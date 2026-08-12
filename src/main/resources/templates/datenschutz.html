@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="de" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="${'Datenschutz | ' + botBrand.displayName}">Datenschutz</title>
+    <link rel="stylesheet" href="/public.css" th:href="@{/public.css(v=${assetVersion})}">
+    <!-- Muss vor dem Rendern laufen, sonst blitzt beim Laden kurz das falsche Farbschema auf. -->
+    <script src="/theme.js" th:src="@{/theme.js(v=${assetVersion})}"></script>
+</head>
+<body class="dashboard-body">
+<main class="landing-shell legal-layout">
+    <section class="hero-card legal-card">
+        <p class="eyebrow">Datenschutz</p>
+        <h1 th:text="${'Datenschutzhinweise für ' + botBrand.displayName}">Datenschutzhinweise</h1>
+        <p class="hero-copy">
+            Diese private Weboberfläche verarbeitet personenbezogene Daten nur, soweit das für den Discord-Login,
+            die Nutzung des Dashboards, die Verwaltung des Bots, die Bereitstellung hochgeladener Bilder und die
+            pseudonymisierte Hörstatistik technisch oder organisatorisch erforderlich ist.
+        </p>
+
+        <div class="copy-list">
+            <div>
+                <strong>1. Verantwortliche Stelle</strong>
+                <p>
+                    <span th:text="${legalOwnerName != null and !#strings.isEmpty(legalOwnerName) ? legalOwnerName : 'Name noch nicht hinterlegt'}">Name</span><br>
+                    <span th:if="${legalAddress != null and !#strings.isEmpty(legalAddress)}" th:text="${legalAddress}">Adresse</span>
+                    <span th:if="${legalAddress == null or #strings.isEmpty(legalAddress)}">Postanschrift noch nicht hinterlegt</span><br>
+                    <span th:text="${legalEmail != null and !#strings.isEmpty(legalEmail) ? legalEmail : 'Kontaktadresse noch nicht hinterlegt'}">kontakt@example.com</span>
+                </p>
+            </div>
+            <div>
+                <strong>2. Aufruf der Website</strong>
+                <p>
+                    Beim Aufruf der Website werden technisch notwendige Verbindungsdaten verarbeitet, damit Seiteninhalte ausgeliefert,
+                    Fehler erkannt und Angriffe abgewehrt werden können. Dazu können insbesondere IP-Adresse, Datum und Uhrzeit des
+                    Zugriffs, aufgerufene Adresse, Browser-Informationen und technische Header gehören.
+                </p>
+                <p>
+                    Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DSGVO. Das berechtigte Interesse liegt im sicheren und stabilen Betrieb der Website.
+                </p>
+            </div>
+            <div>
+                <strong>3. Discord-Login und Dashboard</strong>
+                <p>
+                    Wenn du dich über Discord anmeldest, werden die für die Authentifizierung und Rechteprüfung benötigten Daten verarbeitet.
+                    Dazu gehören insbesondere Discord-ID, Benutzername, Avatar-URL, Discord-Zugriffstoken sowie die Information,
+                    welche Server du verwalten darfst.
+                </p>
+                <p>
+                    Diese Verarbeitung erfolgt, um dir den geschützten Zugriff auf das Dashboard zu ermöglichen und um sicherzustellen,
+                    dass nur berechtigte Personen Server- und Bot-Einstellungen ändern können. Rechtsgrundlage ist Art. 6 Abs. 1 lit. b DSGVO,
+                    soweit die Verarbeitung zur Bereitstellung der von dir angeforderten Dashboard-Funktion erforderlich ist,
+                    sowie ergänzend Art. 6 Abs. 1 lit. f DSGVO.
+                </p>
+            </div>
+            <div>
+                <strong>4. Server-, Bot- und Moduldaten</strong>
+                <p>
+                    Im Dashboard gespeicherte Konfigurationen, zum Beispiel Modulstatus, Channel-Zuordnungen, Ticket-Panel-Daten,
+                    Verify-Einstellungen, Welcome-Texte, Reaction-Roles, Audio-/Radio-Konfigurationen oder administrative Bot-Einstellungen,
+                    werden in der zentralen Datenbank gespeichert.
+                </p>
+                <p>
+                    Rechtsgrundlage ist Art. 6 Abs. 1 lit. b DSGVO für die von dir ausgelöste Konfiguration sowie Art. 6 Abs. 1 lit. f DSGVO
+                    für den sicheren und nachvollziehbaren Betrieb des Bots.
+                </p>
+            </div>
+            <div>
+                <strong>5. Pseudonymisierte Hörstatistik und öffentliche Stats-Seite</strong>
+                <p>
+                    Für Musik-, Radio- und AI-Radio-Wiedergaben werden Hörvorgänge pseudonymisiert ausgewertet. Dabei werden insbesondere
+                    Titel, Künstler, Quelle, Wiedergabeart, Hördauer, Zeitpunkte, Serverbezug und eine intern gehashte Hörer-Kennung verarbeitet.
+                    Offene Discord-IDs, Nutzernamen oder Avatare werden auf der öffentlichen Stats-Seite nicht veröffentlicht.
+                </p>
+                <p>
+                    Die öffentliche Seite unter <code>/stats</code> zeigt ausschließlich aggregierte Werte wie Live-Hörer, Hördauer,
+                    eindeutige pseudonymisierte Hörer, Top-Titel, Top-Quellen und Tagesübersichten. Die interne Hash-Kennung dient nur dazu,
+                    wiederkehrende Hörer statistisch zählen zu können, ohne öffentliche Personenbezüge anzuzeigen.
+                </p>
+                <p>
+                    Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DSGVO. Das berechtigte Interesse liegt in der technischen Betriebsanalyse,
+                    einer nachvollziehbaren Musiknutzungs-Statistik und der Bereitstellung einer öffentlichen Gesamtübersicht,
+                    ohne offene Identitätsdaten zu veröffentlichen.
+                </p>
+            </div>
+            <div>
+                <strong>6. Hochgeladene Bilder</strong>
+                <p>
+                    Wenn du Bilddateien über das Dashboard oder den Admin-Bereich hochlädst, werden die Bilddaten in Base64-kodierter Form
+                    in der zentralen Datenbank gespeichert. Zusätzlich werden technische Angaben wie Dateiname, Dateityp, Dateigröße,
+                    Upload-Zeitpunkt und die hochladende Discord-ID verarbeitet.
+                </p>
+                <p>
+                    Die Bilder werden verwendet, um Branding, Welcome-Karten, Verify-Nachrichten, Ticket-Panels oder andere Bot-
+                    und Webmodule darzustellen. Dafür werden die Bilder über eine Medien-URL bereitgestellt. Wenn du ein hochgeladenes Bild
+                    in einem Discord-Embed oder auf einer öffentlichen Webseite nutzt, ist dieses Bild unter der jeweiligen Medien-URL abrufbar.
+                </p>
+                <p>
+                    Bitte lade ausschließlich Bilder hoch, für die du die erforderlichen Nutzungsrechte besitzt. Enthält ein Bild erkennbare Personen,
+                    musst du zusätzlich sicherstellen, dass die Veröffentlichung datenschutz- und persönlichkeitsrechtlich zulässig ist.
+                    Rechtsgrundlage für die technische Speicherung und Auslieferung ist Art. 6 Abs. 1 lit. b DSGVO beziehungsweise
+                    Art. 6 Abs. 1 lit. f DSGVO; für die rechtliche Zulässigkeit des von dir hochgeladenen Inhalts bleibst du als hochladende Person verantwortlich.
+                </p>
+            </div>
+            <div>
+                <strong>7. Cookies und Session</strong>
+                <p>
+                    Die Website verwendet nur technisch notwendige Cookies. Dazu gehören insbesondere ein Session-Cookie für den geschützten
+                    Login-Bereich sowie ein Cookie, das die Auswahl im Cookie-Hinweis speichert. Diese Cookies sind erforderlich,
+                    damit die Anmeldung erhalten bleibt, geschützte Bereiche funktionieren und die Website nicht bei jedem Aufruf
+                    erneut dieselbe Entscheidung abfragt.
+                </p>
+                <p>
+                    Rechtsgrundlage für das Speichern und Auslesen technisch notwendiger Informationen ist § 25 Abs. 2 Nr. 2 TDDDG.
+                    Die anschließende Verarbeitung personenbezogener Daten erfolgt auf Grundlage von Art. 6 Abs. 1 lit. f DSGVO.
+                </p>
+            </div>
+            <div>
+                <strong>8. Empfänger und eingesetzte Dienste</strong>
+                <p>
+                    Empfänger der Daten können technische Dienstleister sein, die für Hosting, Datenbankbetrieb, Reverse Proxy,
+                    Netzwerkbetrieb oder Serverinfrastruktur eingesetzt werden. Bei Nutzung des Discord-Logins oder bei der Verwendung
+                    von Discord als Plattform werden Daten außerdem gegenüber Discord offengelegt beziehungsweise übermittelt.
+                    Discord verarbeitet diese Daten eigenverantwortlich.
+                </p>
+                <p>
+                    Sofern Discord oder andere angebundene Dienste Daten in Drittländern verarbeiten, kann dabei auch eine Übermittlung
+                    in Staaten außerhalb der Europäischen Union stattfinden. Auf die Verarbeitung durch diese externen Dienste besteht
+                    nur insoweit Einfluss, wie es die technische Integration zulässt.
+                </p>
+            </div>
+            <div>
+                <strong>9. Speicherdauer</strong>
+                <p>
+                    Session-Daten werden grundsätzlich bis zum Logout oder bis zum Ablauf der Session gespeichert. Konfigurationsdaten bleiben gespeichert,
+                    solange sie für den Betrieb des Bots oder der verwalteten Server benötigt werden. Hochgeladene Bilder bleiben gespeichert,
+                    solange sie in Konfigurationen verwendet werden oder bis sie im Rahmen einer technischen Bereinigung entfernt werden.
+                    Ticket-Transcripts, Logs, Hörstatistiken und Modulzustände bleiben gespeichert, solange sie betrieblich erforderlich sind
+                    oder bis sie gelöscht werden.
+                </p>
+            </div>
+            <div>
+                <strong>10. Deine Rechte</strong>
+                <p>
+                    Du hast im Rahmen der gesetzlichen Voraussetzungen das Recht auf Auskunft nach Art. 15 DSGVO, Berichtigung nach Art. 16 DSGVO,
+                    Löschung nach Art. 17 DSGVO, Einschränkung der Verarbeitung nach Art. 18 DSGVO, Datenübertragbarkeit nach Art. 20 DSGVO
+                    sowie Widerspruch nach Art. 21 DSGVO. Außerdem hast du das Recht, dich bei einer Datenschutz-Aufsichtsbehörde zu beschweren.
+                </p>
+            </div>
+            <div>
+                <strong>11. Keine automatisierte Entscheidungsfindung</strong>
+                <p>Eine automatisierte Entscheidungsfindung oder ein Profiling im Sinne von Art. 22 DSGVO findet im Rahmen dieser Website nicht statt.</p>
+            </div>
+            <div>
+                <strong>12. Kontakt für Datenschutzanfragen</strong>
+                <p>Bei Fragen zu dieser Datenschutzerklärung, zu gespeicherten Daten oder zu Löschungsanfragen kannst du dich an die oben genannte Kontaktadresse wenden.</p>
+            </div>
+        </div>
+
+        <footer class="portal-footer">
+            <a class="ghost-button" href="/">Zur Startseite</a>
+            <div class="theme-switcher" role="group" aria-label="Farbschema">
+                <button class="theme-switch-option" type="button" data-theme-option="system" aria-pressed="true">System</button>
+                <button class="theme-switch-option" type="button" data-theme-option="dark" aria-pressed="false">Dunkel</button>
+                <button class="theme-switch-option" type="button" data-theme-option="light" aria-pressed="false">Hell</button>
+            </div>
+            <div class="footer-links">
+                <a href="/impressum">Impressum</a>
+                <a href="/stats">Stats</a>
+            </div>
+        </footer>
+    </section>
+</main>
+<div id="cookieNotice" class="cookie-notice" hidden>
+    <div class="cookie-notice-copy">
+        <strong>Cookie-Hinweis</strong>
+        <p>Diese Seite nutzt nur technisch notwendige Session-Cookies für Login, Sicherheit und den geschützten Dashboard-Zugriff.</p>
+    </div>
+    <div class="cookie-notice-actions">
+        <a id="cookieNoticeAccept" class="primary-button small-button" href="/cookies/accept">Akzeptieren</a>
+        <a id="cookieNoticeReject" class="ghost-button small-button" href="/cookies/reject">Ablehnen</a>
+    </div>
+</div>
+<script src="/cookie-hint.js" th:src="@{/cookie-hint.js(v=${assetVersion})}"></script>
+</body>
+</html>
