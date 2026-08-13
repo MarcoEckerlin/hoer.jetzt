@@ -1,0 +1,75 @@
+# Einzelner Audio-Knoten auf einem eigenen Host, angebunden ans Tailscale-Netz.
+#
+#   TS_HOSTNAME=hoerjetzt-premium-1 TS_AUTHKEY=tskey-auth-... \
+#   HJ_LAVALINK_PASSWORD=... LAVALINK_TIER=premium \
+#   docker compose -f docker-compose.lavalink.tailscale.yml up -d
+#
+# Kein Port nach aussen. Der Knoten ist ausschliesslich ueber das Tailnet
+# erreichbar - damit entfaellt die Firewall-Regel fuer 2333 ersatzlos.
+#
+# Voraussetzung auf dem Host:  modprobe tun
+#
+# Danach im Adminbereich unter Lavalink eintragen:
+#   Adresse   http://<tailscale-ip>:2333     (docker exec ... tailscale ip -4)
+#   Passwort  HJ_LAVALINK_PASSWORD
+#   Stufe     free oder premium
+#   Grenze    gleichzeitige Wiedergaben, 0 = unbegrenzt
+
+name: hoerjetzt-node
+
+# Die Komponentenzweige liegen NEBEN main, nicht darin:
+#   /opt/hoerjetzt/main/deploy/docker   <- diese Datei
+#   /opt/hoerjetzt/core                 <- Bauverzeichnis
+# Deshalb drei Ebenen hoch. Wer anders ablegt, setzt HJ_QUELLEN in der .env
+# auf das Verzeichnis, in dem core, ai-radio und lavalink liegen.
+
+services:
+
+  tailscale:
+    image: tailscale/tailscale:stable
+    container_name: hoerjetzt-node-tailscale
+    hostname: ${TS_HOSTNAME:?Name im Tailnet fehlt}
+    restart: unless-stopped
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY:?Tailscale Auth-Key fehlt}
+      TS_HOSTNAME: ${TS_HOSTNAME}
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_USERSPACE: "false"
+      TS_ACCEPT_DNS: "${TS_ACCEPT_DNS:-false}"
+      # Bewusst ohne Vorgabe. Ein --advertise-tags=... hier waere bequem,
+      # scheitert aber, solange der Tag nicht in den Tailnet-ACLs unter
+      # tagOwners steht - und dann startet der Container in Endlosschleife neu.
+      TS_EXTRA_ARGS: ${TS_EXTRA_ARGS-}
+    volumes:
+      - tailscale-state:/var/lib/tailscale
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    healthcheck:
+      test: ["CMD-SHELL", "tailscale status --peers=false >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 10s
+
+  lavalink:
+    image: ghcr.io/marcoeckerlin/hoerjetzt-lavalink:${LAVALINK_TAG:-latest}
+    build:
+      context: ${HJ_QUELLEN:-../../..}/lavalink
+    restart: unless-stopped
+    network_mode: service:tailscale
+    depends_on:
+      tailscale:
+        condition: service_healthy
+    environment:
+      LAVALINK_SERVER_PASSWORD: ${HJ_LAVALINK_PASSWORD:?Passwort fehlt}
+      LAVALINK_TIER: ${LAVALINK_TIER:-free}
+      LAVALINK_PORT: 2333
+      YOUTUBE_PLUGIN_VERSION: ${YOUTUBE_PLUGIN_VERSION:-1.18.2}
+      # hoch | mittel | sparsam - siehe entrypoint.sh im lavalink-Zweig.
+      LAVALINK_QUALITAET: ${LAVALINK_QUALITAET:-hoch}
+
+volumes:
+  tailscale-state:
