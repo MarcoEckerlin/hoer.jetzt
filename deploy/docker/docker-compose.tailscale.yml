@@ -1,0 +1,164 @@
+# hoer.jetzt - Stack fuer einen Host, angebunden an ein Tailscale-Netz.
+#
+#   cp .env.beispiel .env      # ausfuellen, TS_AUTHKEY nicht vergessen
+#   docker compose -f docker-compose.tailscale.yml up -d
+#
+# Unterschied zu docker-compose.yml: ein Sidecar-Container haengt am Tailnet,
+# alle anderen Container teilen sich dessen Netzwerk-Namensraum. Der Host ist
+# damit genau eine Adresse im Netz. Untereinander reden die Dienste ueber
+# 127.0.0.1, nach aussen nur ueber das Tailnet.
+#
+# Voraussetzung auf dem Host:  modprobe tun
+#
+# Weitere Audio-Knoten stehen auf eigenen Hosts und kommen mit
+# docker-compose.lavalink.tailscale.yml dazu. Im Adminbereich werden sie mit
+# ihrer Tailscale-Adresse eingetragen (100.x.y.z).
+
+name: hoerjetzt
+
+# Die Komponentenzweige liegen NEBEN main, nicht darin:
+#   /opt/hoerjetzt/main/deploy/docker   <- diese Datei
+#   /opt/hoerjetzt/core                 <- Bauverzeichnis
+# Deshalb drei Ebenen hoch. Wer anders ablegt, setzt HJ_QUELLEN in der .env
+# auf das Verzeichnis, in dem core, ai-radio und lavalink liegen.
+
+services:
+
+  tailscale:
+    image: tailscale/tailscale:stable
+    container_name: hoerjetzt-tailscale
+    hostname: ${TS_HOSTNAME:-hoerjetzt-core}
+    restart: unless-stopped
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY:?Tailscale Auth-Key fehlt}
+      TS_HOSTNAME: ${TS_HOSTNAME:-hoerjetzt-core}
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_USERSPACE: "false"
+      # In Containern schreibt Tailscale ungern an /etc/resolv.conf. Knoten
+      # deshalb ueber ihre 100er-Adresse eintragen, nicht ueber MagicDNS.
+      TS_ACCEPT_DNS: "${TS_ACCEPT_DNS:-false}"
+      # Bewusst ohne Vorgabe. Ein --advertise-tags=... hier waere bequem,
+      # scheitert aber, solange der Tag nicht in den Tailnet-ACLs unter
+      # tagOwners steht - und dann startet der Container in Endlosschleife neu.
+      TS_EXTRA_ARGS: ${TS_EXTRA_ARGS-}
+    volumes:
+      - tailscale-state:/var/lib/tailscale
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    ports:
+      # Die Weboberflaeche haengt am Namensraum des Sidecars, also wird der
+      # Port hier veroeffentlicht - nicht beim core-Dienst.
+      # Host-Port ueber HJ_WEB_PORT_HOST aenderbar, falls 8080 schon belegt ist.
+      - "${HJ_WEB_BIND:-127.0.0.1}:${HJ_WEB_PORT_HOST:-8080}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "tailscale status --peers=false >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 10s
+
+  core:
+    image: ghcr.io/marcoeckerlin/hoerjetzt-core:${CORE_TAG:-latest}
+    build:
+      context: ${HJ_QUELLEN:-../../..}/core
+    restart: unless-stopped
+    network_mode: service:tailscale
+    depends_on:
+      tailscale:
+        condition: service_healthy
+      lavalink-free-1:
+        condition: service_healthy
+    environment:
+      HJ_BOT_TOKEN: ${HJ_BOT_TOKEN:?Bot-Token fehlt}
+      HJ_BOT_ID: ${HJ_BOT_ID:-1}
+      HJ_DB_HOST: ${HJ_DB_HOST:?Datenbank-Adresse fehlt}
+      HJ_DB_PORT: ${HJ_DB_PORT:-3306}
+      HJ_DB_NAME: ${HJ_DB_NAME:-discordbot}
+      HJ_DB_USER: ${HJ_DB_USER:-discordbot}
+      HJ_DB_PASSWORD: ${HJ_DB_PASSWORD:?Datenbank-Passwort fehlt}
+      HJ_WEB_PORT: 8080
+      HJ_WEB_BASE_URL: ${HJ_WEB_BASE_URL:?Oeffentliche Adresse fehlt}
+      HJ_WEB_REDIRECT_URI: ${HJ_WEB_BASE_URL}/auth/discord/callback
+      HJ_DISCORD_CLIENT_ID: ${HJ_DISCORD_CLIENT_ID:?Client-ID fehlt}
+      HJ_DISCORD_CLIENT_SECRET: ${HJ_DISCORD_CLIENT_SECRET:?Client-Secret fehlt}
+      # Gemeinsamer Namensraum: die Nachbarn liegen auf 127.0.0.1.
+      HJ_MUSIC_BRAIN_BASE_URL: http://127.0.0.1:8091
+      HJ_LAVALINK_NAME: free-1
+      HJ_LAVALINK_URI: http://127.0.0.1:2333
+      HJ_LAVALINK_PASSWORD: ${HJ_LAVALINK_PASSWORD:?Lavalink-Passwort fehlt}
+      # Sekunden zwischen zwei Abgleichen der Knotentabelle. Damit kommt ein
+      # neuer Audio-Knoten von selbst dazu - ohne den Bot neu zu starten.
+      # 0 schaltet die Wache ab.
+      HJ_LAVALINK_WATCH_SECONDS: ${HJ_LAVALINK_WATCH_SECONDS:-30}
+      HJ_LLM_OLLAMA_URL: ${HJ_LLM_OLLAMA_URL:-}
+      HJ_LLM_MODEL: ${HJ_LLM_MODEL:-}
+
+  ai-radio:
+    image: ghcr.io/marcoeckerlin/hoerjetzt-ai-radio:${AI_RADIO_TAG:-latest}
+    build:
+      context: ${HJ_QUELLEN:-../../..}/ai-radio
+    restart: unless-stopped
+    network_mode: service:tailscale
+    depends_on:
+      tailscale:
+        condition: service_healthy
+    environment:
+      HJ_BOT_ID: ${HJ_BOT_ID:-1}
+      HJ_DB_HOST: ${HJ_DB_HOST}
+      HJ_DB_PORT: ${HJ_DB_PORT:-3306}
+      HJ_DB_NAME: ${HJ_DB_NAME:-discordbot}
+      HJ_DB_USER: ${HJ_DB_USER}
+      HJ_DB_PASSWORD: ${HJ_DB_PASSWORD}
+      # Nur lokal lauschen: im Tailnet hat dieser Dienst nichts zu suchen.
+      HJ_LISTEN_HOST: 127.0.0.1
+      HJ_LLM_OLLAMA_URL: ${HJ_LLM_OLLAMA_URL:-}
+      HJ_LLM_MODEL: ${HJ_LLM_MODEL:-}
+
+  lavalink-free-1:
+    image: ghcr.io/marcoeckerlin/hoerjetzt-lavalink:${LAVALINK_TAG:-latest}
+    build:
+      context: ${HJ_QUELLEN:-../../..}/lavalink
+    restart: unless-stopped
+    network_mode: service:tailscale
+    depends_on:
+      tailscale:
+        condition: service_healthy
+    environment:
+      LAVALINK_SERVER_PASSWORD: ${HJ_LAVALINK_PASSWORD:?Lavalink-Passwort fehlt}
+      LAVALINK_TIER: free
+      LAVALINK_PORT: 2333
+      YOUTUBE_PLUGIN_VERSION: ${YOUTUBE_PLUGIN_VERSION:-1.18.2}
+      YOUTUBE_PLUGIN_SNAPSHOT: ${YOUTUBE_PLUGIN_SNAPSHOT:-false}
+      # hoch | mittel | sparsam - siehe entrypoint.sh im lavalink-Zweig.
+      LAVALINK_QUALITAET: ${LAVALINK_QUALITAET:-hoch}
+      # Altersbeschraenkte Titel gibt YouTube nur an angemeldete Clients.
+      YOUTUBE_OAUTH: ${YOUTUBE_OAUTH:-false}
+      YOUTUBE_REFRESH_TOKEN: ${YOUTUBE_REFRESH_TOKEN:-}
+      # Alle Dienste teilen sich hier den Namensraum des Tailscale-Containers,
+      # deshalb 127.0.0.1 statt eines Servicenamens.
+      YT_CIPHER_URL: ${YT_CIPHER_URL-http://127.0.0.1:8001}
+      YT_CIPHER_PASSWORD: ${YT_CIPHER_PASSWORD:-}
+      YT_CIPHER_USERAGENT: hoerjetzt
+      # Nur lokal: dieser Knoten gehoert dem eigenen Host.
+      LAVALINK_ADDRESS: 127.0.0.1
+
+  # Entschluesselt YouTubes Stream-Adressen - ohne ihn scheitert das Plugin,
+  # sobald YouTube sein Player-Skript tauscht ("must find sig function").
+  yt-cipher:
+    image: ghcr.io/kikkia/yt-cipher:master
+    restart: unless-stopped
+    network_mode: service:tailscale
+    depends_on:
+      tailscale:
+        condition: service_healthy
+    environment:
+      PORT: 8001
+      HOST: 127.0.0.1
+      API_TOKEN: ${YT_CIPHER_PASSWORD:-}
+      OVERRIDE_PLAYER_VARIANT: IAS
+
+volumes:
+  tailscale-state:
