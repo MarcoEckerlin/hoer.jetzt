@@ -1,0 +1,6 @@
+# Welcher Stand der Komponenten zu diesem Release gehoert.
+# Wird von deploy/auto-update.sh gelesen - Zeilen bitte nicht umsortieren.
+version=2026.08.13.16
+core=04f8ef65cfb7bda62faeff9fa72aa527569327c3
+ai-radio=9ccb590c2e8da51123b40eb43dbbe98844f64c7a
+lavalink=aa7a22e06492fefbb0d4d2406099cc4e44fc0afa
