@@ -1,0 +1,92 @@
+# hoer.jetzt - Stack fuer einen Host.
+#
+#   cp .env.beispiel .env      # ausfuellen
+#   docker compose up -d
+#
+# Die Datenbank laeuft ausserhalb (bestehende MariaDB) und wird nur eingetragen,
+# nicht mitgestartet. Audio-Knoten koennen hier mitlaufen oder auf eigenen
+# Hosts stehen - siehe docker-compose.lavalink.yml.
+
+name: hoerjetzt
+
+# Die Komponentenzweige liegen NEBEN main, nicht darin:
+#   /opt/hoerjetzt/main/deploy/docker   <- diese Datei
+#   /opt/hoerjetzt/core                 <- Bauverzeichnis
+# Deshalb drei Ebenen hoch. Wer anders ablegt, setzt HJ_QUELLEN in der .env
+# auf das Verzeichnis, in dem core, ai-radio und lavalink liegen.
+
+services:
+
+  core:
+    image: ghcr.io/marcoeckerlin/hoerjetzt-core:${CORE_TAG:-latest}
+    build:
+      context: ${HJ_QUELLEN:-../../..}/core
+    restart: unless-stopped
+    environment:
+      HJ_BOT_TOKEN: ${HJ_BOT_TOKEN:?Bot-Token fehlt}
+      HJ_BOT_ID: ${HJ_BOT_ID:-1}
+      HJ_DB_HOST: ${HJ_DB_HOST:?Datenbank-Adresse fehlt}
+      HJ_DB_PORT: ${HJ_DB_PORT:-3306}
+      HJ_DB_NAME: ${HJ_DB_NAME:-discordbot}
+      HJ_DB_USER: ${HJ_DB_USER:-discordbot}
+      HJ_DB_PASSWORD: ${HJ_DB_PASSWORD:?Datenbank-Passwort fehlt}
+      HJ_WEB_PORT: 8080
+      HJ_WEB_BASE_URL: ${HJ_WEB_BASE_URL:?Oeffentliche Adresse fehlt}
+      HJ_WEB_REDIRECT_URI: ${HJ_WEB_BASE_URL}/auth/discord/callback
+      HJ_DISCORD_CLIENT_ID: ${HJ_DISCORD_CLIENT_ID:?Client-ID fehlt}
+      HJ_DISCORD_CLIENT_SECRET: ${HJ_DISCORD_CLIENT_SECRET:?Client-Secret fehlt}
+      HJ_MUSIC_BRAIN_BASE_URL: http://ai-radio:8091
+      # Ohne diese drei findet der Bot beim allerersten Start keinen Knoten:
+      # in der Datenbank steht noch keiner, weil ihn niemand eintragen konnte.
+      HJ_LAVALINK_NAME: free-1
+      HJ_LAVALINK_URI: http://lavalink-free-1:2333
+      HJ_LAVALINK_PASSWORD: ${HJ_LAVALINK_PASSWORD:?Lavalink-Passwort fehlt}
+      HJ_LLM_OLLAMA_URL: ${HJ_LLM_OLLAMA_URL:-http://127.0.0.1:11434}
+      HJ_LLM_MODEL: ${HJ_LLM_MODEL:-phi-3.5-mini-instruct}
+    ports:
+      - "${HJ_WEB_BIND:-127.0.0.1}:${HJ_WEB_PORT_HOST:-8080}:8080"
+    depends_on:
+      lavalink-free-1:
+        condition: service_healthy
+    networks: [hoerjetzt]
+
+  ai-radio:
+    image: ghcr.io/marcoeckerlin/hoerjetzt-ai-radio:${AI_RADIO_TAG:-latest}
+    build:
+      context: ${HJ_QUELLEN:-../../..}/ai-radio
+    restart: unless-stopped
+    environment:
+      HJ_BOT_ID: ${HJ_BOT_ID:-1}
+      HJ_DB_HOST: ${HJ_DB_HOST}
+      HJ_DB_PORT: ${HJ_DB_PORT:-3306}
+      HJ_DB_NAME: ${HJ_DB_NAME:-discordbot}
+      HJ_DB_USER: ${HJ_DB_USER}
+      HJ_DB_PASSWORD: ${HJ_DB_PASSWORD}
+      HJ_LISTEN_HOST: 0.0.0.0
+      HJ_LLM_OLLAMA_URL: ${HJ_LLM_OLLAMA_URL:-http://127.0.0.1:11434}
+      HJ_LLM_MODEL: ${HJ_LLM_MODEL:-phi-3.5-mini-instruct}
+    # Kein Port nach aussen: nur core spricht mit diesem Dienst.
+    networks: [hoerjetzt]
+
+  # ---------------------------------------------------------------- Audio
+  #
+  # Ein Standard-Knoten laeuft immer mit, damit der Stack allein lauffaehig
+  # ist. Weitere Knoten - vor allem Premium - gehoeren auf eigene Hosts.
+
+  lavalink-free-1:
+    image: ghcr.io/marcoeckerlin/hoerjetzt-lavalink:${LAVALINK_TAG:-latest}
+    build:
+      context: ${HJ_QUELLEN:-../../..}/lavalink
+    restart: unless-stopped
+    environment:
+      LAVALINK_SERVER_PASSWORD: ${HJ_LAVALINK_PASSWORD:?Lavalink-Passwort fehlt}
+      LAVALINK_TIER: free
+      LAVALINK_PORT: 2333
+      YOUTUBE_PLUGIN_VERSION: ${YOUTUBE_PLUGIN_VERSION:-1.18.2}
+      # hoch | mittel | sparsam - siehe entrypoint.sh im lavalink-Zweig.
+      LAVALINK_QUALITAET: ${LAVALINK_QUALITAET:-hoch}
+    networks: [hoerjetzt]
+
+networks:
+  hoerjetzt:
+    driver: bridge

@@ -1,0 +1,62 @@
+# Mehrere Audio-Knoten auf einem Host.
+#
+#   cd /opt/hoerjetzt/main/deploy/docker
+#   cp /opt/hoerjetzt/.env .env
+#   docker compose -f docker-compose.nodes.yml up -d node-2 node-3
+#
+# Bewusst ausgeschrieben statt "replicas": jeder Knoten braucht seinen eigenen
+# Port, seine eigene Stufe und seinen eigenen Namen im Adminbereich. Replikate
+# waeren vier gleiche Container - und der Bot koennte sie nicht auseinander
+# halten, weil die Session an den Namen haengt.
+#
+# Ehrlich dazu: mehrere Knoten auf einem Host teilen sich dieselbe CPU. Das
+# bringt keine Leistung, sondern Trennung - eigene Obergrenzen je Knoten und
+# einen Premium-Pool, in den nur wenige Server duerfen. Wer wirklich mehr
+# Leistung will, braucht eine zweite Maschine.
+#
+# node-1 laeuft bereits im Hauptstack (docker-compose.yml) auf 2333.
+# Deshalb faengt es hier bei 2334 an.
+
+name: hoerjetzt-nodes
+
+x-knoten: &knoten
+  image: ghcr.io/marcoeckerlin/hoerjetzt-lavalink:${LAVALINK_TAG:-latest}
+  build:
+    context: ${HJ_QUELLEN:-../../..}/lavalink
+  restart: unless-stopped
+  environment: &knotenumgebung
+    LAVALINK_SERVER_PASSWORD: ${HJ_LAVALINK_PASSWORD:?Lavalink-Passwort fehlt}
+    LAVALINK_PORT: 2333
+    YOUTUBE_PLUGIN_VERSION: ${YOUTUBE_PLUGIN_VERSION:-1.18.2}
+
+services:
+
+  node-2:
+    <<: *knoten
+    container_name: hoerjetzt-lavalink-2
+    environment:
+      <<: *knotenumgebung
+      LAVALINK_TIER: ${NODE2_TIER:-free}
+      LAVALINK_QUALITAET: ${NODE2_QUALITAET:-hoch}
+    ports:
+      - "${HJ_NODE_BIND:-0.0.0.0}:2334:2333"
+
+  node-3:
+    <<: *knoten
+    container_name: hoerjetzt-lavalink-3
+    environment:
+      <<: *knotenumgebung
+      LAVALINK_TIER: ${NODE3_TIER:-free}
+      LAVALINK_QUALITAET: ${NODE3_QUALITAET:-hoch}
+    ports:
+      - "${HJ_NODE_BIND:-0.0.0.0}:2335:2333"
+
+  node-4:
+    <<: *knoten
+    container_name: hoerjetzt-lavalink-4
+    environment:
+      <<: *knotenumgebung
+      LAVALINK_TIER: ${NODE4_TIER:-premium}
+      LAVALINK_QUALITAET: ${NODE4_QUALITAET:-hoch}
+    ports:
+      - "${HJ_NODE_BIND:-0.0.0.0}:2336:2333"
