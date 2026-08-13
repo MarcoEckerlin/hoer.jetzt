@@ -1,0 +1,35 @@
+# Einzelner Audio-Knoten auf einem eigenen Host.
+#
+#   HJ_LAVALINK_PASSWORD=... LAVALINK_TIER=premium docker compose \
+#       -f docker-compose.lavalink.yml up -d
+#
+# Der Knoten wird anschliessend im Adminbereich unter Lavalink eingetragen:
+# Adresse, Passwort, Stufe und Obergrenze. Erst dieser Eintrag entscheidet,
+# welche Server auf ihm landen - die Variable hier dient nur der Anzeige.
+
+name: hoerjetzt-node
+
+# Die Komponentenzweige liegen NEBEN main, nicht darin:
+#   /opt/hoerjetzt/main/deploy/docker   <- diese Datei
+#   /opt/hoerjetzt/core                 <- Bauverzeichnis
+# Deshalb drei Ebenen hoch. Wer anders ablegt, setzt HJ_QUELLEN in der .env
+# auf das Verzeichnis, in dem core, ai-radio und lavalink liegen.
+
+services:
+  lavalink:
+    image: ghcr.io/marcoeckerlin/hoerjetzt-lavalink:${LAVALINK_TAG:-latest}
+    build:
+      context: ${HJ_QUELLEN:-../../..}/lavalink
+    restart: unless-stopped
+    environment:
+      LAVALINK_SERVER_PASSWORD: ${HJ_LAVALINK_PASSWORD:?Passwort fehlt}
+      LAVALINK_TIER: ${LAVALINK_TIER:-free}
+      LAVALINK_PORT: 2333
+      YOUTUBE_PLUGIN_VERSION: ${YOUTUBE_PLUGIN_VERSION:-1.18.2}
+      # hoch | mittel | sparsam - siehe entrypoint.sh im lavalink-Zweig.
+      LAVALINK_QUALITAET: ${LAVALINK_QUALITAET:-hoch}
+    ports:
+      # Nach aussen sichtbar, weil der Bot auf einem anderen Host laeuft.
+      # Unbedingt per Firewall auf die Bot-Adresse begrenzen - das Passwort
+      # ist der einzige Schutz.
+      - "${LAVALINK_BIND:-0.0.0.0}:2333:2333"
