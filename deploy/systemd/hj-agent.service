@@ -1,0 +1,11 @@
+[Unit]
+Description=hoer.jetzt Agent - meldet sich beim Controller und setzt dessen Vorgaben um
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/hoerjetzt/main/deploy/agent/hj-agent.sh
+# Der Agent darf nie die Maschine blockieren: laeuft er laenger als fuenf
+# Minuten, haengt etwas, und der naechste Lauf soll trotzdem stattfinden.
+TimeoutStartSec=300
