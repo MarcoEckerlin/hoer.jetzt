@@ -1,0 +1,35 @@
+# Der Betriebsbereich - Zusatz, kein Bestandteil.
+#
+# Nur auf den Maschinen starten, auf denen jemand den Verbund verwaltet:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.admin.yml up -d
+#
+# Ohne diese Datei gibt es den Bereich auf der Maschine schlicht nicht - kein
+# Abbild, kein Port, keine Weiterleitung. Das ist der ganze Sinn der Trennung.
+#
+# Er laeuft auf einem eigenen Port (Vorgabe 8081) und standardmaessig nur auf
+# 127.0.0.1. Von aussen erreichbar machen heisst: einen Reverse Proxy mit TLS
+# davorsetzen, nicht HJ_ADMIN_BIND auf 0.0.0.0 stellen. Die Rechtepruefung in
+# core haelt zwar, aber sie ueber ein unverschluesseltes Netz zu schicken macht
+# sie wertlos.
+#
+# Wichtig: die Anmeldung haengt an einem Cookie, das core setzt. Damit sie hier
+# funktioniert, muss der Betriebsbereich unter demselben Ursprung erreichbar
+# sein wie core - also entweder ueber denselben Hostnamen mit eigenem Pfad im
+# aeusseren Proxy, oder ueber einen eigenen Hostnamen, der im Developer Portal
+# als zusaetzliche Redirect-URL hinterlegt ist.
+
+services:
+  admin:
+    image: ghcr.io/marcoeckerlin/hoerjetzt-admin:${ADMIN_TAG:-latest}
+    build:
+      context: ${HJ_QUELLEN:-../../..}/admin
+    restart: unless-stopped
+    environment:
+      HJ_CORE_HOST: core
+      HJ_CORE_PORT: 8080
+    ports:
+      - "${HJ_ADMIN_BIND:-127.0.0.1}:${HJ_ADMIN_PORT_HOST:-8081}:80"
+    depends_on:
+      - core
+    networks: [hoerjetzt]
