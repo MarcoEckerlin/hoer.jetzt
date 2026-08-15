@@ -1,0 +1,12 @@
+[Unit]
+Description=hoer.jetzt - naechtliches Update um 03:00
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+# Streut den Start, damit nicht alle Hosts gleichzeitig bei GitHub anklopfen.
+RandomizedDelaySec=900
+# Holt einen verpassten Termin nach, wenn die Maschine aus war.
+Persistent=true
+
+[Install]
+WantedBy=timers.target
