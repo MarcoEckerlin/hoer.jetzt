@@ -1,104 +1,91 @@
 # hoer.jetzt
 
 Discord-Bot mit Weboberfläche: Musik, AI-Radio, KI-Chat und Community-Module —
-konfigurierbar über ein Panel im Discord-Stil, statt über Slash-Commands.
+konfigurierbar über ein Panel im Discord-Stil.
 
-Der Bot ist nicht auf eine Installation festgelegt. Branding, Token, Datenbank
-und Rechte kommen aus der Konfiguration; mehrere Instanzen können sich eine
-Datenbank teilen und werden über `bot_id` getrennt gehalten.
+## Aufbau: vier Zweige
 
-## Aufbau
+Der Anwendungscode liegt **nicht** in `main`. Jede Komponente hat ihren eigenen
+Zweig, ohne gemeinsame Historie — ein Merge zwischen ihnen ist damit technisch
+ausgeschlossen.
 
-```
-src/                    Bot und Weboberfläche (Spring Boot, JDA, Lavalink)
-music-brain-service/    eigener Dienst: Titelvorschläge für das AI-Radio
-deploy/                 Installation, Update, Paketbau
-Kontext/Installation/   Dokumentation von Anforderungen bis Fehlersuche
-config/                 lokale Konfiguration (nicht im Repo)
-```
+| Zweig | Inhalt | Abbild |
+| --- | --- | --- |
+| `main` | Compose, Dokumentation, Betriebsskripte | — |
+| [`core`](../../tree/core) | Bot und Weboberfläche | `hoerjetzt-core` |
+| [`ai-radio`](../../tree/ai-radio) | Music-Brain | `hoerjetzt-ai-radio` |
+| [`lavalink`](../../tree/lavalink) | Audio-Knoten | `hoerjetzt-lavalink` |
 
-### Komponenten zur Laufzeit
-
-```
-              nginx  (80)
-                 │
-       discordbot (8080)  ──  MariaDB (3306)
-          │          │
-     Lavalink     Music-Brain (8091)
-       (2333)          │
-                  Sprachmodell (11434, optional)
-```
-
-Nach außen ist nur nginx offen. Alles andere hört auf `127.0.0.1`.
-
-## Installation
-
-Auf einem frischen Debian 12 oder Ubuntu 22.04/24.04 als root:
+Zum Bauen wird der jeweilige Zweig ausgecheckt. `docker compose build` in
+`deploy/docker/` erwartet die drei Zweige als Arbeitskopien nebeneinander:
 
 ```bash
-git clone https://github.com/MarcoEckerlin/hoer.jetzt.git /opt/discordbot-src
-cd /opt/discordbot-src
-bash deploy/install.sh
+git clone -b core     <repo> core
+git clone -b ai-radio <repo> ai-radio
+git clone -b lavalink <repo> lavalink
+git clone -b main     <repo> main
+cd main/deploy/docker && docker compose build
 ```
-
-Das Skript erkennt selbst, ob es aus dem Quellcode bauen muss oder ob fertige
-JARs beiliegen, und fragt dann in fünf Abschnitten alles ab: Datenbank,
-Discord, Weboberfläche, Audio, Zusatzdienste.
-
-Ausführlich in [`Kontext/Installation/`](Kontext/Installation/) — Einstieg über
-[`02-erstinstallation.md`](Kontext/Installation/02-erstinstallation.md).
 
 ## Betrieb
 
 ```bash
-bash deploy/update.sh              # bauen, sichern, neu starten, bei Fehler zurückrollen
-bash deploy/make-package.sh /root  # fertiges Paket mit allen JARs schnüren
-journalctl -u discordbot -f        # mitlesen
+cd deploy/docker
+cp .env.beispiel .env      # ausfüllen
+docker compose up -d
 ```
 
-## Rechte und Freischaltungen
+Die Datenbank läuft außerhalb des Stacks und wird nur eingetragen. Das Schema
+legt der Bot beim ersten Start selbst an.
 
-Zwei Ebenen, die oft verwechselt werden:
-
-**Bot-Administratoren** verwalten die Instanz. Wer die Discord-Anwendung
-besitzt, wird beim ersten Aufruf von `/admin` automatisch eingetragen und kann
-weitere Admins anlegen. Ein Bot-Admin umgeht auf jedem Server sämtliche
-Rollenprüfungen — auch dort, wo er kein Mitglied ist.
-
-**Rollenrechte** gelten je Discord-Server und werden im Serverpanel vergeben:
-Webpanel öffnen, Musik steuern, Warteschlange verwalten, Module einstellen,
-Tickets bearbeiten, Logs einsehen, KI nutzen, Rechte verwalten. Solange nichts
-eingetragen ist, gilt: wer *Server verwalten* darf, darf alles.
-
-**KI-Chat und AI-Radio** sind je Server gesperrt und werden nur von einem
-Bot-Admin freigegeben — beide kosten Rechenzeit, die Sperre ist Absicht.
-
-## Discord-Berechtigungen
-
-Zwei Intents sind Pflicht: **Server Members** und **Message Content**.
-
-Einladung mit allen Modulen:
+## Aufbau zur Laufzeit
 
 ```
-https://discord.com/api/oauth2/authorize
-    ?client_id=<CLIENT-ID>
-    &permissions=1101960178806
-    &scope=bot%20applications.commands
+                Internet
+                   │
+              Reverse Proxy
+                   │
+        core (8080) ── MariaDB (extern)
+          │      │
+          │      └── ai-radio (8091, nur intern)
+          │
+     ┌────┴─────────────────────┐
+     │                          │
+  Standard-Pool            Premium-Pool
+  lavalink free            lavalink premium
+  (mehrere Knoten)         (bessere Hardware)
 ```
 
-Ohne Moderationsbefehle genügt `permissions=2150747200`. Details in
-[`03-discord-berechtigungen.md`](Kontext/Installation/03-discord-berechtigungen.md).
+Audio wird auf Knoten verteilt, alles andere läuft im `core`. Welcher Knoten
+einen Server bedient, entscheidet dessen Stufe: Premium-Server landen auf
+Premium-Knoten, die bewusst leer gehalten werden. Freigeschaltet wird Premium
+je Server im Adminbereich — wie KI-Chat und AI-Radio.
 
-## Technik
+Fällt ein Knoten aus, verteilt die Bibliothek seine Verbindungen neu — die
+Stufentrennung bleibt dabei erhalten. Ist kein Premium-Knoten erreichbar,
+weicht der Bot auf die Standardstufe aus und protokolliert das.
 
-Java 21 · Spring Boot 3.4 · JDA 6 · Lavalink 4 · MariaDB · Thymeleaf
+## Knoten hinzufügen
 
-Die Weboberfläche ist bewusst ohne Framework gebaut: ein CSS, ein JS je Panel,
-keine Build-Kette für das Frontend.
+Auf dem neuen Host:
 
-## Konfiguration
+```bash
+HJ_LAVALINK_PASSWORD=... LAVALINK_TIER=premium \
+    docker compose -f docker-compose.lavalink.yml up -d
+```
 
-`config/config.json` enthält Bot-Token und Discord-Secrets und steht deshalb
-in `.gitignore`. Vorlage: `config/config.template.json`. Auf einem
-installierten Server liegt die echte Datei unter
-`/opt/discordbot/config/config.json` mit Rechten `0600`.
+Danach im Adminbereich unter *Lavalink* eintragen: Adresse, Passwort, Stufe und
+Obergrenze gleichzeitiger Wiedergaben. Erst dieser Eintrag entscheidet, welche
+Server auf dem Knoten landen.
+
+## Dokumentation
+
+[`Kontext/Installation/`](Kontext/Installation/) — Serveranforderungen,
+Erstinstallation, Discord-Berechtigungen, Datenbank, Betrieb, Fehlersuche.
+
+## Ohne Docker
+
+Die Skripte unter `deploy/` richten den Stack direkt auf einem Debian-Server
+ein. Sie erwarten den Anwendungscode und sind damit nur aus den
+Komponentenzweigen heraus sinnvoll — für neue Installationen ist Docker der
+einfachere Weg.
