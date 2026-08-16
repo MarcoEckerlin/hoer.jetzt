@@ -182,9 +182,14 @@ public class GuildPermissionService {
                 }
 
                 if (matrix != null && !matrix.isEmpty()) {
+                    // INSERT IGNORE gibt es unter PostgreSQL nicht - dort faengt
+                    // ON CONFLICT DO NOTHING doppelte Zeilen ab. Ohne das
+                    // scheiterte der Batch und die Rechtematrix liess sich nicht
+                    // speichern.
                     String insert = """
-                            INSERT IGNORE INTO guild_role_permissions (bot_id, guild_id, role_id, permission)
+                            INSERT INTO guild_role_permissions (bot_id, guild_id, role_id, permission)
                             VALUES (?,?,?,?)
+                            ON CONFLICT (bot_id, guild_id, role_id, permission) DO NOTHING
                             """;
                     try (PreparedStatement statement = connection.prepareStatement(insert)) {
                         for (Map.Entry<String, Set<GuildPermission>> entry : matrix.entrySet()) {

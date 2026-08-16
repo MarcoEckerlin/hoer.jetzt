@@ -69,7 +69,9 @@ public class PlaybackStateService {
              PreparedStatement statement = connection.prepareStatement("""
                      INSERT INTO lavalink_sessions (bot_id, node_name, session_id)
                      VALUES (?, ?, ?)
-                     ON DUPLICATE KEY UPDATE session_id = VALUES(session_id)
+                     ON CONFLICT (bot_id, node_name) DO UPDATE SET
+                         session_id = EXCLUDED.session_id,
+                         updated_at = current_timestamp
                      """)) {
             statement.setInt(1, botId);
             statement.setString(2, nodeName);
@@ -112,16 +114,23 @@ public class PlaybackStateService {
                          (bot_id, guild_id, voice_channel_id, current_encoded, position_ms,
                           queue_encoded, volume, repeat_enabled, bass_enabled, smart_radio, radio_name)
                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                     ON DUPLICATE KEY UPDATE
-                         voice_channel_id = VALUES(voice_channel_id),
-                         current_encoded  = VALUES(current_encoded),
-                         position_ms      = VALUES(position_ms),
-                         queue_encoded    = VALUES(queue_encoded),
-                         volume           = VALUES(volume),
-                         repeat_enabled   = VALUES(repeat_enabled),
-                         bass_enabled     = VALUES(bass_enabled),
-                         smart_radio      = VALUES(smart_radio),
-                         radio_name       = VALUES(radio_name)
+                     ON CONFLICT (bot_id, guild_id) DO UPDATE SET
+                         voice_channel_id = EXCLUDED.voice_channel_id,
+                         current_encoded  = EXCLUDED.current_encoded,
+                         position_ms      = EXCLUDED.position_ms,
+                         queue_encoded    = EXCLUDED.queue_encoded,
+                         volume           = EXCLUDED.volume,
+                         repeat_enabled   = EXCLUDED.repeat_enabled,
+                         bass_enabled     = EXCLUDED.bass_enabled,
+                         smart_radio      = EXCLUDED.smart_radio,
+                         radio_name       = EXCLUDED.radio_name,
+                         -- PostgreSQL kennt kein "ON UPDATE current_timestamp":
+                         -- ohne diese Zeile bliebe updated_at auf dem Wert des
+                         -- ersten Einfuegens stehen, und loadRecent() haette den
+                         -- Schnappschuss nach Ablauf des Fensters nie wieder
+                         -- gefunden - die Wiedergabe waere nach einem Update
+                         -- stumm geblieben.
+                         updated_at       = current_timestamp
                      """)) {
             statement.setInt(1, botId);
             statement.setString(2, snapshot.guildId());
@@ -167,12 +176,15 @@ public class PlaybackStateService {
              PreparedStatement statement = connection.prepareStatement("""
                      SELECT guild_id, voice_channel_id, current_encoded, position_ms, queue_encoded,
                             volume, repeat_enabled, bass_enabled, smart_radio, radio_name,
-                            UNIX_TIMESTAMP(updated_at) * 1000 AS updated_ms
+                            (EXTRACT(EPOCH FROM updated_at) * 1000)::bigint AS updated_ms
                      FROM guild_playback_state
-                     WHERE bot_id = ? AND updated_at >= (NOW() - INTERVAL ? SECOND)
+                     WHERE bot_id = ? AND updated_at >= current_timestamp - make_interval(secs => ?)
                      """)) {
             statement.setInt(1, botId);
-            statement.setLong(2, Math.max(1L, maxAgeSeconds));
+            // make_interval(secs => …) erwartet double precision - als long
+            // muesste PostgreSQL erst casten, und bei benannten Argumenten ist
+            // das unnoetig heikel.
+            statement.setDouble(2, Math.max(1L, maxAgeSeconds));
             try (ResultSet resultSet = statement.executeQuery()) {
                 while (resultSet.next()) {
                     List<String> queue = new ArrayList<>();

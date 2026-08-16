@@ -245,11 +245,20 @@ public class BotAdminService {
 
             importLegacyAdminsOnce();
 
+            // FIELD() gibt es nur in MariaDB/MySQL. Unter PostgreSQL scheiterte
+            // diese Abfrage mit "function field(...) does not exist" - und weil
+            // der Fehler unten nur zu einer WARN-Zeile fuehrt, blieb die Liste
+            // leer und *niemand* war mehr Bot-Admin. Der Adminbereich antwortete
+            // dann mit 403, auch ueber HJ_BOT_ADMIN_IDS: die Notfalltuer traegt
+            // den Eintrag zwar ein, gelesen wird er aber ueber genau diese
+            // Abfrage. CASE ist Standard-SQL und tut dasselbe.
             String sql = """
                     SELECT user_id, role, display_name, added_by, application_owner, created_at
                     FROM bot_admins
                     WHERE bot_id = ?
-                    ORDER BY application_owner DESC, FIELD(role,'OWNER','ADMIN','SUPPORT'), created_at
+                    ORDER BY application_owner DESC,
+                             CASE role WHEN 'OWNER' THEN 1 WHEN 'ADMIN' THEN 2 WHEN 'SUPPORT' THEN 3 ELSE 4 END,
+                             created_at
                     """;
 
             try (Connection connection = DB.connection();
@@ -324,9 +333,13 @@ public class BotAdminService {
                 return;
             }
 
+            // INSERT IGNORE ist MySQL-Syntax; unter PostgreSQL ist das
+            // Gegenstueck ON CONFLICT DO NOTHING. Ebenso muss der Wahrheitswert
+            // false heissen, nicht 0.
             String insert = """
-                    INSERT IGNORE INTO bot_admins (bot_id, user_id, role, display_name, added_by, application_owner)
-                    VALUES (?,?,?,'','migration',0)
+                    INSERT INTO bot_admins (bot_id, user_id, role, display_name, added_by, application_owner)
+                    VALUES (?,?,?,'','migration',false)
+                    ON CONFLICT (bot_id, user_id) DO NOTHING
                     """;
             int imported = 0;
             try (PreparedStatement statement = connection.prepareStatement(insert)) {
