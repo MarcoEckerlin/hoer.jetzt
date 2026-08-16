@@ -197,6 +197,30 @@ else
     geheim HJ_LAVALINK_PASSWORD "Passwort"
 fi
 
+# ---------------------------------------------------------------- Anbindung
+#
+# Bisher endete die Installation mit einem Zettel: Name, Adresse und Passwort
+# von Hand in den Adminbereich uebertragen. Wer das vergass, hatte einen
+# laufenden Knoten, den der Bot nicht kannte - ohne jede Fehlermeldung, denn
+# aus dessen Sicht existierte er nicht.
+
+step "Anbindung an den Bot"
+info "Traegt sich der Knoten selbst ein, entfaellt der Eintrag im Adminbereich."
+info "Dafuer braucht es die Adresse des Bots und das gemeinsame Geheimnis"
+info "HJ_NODE_TOKEN aus dessen .env."
+HJ_CORE_URL=""
+HJ_NODE_TOKEN=""
+if ja "Selbst beim Bot anmelden?"; then
+    frage HJ_CORE_URL "Adresse des Bots (z.B. https://hoer.jetzt)"
+    geheim HJ_NODE_TOKEN "HJ_NODE_TOKEN"
+    HJ_CORE_URL="${HJ_CORE_URL%/}"
+else
+    warn "Dann bleibt der Eintrag im Adminbereich von Hand noetig."
+fi
+
+HJ_AGENT_TOKEN="$(zufall)"
+frage HJ_AGENT_PORT "Port des Knoten-Agenten" "$((8098 + INSTANZ))"
+
 step "Abbild bauen"
 docker build -t "${NAME}:latest" "$HIER" || fail "Build fehlgeschlagen."
 
@@ -283,15 +307,40 @@ else
     warn "Knoten antwortet noch nicht - beim ersten Start werden Plugins geladen."
 fi
 
+step "Knoten-Agent"
+info "Der Agent erlaubt Neustart und Aktualisierung dieses Knotens aus dem"
+info "Webinterface heraus - und meldet ihn beim Bot an."
+
+HJ_NODE_CONTAINER="$NAME" \
+HJ_NODE_NAME="${LAVALINK_TIER}-${INSTANZ}" \
+HJ_NODE_ADDRESS="http://${LAVALINK_BIND}:${LAVALINK_PORT}" \
+HJ_LAVALINK_PASSWORD="$HJ_LAVALINK_PASSWORD" \
+HJ_NODE_TIER="$LAVALINK_TIER" \
+HJ_AGENT_TOKEN="$HJ_AGENT_TOKEN" \
+HJ_AGENT_PORT="$HJ_AGENT_PORT" \
+HJ_CORE_URL="$HJ_CORE_URL" \
+HJ_NODE_TOKEN="$HJ_NODE_TOKEN" \
+    bash "${HIER}/agent/einrichten.sh" || warn "Agent konnte nicht eingerichtet werden - der Knoten laeuft trotzdem."
+
 step "Fertig"
 echo
-info "Im Adminbereich unter Lavalink eintragen:"
-info "    Name:     ${LAVALINK_TIER}-${INSTANZ}"
-info "    Adresse:  http://${LAVALINK_BIND}:${LAVALINK_PORT}"
-info "    Passwort: ${HJ_LAVALINK_PASSWORD}"
-info "    Stufe:    ${LAVALINK_TIER}"
-echo
-warn "Erst dieser Eintrag entscheidet, welche Server auf dem Knoten landen."
+if [[ -n "$HJ_CORE_URL" ]]; then
+    info "Der Knoten meldet sich selbst an und taucht im Adminbereich von allein auf."
+    info "    Name:     ${LAVALINK_TIER}-${INSTANZ}"
+    info "    Adresse:  http://${LAVALINK_BIND}:${LAVALINK_PORT}"
+    info "    Stufe:    ${LAVALINK_TIER}"
+    echo
+    info "Dauert es laenger als eine Minute:"
+    info "    journalctl -u hoerjetzt-agent -n 40"
+else
+    info "Im Adminbereich unter Lavalink eintragen:"
+    info "    Name:     ${LAVALINK_TIER}-${INSTANZ}"
+    info "    Adresse:  http://${LAVALINK_BIND}:${LAVALINK_PORT}"
+    info "    Passwort: ${HJ_LAVALINK_PASSWORD}"
+    info "    Stufe:    ${LAVALINK_TIER}"
+    echo
+    warn "Erst dieser Eintrag entscheidet, welche Server auf dem Knoten landen."
+fi
 echo
 if [[ "$YOUTUBE_OAUTH" == "true" && -z "$YOUTUBE_REFRESH_TOKEN" ]]; then
     warn "YouTube-Anmeldung offen: im Log steht gleich ein Geraetecode."

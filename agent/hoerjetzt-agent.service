@@ -1,0 +1,34 @@
+[Unit]
+Description=hoer.jetzt Knoten-Agent
+Documentation=https://github.com/MarcoEckerlin/hoer.jetzt
+# Der Agent redet mit Docker. Startet er vorher, findet der erste Zustands-
+# aufruf keinen Socket und der Knoten meldet sich als "fehlt" an - obwohl
+# gleich darauf alles laeuft.
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+# Alle Einstellungen und Geheimnisse in einer Datei, chmod 600. Nichts davon
+# gehoert in die Unit selbst: die liegt unter /etc/systemd/system und ist fuer
+# jeden lesbar.
+EnvironmentFile=/etc/hoerjetzt-agent.env
+ExecStart=/usr/bin/python3 /opt/hoerjetzt-node/agent/agent.py
+Restart=always
+RestartSec=5
+
+# Der Agent muss docker und git aufrufen koennen und laeuft deshalb als root.
+# Was sich trotzdem eingrenzen laesst, ist eingegrenzt:
+NoNewPrivileges=true
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
