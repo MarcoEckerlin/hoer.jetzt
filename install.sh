@@ -106,8 +106,13 @@ for zweig in core ai-radio lavalink web; do
 done
 
 step "Konfiguration"
-frage HJ_DB_HOST     "Datenbank-Adresse" "127.0.0.1"
-frage HJ_DB_PORT     "Port"              "3306"
+# Die Vorgaben stammten noch aus der MariaDB-Zeit: 127.0.0.1 und Port 3306.
+# Beides ist seit dem Umzug falsch und fuehrt geradewegs in eine Installation,
+# die nicht startet - der Bot laeuft im Container, die Datenbank heisst dort
+# "postgres" und lauscht auf 5432. Wer eine Datenbank ausserhalb betreibt,
+# traegt sie weiterhin von Hand ein.
+frage HJ_DB_HOST     "Datenbank-Adresse" "postgres"
+frage HJ_DB_PORT     "Port"              "5432"
 frage HJ_DB_NAME     "Datenbank"         "discordbot"
 frage HJ_DB_USER     "Benutzer"          "discordbot"
 geheim HJ_DB_PASSWORD "Passwort"
@@ -143,6 +148,8 @@ fi
 
 COMPOSE_DATEI="docker-compose.yml"
 COMPOSE=(-f "$COMPOSE_DATEI")
+# Die Spock-Datei kommt weiter unten dazu, sobald feststeht, ob diese Node zu
+# einem Verbund gehoert - hier ist die Frage noch nicht gestellt.
 
 # Der Betriebsbereich ist kein Bestandteil der Grundinstallation. Er zeigt den
 # ganzen Verbund und setzt dessen Ziel - das gehoert auf eine Maschine, nicht
@@ -160,6 +167,30 @@ frage HJ_NODE_NR "Node-Nummer" "1"
 PRIVAT_IP="$(ip -4 -o addr show 2>/dev/null | awk '{print $4}' | cut -d/ -f1 \
     | grep -E '^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.)' | head -n1 || true)"
 [[ -n "$PRIVAT_IP" ]] && info "Private Adresse gefunden: ${PRIVAT_IP}"
+
+# Replikation und Sitzungen gehoeren zusammen abgefragt.
+#
+# Beides musste man bisher hinterher von Hand in die .env schreiben - und
+# genau das war die Fehlerquelle: ohne HJ_SPOCK laeuft ein Standard-Postgres
+# ohne die Erweiterung, ohne HJ_SESSION_STORE liegen die Sitzungen je Node im
+# Arbeitsspeicher und die Anmeldung bricht beim Wechsel ab. Wer den Verbund
+# aufsetzt, will beides; wer eine einzelne Maschine betreibt, braucht keins
+# von beiden.
+HJ_SPOCK=""
+HJ_SESSION_STORE=""
+echo
+info "Mehrere Nodes im Verbund gleichen ihre Datenbanken ueber Spock ab."
+info "Dafuer braucht Postgres ein anderes Abbild und einen Port im privaten Netz."
+if [[ -n "$PRIVAT_IP" ]] && ja "Diese Node ist Teil eines Verbunds?" n; then
+    HJ_SPOCK="true"
+    HJ_SESSION_STORE="datenbank"
+    # Ohne diese Datei laeuft ein Standard-Postgres ohne die Erweiterung, und
+    # der Port bleibt im Docker-Netz - die andere Node kaeme nicht heran.
+    COMPOSE+=(-f "docker-compose.spock.yml")
+    info "Nach der Installation auf jeder Node einmal:"
+    info "    bash deploy/spock-einrichten.sh anlegen"
+    info "und danach kreuzweise 'verbinden' - siehe ANLEITUNG.md."
+fi
 
 HJ_LAVALINK_PASSWORD="$(zufall)"
 
@@ -185,6 +216,8 @@ HJ_REDIS_HOST=redis
 HJ_REDIS_PORT=6379
 HJ_NODE_NR=${HJ_NODE_NR}
 HJ_PRIVAT_IP=${PRIVAT_IP}
+HJ_SPOCK=${HJ_SPOCK}
+HJ_SESSION_STORE=${HJ_SESSION_STORE}
 ENV
 chmod 600 "$UMGEBUNG"
 info "$UMGEBUNG (enthaelt Token und Passwoerter, Rechte 0600)"
