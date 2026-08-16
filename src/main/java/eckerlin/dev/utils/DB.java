@@ -180,7 +180,7 @@ public class DB {
         schema = schema.replace("${HJ_NODE_NR}", nodeNr == null || nodeNr.isBlank() ? "1" : nodeNr.trim());
 
         int angewandt = 0;
-        for (String anweisung : schema.split(";")) {
+        for (String anweisung : anweisungenTrennen(schema)) {
             String sauber = anweisung.strip();
             if (sauber.isEmpty() || sauber.lines().allMatch(z -> z.strip().isEmpty() || z.strip().startsWith("--"))) {
                 continue;
@@ -189,6 +189,55 @@ public class DB {
             angewandt++;
         }
         System.out.println("[DB] Schema geprueft: " + angewandt + " Anweisungen.");
+    }
+
+    /**
+     * Zerlegt das Schema in einzelne Anweisungen.
+     *
+     * <p>Vorher stand hier {@code schema.split(";")}. Das reicht, solange jede
+     * Anweisung einzeilig endet - aber nicht mehr, sobald eine davon einen
+     * {@code DO $$ ... $$}-Block enthaelt: der hat innen Semikolons, und der
+     * Block waere mitten im Rumpf zerschnitten worden. Gebraucht wird er fuer
+     * bedingtes DDL, denn PostgreSQL kennt kein
+     * "ALTER TABLE ... ADD PRIMARY KEY IF NOT EXISTS" - und ohne Bedingung
+     * scheitert das Schema beim zweiten Start.
+     *
+     * <p>Semikolons in Zeichenketten werden ebenfalls uebergangen. Das ist
+     * heute nicht noetig, kostet aber drei Zeilen und erspart die naechste
+     * Suche nach einem Syntaxfehler, den es gar nicht gibt.</p>
+     */
+    private static java.util.List<String> anweisungenTrennen(String schema) {
+        java.util.List<String> anweisungen = new java.util.ArrayList<>();
+        StringBuilder aktuell = new StringBuilder();
+
+        boolean inZeichenkette = false;
+        boolean inDollarBlock = false;
+
+        for (int i = 0; i < schema.length(); i++) {
+            char zeichen = schema.charAt(i);
+
+            if (!inZeichenkette && zeichen == '$' && i + 1 < schema.length() && schema.charAt(i + 1) == '$') {
+                inDollarBlock = !inDollarBlock;
+                aktuell.append("$$");
+                i++;
+                continue;
+            }
+
+            if (!inDollarBlock && zeichen == '\'') {
+                inZeichenkette = !inZeichenkette;
+            }
+
+            if (zeichen == ';' && !inZeichenkette && !inDollarBlock) {
+                anweisungen.add(aktuell.toString());
+                aktuell.setLength(0);
+                continue;
+            }
+
+            aktuell.append(zeichen);
+        }
+
+        anweisungen.add(aktuell.toString());
+        return anweisungen;
     }
 
     public static boolean isAvailable() {

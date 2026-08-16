@@ -32,6 +32,29 @@ CREATE TABLE IF NOT EXISTS logs (
     "timestamp" timestamp
 );
 
+-- Ein Schluessel fuer logs und settings.
+--
+-- Beide Tabellen kamen ohne aus, solange eine Datenbank genuegte. Mit
+-- Replikation nicht mehr: Spock nimmt eine Tabelle ohne Primaerschluessel
+-- nicht in den Abgleich - und zwar nicht bloss diese eine. Der Aufruf
+-- repset_add_all_tables() bricht beim ersten Fund ab, sodass am Ende *keine*
+-- Tabelle repliziert wird. Aus zwei fehlenden Schluesseln wird so eine
+-- Replikation, die gar nichts tut.
+ALTER TABLE logs
+    ADD COLUMN IF NOT EXISTS id bigint NOT NULL DEFAULT nextval('hj_id_seq');
+
+-- PostgreSQL kennt kein "ADD PRIMARY KEY IF NOT EXISTS" - ohne die Bedingung
+-- scheitert der zweite Start.
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_index WHERE indrelid = 'logs'::regclass AND indisprimary
+    ) THEN
+        ALTER TABLE logs ADD PRIMARY KEY (id);
+    END IF;
+END
+$$;
+
 CREATE TABLE IF NOT EXISTS settings (
     id                    int,
     token                 text,
@@ -65,6 +88,22 @@ CREATE TABLE IF NOT EXISTS settings (
     created_at            timestamp DEFAULT current_timestamp,
     updated_at            timestamp DEFAULT current_timestamp
 );
+
+-- settings hat mit id bereits den natuerlichen Schluessel (eine Zeile je Bot),
+-- er war nur nie als solcher eingetragen. Siehe den Kommentar bei logs.
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_index WHERE indrelid = 'settings'::regclass AND indisprimary
+    ) THEN
+        -- Bei einer Altinstallation koennte id leer sein; dann waere der
+        -- Schluessel nicht anlegbar. Vorher auffuellen kostet nichts.
+        UPDATE settings SET id = 1 WHERE id IS NULL;
+        ALTER TABLE settings ALTER COLUMN id SET NOT NULL;
+        ALTER TABLE settings ADD PRIMARY KEY (id);
+    END IF;
+END
+$$;
 
 -- ---------------------------------------------------------------------------
 -- Audio
