@@ -1,6 +1,7 @@
 package eckerlin.dev.web;
 
 import eckerlin.dev.audio.AudioService;
+import eckerlin.dev.audio.KnotenAgentService;
 import eckerlin.dev.web.dto.AudioNodeUsageView;
 import eckerlin.dev.services.AdminAccessService;
 import eckerlin.dev.services.AdminConfigurationService;
@@ -24,6 +25,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/admin")
@@ -35,6 +37,7 @@ public class AdminApiController {
     private final BotPresentationService botPresentationService;
     private final VmControlService vmControlService;
     private final AudioService audioService;
+    private final KnotenAgentService knotenAgentService;
 
     public AdminApiController(
             AdminAccessService adminAccessService,
@@ -42,8 +45,10 @@ public class AdminApiController {
             BotPresenceService botPresenceService,
             BotPresentationService botPresentationService,
             VmControlService vmControlService,
-            AudioService audioService
+            AudioService audioService,
+            KnotenAgentService knotenAgentService
     ) {
+        this.knotenAgentService = knotenAgentService;
         this.adminAccessService = adminAccessService;
         this.adminConfigurationService = adminConfigurationService;
         this.botPresenceService = botPresenceService;
@@ -125,6 +130,45 @@ public class AdminApiController {
         }
         return new ActionResponse(true, "Knoten " + name
                 + " neu verbunden. Laufende Server ziehen kurz um und kommen zurueck.");
+    }
+
+    /**
+     * Startet den Lavalink-Container auf dem Knoten-Host wirklich neu.
+     *
+     * <p>Der Unterschied zu {@code /reconnect} ist der, auf den es im Ernstfall
+     * ankommt: reconnect kappt die Verbindung von dieser Seite, ein haengender
+     * Container blieb haengen. Hier uebernimmt der Agent auf dem Host.</p>
+     *
+     * <p>Schreibende Stufe, nicht nur lesende: ein Neustart nimmt jedem Server
+     * auf diesem Knoten kurz den Ton.</p>
+     */
+    @PostMapping("/audio/nodes/{name}/restart")
+    public ActionResponse restartAudioNode(@PathVariable("name") String name, HttpSession session) {
+        adminAccessService.requireWriteAdmin(requireSession(session));
+        KnotenAgentService.Antwort antwort = knotenAgentService.neustarten(name);
+        if (!antwort.ok()) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, antwort.meldung());
+        }
+        return new ActionResponse(true, antwort.meldung());
+    }
+
+    /** Holt den lavalink-Zweig auf dem Knoten-Host, baut neu und startet. */
+    @PostMapping("/audio/nodes/{name}/update")
+    public ActionResponse updateAudioNode(@PathVariable("name") String name, HttpSession session) {
+        adminAccessService.requireWriteAdmin(requireSession(session));
+        KnotenAgentService.Antwort antwort = knotenAgentService.aktualisieren(name);
+        if (!antwort.ok()) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, antwort.meldung());
+        }
+        return new ActionResponse(true, antwort.meldung());
+    }
+
+    /** Das Protokoll des letzten Aktualisierungslaufs auf dem Knoten-Host. */
+    @GetMapping("/audio/nodes/{name}/log")
+    public Map<String, Object> audioNodeLog(@PathVariable("name") String name, HttpSession session) {
+        adminAccessService.requireAdmin(requireSession(session));
+        return Map.of("protokoll", knotenAgentService.protokoll(name)
+                .orElse("Kein Agent erreichbar oder noch kein Lauf."));
     }
 
     /** Zieht Server auf die Knotenstufe, die ihnen zusteht. */
