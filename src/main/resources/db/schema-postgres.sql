@@ -302,6 +302,19 @@ CREATE TABLE IF NOT EXISTS bot_admins (
     PRIMARY KEY (bot_id, user_id)
 );
 
+-- Zweiter Faktor je Bot-Admin. Steht hier und nicht in einer eigenen Tabelle,
+-- weil eine neue Tabelle bei aktiver Spock-Replikation einen zusaetzlichen
+-- Handgriff auf beiden Nodes braucht (repset_add_all_tables), eine neue Spalte
+-- dagegen nicht: das Schema laeuft beim Start auf jeder Node ohnehin durch.
+ALTER TABLE bot_admins
+    ADD COLUMN IF NOT EXISTS totp_secret varchar(64);
+
+-- Der Zeitschritt des zuletzt eingeloesten Codes. Ohne den waere derselbe Code
+-- 30 Sekunden lang mehrfach verwendbar - wer ihn mitliest, koennte ihn in
+-- diesem Fenster wiederverwenden.
+ALTER TABLE bot_admins
+    ADD COLUMN IF NOT EXISTS totp_letzter_schritt bigint;
+
 CREATE TABLE IF NOT EXISTS guild_role_permissions (
     bot_id     int         NOT NULL,
     guild_id   varchar(32) NOT NULL,

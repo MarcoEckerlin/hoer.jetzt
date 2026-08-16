@@ -1,7 +1,10 @@
 package eckerlin.dev.web;
 
 import eckerlin.dev.audio.AudioService;
+import eckerlin.dev.audio.AutoScaleService;
+import eckerlin.dev.audio.ErreichbarkeitService;
 import eckerlin.dev.audio.KnotenAgentService;
+import eckerlin.dev.security.ZweiFaktorService;
 import eckerlin.dev.web.dto.AudioNodeUsageView;
 import eckerlin.dev.services.AdminAccessService;
 import eckerlin.dev.services.AdminConfigurationService;
@@ -38,6 +41,9 @@ public class AdminApiController {
     private final VmControlService vmControlService;
     private final AudioService audioService;
     private final KnotenAgentService knotenAgentService;
+    private final AutoScaleService autoScaleService;
+    private final ErreichbarkeitService erreichbarkeitService;
+    private final ZweiFaktorService zweiFaktorService;
 
     public AdminApiController(
             AdminAccessService adminAccessService,
@@ -46,9 +52,15 @@ public class AdminApiController {
             BotPresentationService botPresentationService,
             VmControlService vmControlService,
             AudioService audioService,
-            KnotenAgentService knotenAgentService
+            KnotenAgentService knotenAgentService,
+            AutoScaleService autoScaleService,
+            ErreichbarkeitService erreichbarkeitService,
+            ZweiFaktorService zweiFaktorService
     ) {
         this.knotenAgentService = knotenAgentService;
+        this.autoScaleService = autoScaleService;
+        this.erreichbarkeitService = erreichbarkeitService;
+        this.zweiFaktorService = zweiFaktorService;
         this.adminAccessService = adminAccessService;
         this.adminConfigurationService = adminConfigurationService;
         this.botPresenceService = botPresenceService;
@@ -179,6 +191,85 @@ public class AdminApiController {
         return new ActionResponse(true, umgezogen == 0
                 ? "Alle Server liegen bereits auf der passenden Stufe."
                 : umgezogen + " Server umgezogen.");
+    }
+
+    // ------------------------------------------------------------------
+    // Autoscaling und zweiter Faktor
+    // ------------------------------------------------------------------
+
+    /** Zustand des Autoscalings samt Schwellen - fuer die Kopfzeile der Knotenansicht. */
+    @GetMapping("/audio/autoscale")
+    public AutoScaleService.Lage autoscale(HttpSession session) {
+        adminAccessService.requireAdmin(requireSession(session));
+        return autoScaleService.lage();
+    }
+
+    /** Antwortzeiten zum Loadbalancer, zu den Knoten und deren Agenten. */
+    @GetMapping("/netz/erreichbarkeit")
+    public List<ErreichbarkeitService.Messung> erreichbarkeit(HttpSession session) {
+        adminAccessService.requireAdmin(requireSession(session));
+        return erreichbarkeitService.messen();
+    }
+
+    /**
+     * Legt von Hand einen Knoten bei Hetzner an - etwa einen Premium-Server.
+     *
+     * <p>Hier und nur hier steht der zweite Faktor. Das Autoscaling laeuft
+     * bewusst ohne, weil es auf Last reagieren muss und nachts niemanden
+     * fragen kann. Dieser Weg dagegen ist eine Entscheidung eines Menschen -
+     * und ein uebernommener Adminzugang waere sonst gleichbedeutend mit einer
+     * offenen Kreditkarte.</p>
+     */
+    @PostMapping("/audio/nodes/anlegen")
+    public ActionResponse knotenAnlegen(@RequestBody Map<String, String> anfrage, HttpSession session) {
+        DashboardSession angemeldet = requireSession(session);
+        adminAccessService.requireWriteAdmin(angemeldet);
+
+        if (!zweiFaktorService.eingerichtet(angemeldet.userId())) {
+            throw new ResponseStatusException(HttpStatus.PRECONDITION_REQUIRED,
+                    "Dafür braucht es einen zweiten Faktor. Unter „Zugang“ einrichten.");
+        }
+        if (!zweiFaktorService.pruefen(angemeldet.userId(), anfrage.get("code"))) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Der Code stimmt nicht oder wurde schon benutzt.");
+        }
+
+        String stufe = "premium".equalsIgnoreCase(anfrage.getOrDefault("stufe", "free")) ? "premium" : "free";
+        return autoScaleService.vonHandAnlegen(stufe)
+                .map(name -> new ActionResponse(true, "Server %s wird angelegt. Er meldet sich in wenigen Minuten von selbst an.".formatted(name)))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                        "Hetzner hat den Server nicht angelegt - Einzelheiten stehen im Protokoll."));
+    }
+
+    @GetMapping("/2fa")
+    public Map<String, Object> zweiFaktorZustand(HttpSession session) {
+        DashboardSession angemeldet = requireSession(session);
+        adminAccessService.requireAdmin(angemeldet);
+        return Map.of("eingerichtet", zweiFaktorService.eingerichtet(angemeldet.userId()));
+    }
+
+    /**
+     * Legt ein neues Geheimnis an und liefert die {@code otpauth:}-Adresse.
+     *
+     * <p>Sie wird genau einmal ausgeliefert und nirgends noch einmal angezeigt.
+     * Wer sie verliert, richtet neu ein - das ist der Preis dafuer, dass sie
+     * nicht dauerhaft ueber die API abrufbar ist.</p>
+     */
+    @PostMapping("/2fa/einrichten")
+    public Map<String, Object> zweiFaktorEinrichten(HttpSession session) throws SQLException {
+        DashboardSession angemeldet = requireSession(session);
+        adminAccessService.requireWriteAdmin(angemeldet);
+        return Map.of("otpauth", zweiFaktorService.einrichten(angemeldet.userId(), angemeldet.username()));
+    }
+
+    @PostMapping("/2fa/pruefen")
+    public ActionResponse zweiFaktorPruefen(@RequestBody Map<String, String> anfrage, HttpSession session) {
+        DashboardSession angemeldet = requireSession(session);
+        adminAccessService.requireAdmin(angemeldet);
+        if (!zweiFaktorService.pruefen(angemeldet.userId(), anfrage.get("code"))) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Der Code stimmt nicht.");
+        }
+        return new ActionResponse(true, "Der zweite Faktor ist eingerichtet.");
     }
 
     @PostMapping("/actions/restart-vm")
