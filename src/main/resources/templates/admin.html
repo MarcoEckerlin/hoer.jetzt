@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="de" xmlns:th="http://www.thymeleaf.org" data-theme="dark">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title th:text="|Bot-Verwaltung — ${botBrand.displayName}|">Bot-Verwaltung</title>
+    <link rel="stylesheet" href="/panel.css">
+    <script src="/theme.js" th:src="@{/theme.js(v=${assetVersion})}"></script>
+</head>
+<body>
+<script src="/panel-icons.js"></script>
+
+<div class="app">
+
+    <!-- ===================== Instanzleiste ===================== -->
+    <nav class="rail" aria-label="Bereiche">
+        <button class="rail-item is-active" title="Bot-Verwaltung">
+            <img th:if="${botBrand.avatarUrl}" th:src="${botBrand.avatarUrl}" alt="">
+            <span th:unless="${botBrand.avatarUrl}">BV</span>
+        </button>
+        <div class="rail-sep"></div>
+        <a class="rail-item" href="/dashboard" title="Zum Serverpanel" style="text-decoration:none">
+            <svg viewBox="0 0 24 24" width="22" height="22"><use href="#i-server"/></svg>
+        </a>
+        <a class="rail-item" href="/logout" title="Abmelden" style="text-decoration:none">
+            <svg viewBox="0 0 24 24" width="22" height="22"><use href="#i-exit"/></svg>
+        </a>
+    </nav>
+
+    <!-- ===================== Navigation ===================== -->
+    <div class="nav">
+        <div class="nav-head">
+            <span class="dot" id="botDot"></span>
+            <span th:text="${botBrand.displayName}">Bot</span>
+        </div>
+        <div class="nav-search">
+            <input id="navSearch" type="search" placeholder="Bereich suchen…" autocomplete="off">
+        </div>
+        <div class="nav-scroll" id="navScroll">
+
+            <div class="nav-group">
+                <h3>Instanz</h3>
+                <button class="nav-link is-active" data-page="overview">
+                    <svg viewBox="0 0 24 24"><use href="#i-home"/></svg>Übersicht</button>
+                <button class="nav-link" data-page="brand">
+                    <svg viewBox="0 0 24 24"><use href="#i-brand"/></svg>Marke &amp; Rechtliches</button>
+                <button class="nav-link" data-page="maintenance">
+                    <svg viewBox="0 0 24 24"><use href="#i-wrench"/></svg>Wartung</button>
+            </div>
+
+            <div class="nav-group">
+                <h3>Bot</h3>
+                <button class="nav-link" data-page="bot">
+                    <svg viewBox="0 0 24 24"><use href="#i-key"/></svg>Zugang &amp; Status</button>
+                <button class="nav-link" data-page="login">
+                    <svg viewBox="0 0 24 24"><use href="#i-shield"/></svg>Discord-Login</button>
+                <button class="nav-link" data-page="llm">
+                    <svg viewBox="0 0 24 24"><use href="#i-ai"/></svg>KI-Anbieter</button>
+            </div>
+
+            <div class="nav-group">
+                <h3>Betrieb</h3>
+                <button class="nav-link" data-page="deployments">
+                    <svg viewBox="0 0 24 24"><use href="#i-deploy"/></svg>Deployments</button>
+                <button class="nav-link" data-page="lavalink">
+                    <svg viewBox="0 0 24 24"><use href="#i-plug"/></svg>Audio-Knoten</button>
+            </div>
+
+            <div class="nav-group">
+                <h3>Verwaltung</h3>
+                <button class="nav-link" data-page="guilds">
+                    <svg viewBox="0 0 24 24"><use href="#i-server"/></svg>Server<span class="badge" id="guildCountBadge">…</span></button>
+                <button class="nav-link" data-page="admins">
+                    <svg viewBox="0 0 24 24"><use href="#i-users"/></svg>Admins<span class="badge" id="adminCountBadge">…</span></button>
+                <button class="nav-link" data-page="audit">
+                    <svg viewBox="0 0 24 24"><use href="#i-clock"/></svg>Protokoll</button>
+            </div>
+
+        </div>
+        <div class="nav-foot">
+            <div class="avatar">
+                <img th:if="${user.avatarUrl}" th:src="${user.avatarUrl}" alt="">
+                <span th:unless="${user.avatarUrl}" th:text="${#strings.substring(user.username,0,1)}">M</span>
+            </div>
+            <div class="who">
+                <b th:text="${user.username}">Nutzer</b>
+                <span id="ownRole">Bot-Verwaltung</span>
+            </div>
+            <button class="icon-btn" id="themeBtn" title="Design wechseln">
+                <svg viewBox="0 0 24 24"><use href="#i-sun"/></svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- ===================== Inhalt ===================== -->
+    <main class="main">
+        <div class="topbar">
+            <button class="burger" id="burger" aria-label="Navigation">
+                <svg viewBox="0 0 24 24" width="22" height="22"><use href="#i-menu"/></svg>
+            </button>
+            <div class="crumb">
+                <svg viewBox="0 0 24 24" id="crumbIcon"><use href="#i-home"/></svg>
+                <b id="crumbText">Übersicht</b>
+            </div>
+            <div class="spacer"></div>
+            <span class="status-pill opt" id="deploymentPill"
+                  th:text="|Deployment: ${currentDeploymentDisplayName}|">Deployment</span>
+            <span class="status-pill" id="botPill"><span class="dot"></span>Bot</span>
+        </div>
+
+        <div class="scroll" id="scroll">
+            <div class="page" id="page">
+                <div class="empty"><span class="spinner"></span></div>
+            </div>
+        </div>
+
+        <div class="savebar" id="savebar" role="status">
+            <span class="msg">Vorsicht — du hast ungespeicherte Änderungen!</span>
+            <button class="btn btn-ghost btn-sm" id="resetBtn">Zurücksetzen</button>
+            <button class="btn btn-success btn-sm" id="saveBtn">Änderungen speichern</button>
+        </div>
+    </main>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<div class="toast" id="toast"></div>
+
+<script src="/panel-upload.js"></script>
+<script src="/admin-panel.js"></script>
+<div class="theme-switcher-floating">
+                <div class="theme-switcher" role="group" aria-label="Farbschema">
+                    <button class="theme-switch-option" type="button" data-theme-option="system" aria-pressed="true">System</button>
+                    <button class="theme-switch-option" type="button" data-theme-option="dark" aria-pressed="false">Dunkel</button>
+                    <button class="theme-switch-option" type="button" data-theme-option="light" aria-pressed="false">Hell</button>
+                </div>
+</div>
+</body>
+</html>

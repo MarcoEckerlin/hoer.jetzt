@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="de" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="${botBrand.displayName + ' — Musik für deinen Discord-Server'}">hoer.jetzt — Musik für deinen Discord-Server</title>
+    <meta name="description"
+          th:attr="content=${botBrand.displayName + ' spielt Musik, Playlists und Webradio in deinen Discord-Sprachkanal. Slash-Command oder Weboberfläche, ohne Werbung.'}"
+          content="Musik, Playlists und Webradio in deinem Discord-Sprachkanal.">
+    <link rel="stylesheet" href="/public.css" th:href="@{/public.css(v=${assetVersion})}">
+    <!-- Muss vor dem Rendern laufen, sonst blitzt beim Laden kurz das falsche Farbschema auf. -->
+    <script src="/theme.js" th:src="@{/theme.js(v=${assetVersion})}"></script>
+</head>
+<body class="landing-body">
+<main class="landing-shell landing-grid">
+    <section class="hero-card hero-card-wide">
+        <div class="hero-meta">
+            <div class="brand-media">
+                <img class="brand-logo" th:if="${botBrand.avatarUrl}" th:src="${botBrand.avatarUrl}" alt="" aria-hidden="true">
+                <div>
+                    <p class="eyebrow" th:text="${botBrand.displayName}">hoer.jetzt</p>
+                    <p class="hero-status">Musikbot für Discord</p>
+                </div>
+            </div>
+            <div class="status-pill" th:if="${maintenanceEnabled}">
+                Wartungsmodus aktiv
+            </div>
+        </div>
+
+        <h1>Musik auf deinem Server.<br>Ohne Werbung, ohne Setup-Abend.</h1>
+
+        <p class="hero-copy">
+            Einladen, <code>/play</code> tippen, fertig. <span th:text="${botBrand.displayName}">hoer.jetzt</span>
+            spielt Songs, Playlists und Webradio in deinen Sprachkanal — in voller Qualität und ohne
+            Unterbrechung durch Werbung. Wer lieber klickt statt tippt, steuert alles über die Weboberfläche.
+        </p>
+
+        <p class="error-copy" th:if="${maintenanceEnabled}" th:text="${maintenanceMessage}"></p>
+        <p class="error-copy" th:if="${errorMessage}" th:text="${errorMessage}"></p>
+
+        <div class="hero-actions">
+            <a class="primary-button" th:if="${loginConfigured}" th:href="${loginUrl}">Mit Discord anmelden</a>
+            <a class="ghost-button" th:if="${inviteConfigured}" th:href="${inviteUrl}" rel="noopener">Bot hinzufügen</a>
+            <span class="warning-pill" th:if="${!loginConfigured}">
+                Der Discord-Login ist noch nicht fertig eingerichtet. Client-ID, Secret und Redirect-URI
+                stehen im Adminbereich.
+            </span>
+        </div>
+
+        <div class="feature-grid">
+            <article class="feature-card">
+                <h2>Alles, was klingt</h2>
+                <p>
+                    Einzelne Titel, ganze Playlists, Livestreams und Webradio. Warteschlange, Wiederholung,
+                    Lautstärke und Bassanhebung sind zwei Klicks entfernt — oder ein Slash-Command.
+                </p>
+            </article>
+            <article class="feature-card">
+                <h2>Läuft weiter</h2>
+                <p>
+                    Updates unterbrechen die Wiedergabe nicht: Warteschlange und Abspielposition überleben
+                    einen Neustart. Fällt ein Audioserver aus, zieht deine Runde auf einen anderen um —
+                    meist hörst du davon nichts.
+                </p>
+            </article>
+            <article class="feature-card">
+                <h2>Pro Server eingestellt</h2>
+                <p>
+                    Rechte, Sprachkanäle, Willkommensnachrichten, Reaction-Roles und Protokolle regelst du
+                    je Server im Web statt in verstreuten Konfigurationsdateien.
+                </p>
+            </article>
+        </div>
+
+        <footer class="portal-footer">
+            <p>&copy; <span th:text="${currentYear}">2026</span> <span th:text="${botBrand.displayName}">hoer.jetzt</span></p>
+            <div class="theme-switcher" role="group" aria-label="Farbschema">
+                <button class="theme-switch-option" type="button" data-theme-option="system" aria-pressed="true">System</button>
+                <button class="theme-switch-option" type="button" data-theme-option="dark" aria-pressed="false">Dunkel</button>
+                <button class="theme-switch-option" type="button" data-theme-option="light" aria-pressed="false">Hell</button>
+            </div>
+            <div class="footer-links">
+                <a href="/impressum">Impressum</a>
+                <a href="/datenschutz">Datenschutz</a>
+                <a href="/stats">Stats</a>
+            </div>
+        </footer>
+    </section>
+
+    <aside class="hero-visual">
+        <div class="visual-card visual-card-main">
+            <img class="hero-illustration" th:if="${botBrand.heroImageUrl}" th:src="${botBrand.heroImageUrl}" alt="" aria-hidden="true">
+            <p class="eyebrow">In drei Schritten</p>
+            <strong>Vom Einladen bis zum ersten Song</strong>
+            <p>
+                <b>1.</b> Bot auf den Server holen.<br>
+                <b>2.</b> In einen Sprachkanal gehen.<br>
+                <b>3.</b> <code>/play</code> und den Titel, eine Playlist oder einen Radiosender nennen.
+            </p>
+        </div>
+        <div class="visual-card">
+            <span class="badge success">Im Chat</span>
+            <p>
+                <code>/play</code>, <code>/skip</code>, <code>/queue</code>, <code>/radio</code> —
+                die Befehle stehen direkt in Discord zur Auswahl, ohne Handbuch.
+            </p>
+        </div>
+        <div class="visual-card">
+            <span class="badge muted">Im Web</span>
+            <p>
+                Anmelden mit Discord, Server auswählen, steuern. Es erscheinen nur die Server, auf denen du
+                selbst etwas zu sagen hast.
+            </p>
+        </div>
+    </aside>
+</main>
+<div id="cookieNotice" class="cookie-notice" hidden>
+    <div class="cookie-notice-copy">
+        <strong>Cookie-Hinweis</strong>
+        <p>Diese Website nutzt nur technisch notwendige Session-Cookies, damit Discord-Login, geschützte Bereiche und längere Sitzungen funktionieren.</p>
+    </div>
+    <div class="cookie-notice-actions">
+        <a id="cookieNoticeAccept" class="primary-button small-button" href="/cookies/accept">Akzeptieren</a>
+        <a id="cookieNoticeReject" class="ghost-button small-button" href="/cookies/reject">Ablehnen</a>
+    </div>
+</div>
+<script src="/cookie-hint.js" th:src="@{/cookie-hint.js(v=${assetVersion})}"></script>
+</body>
+</html>

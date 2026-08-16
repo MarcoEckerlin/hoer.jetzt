@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="de" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="${'Status & Statistik | ' + botBrand.displayName}">Status & Statistik</title>
+    <link rel="stylesheet" href="/public.css" th:href="@{/public.css(v=${assetVersion})}">
+    <!-- Muss vor dem Rendern laufen, sonst blitzt beim Laden kurz das falsche Farbschema auf. -->
+    <script src="/theme.js" th:src="@{/theme.js(v=${assetVersion})}"></script>
+</head>
+<body class="dashboard-body">
+<main class="landing-shell legal-layout stats-layout">
+    <section class="hero-card legal-card stats-hero">
+        <div class="hero-meta">
+            <div class="brand-media">
+                <img class="brand-logo" th:if="${botBrand.avatarUrl}" th:src="${botBrand.avatarUrl}" alt="Bot Avatar">
+                <div>
+                    <p class="eyebrow">Öffentliche Statusseite</p>
+                    <h1 th:text="${botBrand.displayName + ' Status & Hörstatistik'}">Status & Hörstatistik</h1>
+                </div>
+            </div>
+            <span id="statsGeneratedLabel" class="badge muted" th:text="${'Stand ' + stats.summary.generatedAtLabel}">Stand</span>
+        </div>
+
+        <p class="hero-copy">
+            Diese Seite zeigt den aktuellen Audio-Status und eine öffentliche, datenschutzfreundliche Hörstatistik.
+            Sichtbar sind nur aggregierte Werte, keine offenen Discord-Identitäten.
+        </p>
+
+        <section class="stats-system-banner">
+            <div>
+                <p class="section-kicker">Systemstatus</p>
+                <h2 id="statsSystemHeadline" th:text="${stats.summary.liveStreams > 0 ? 'Wiedergabe läuft stabil' : 'System bereit'}">System bereit</h2>
+                <p id="statsSystemNote" class="panel-copy"
+                   th:text="${stats.summary.liveStreams > 0 ? stats.summary.liveStreams + ' aktive Streams mit ' + stats.summary.liveListeners + ' Live-Hörern.' : 'Der Bot ist online und wartet aktuell auf die nächste Wiedergabe.'}">
+                    Der Bot ist online und wartet aktuell auf die nächste Wiedergabe.
+                </p>
+            </div>
+            <div class="stats-system-state">
+                <span id="statsSystemState" class="badge success"
+                      th:text="${stats.summary.liveStreams > 0 ? 'Streaming aktiv' : 'Bereit'}">Bereit</span>
+            </div>
+        </section>
+
+        <section class="stats-status-strip">
+            <article class="mini-panel">
+                <span class="mini-label">Live-Hörer</span>
+                <strong id="liveListenersValue" th:text="${stats.summary.liveListeners}">0</strong>
+                <p>jetzt verbunden</p>
+            </article>
+            <article class="mini-panel">
+                <span class="mini-label">Aktive Streams</span>
+                <strong id="liveStreamsValue" th:text="${stats.summary.liveStreams}">0</strong>
+                <p>Musik, Radio oder AI Radio</p>
+            </article>
+            <article class="mini-panel">
+                <span class="mini-label">30 Tage Hörzeit</span>
+                <strong id="listenTime30dValue" th:text="${stats.summary.listenedTime30d}">0 min</strong>
+                <p>gestreamte Zeit</p>
+            </article>
+            <article class="mini-panel">
+                <span class="mini-label">Eindeutige Hörer</span>
+                <strong id="uniqueListeners30dValue" th:text="${stats.summary.uniqueListeners30d}">0</strong>
+                <p>pseudonymisiert in 30 Tagen</p>
+            </article>
+        </section>
+
+        <section class="stats-block">
+            <div class="panel-title-row">
+                <div>
+                    <h3>Audio-Knoten</h3>
+                    <p class="panel-copy">Alle Wiedergabe-Knoten dieser Instanz und ob sie gerade antworten.</p>
+                </div>
+                <span id="nodeStatusBadge" class="badge muted">—</span>
+            </div>
+            <div id="nodeListe" class="node-liste"></div>
+            <div id="nodeLeer" class="empty-state" hidden>Kein Audio-Knoten eingetragen.</div>
+        </section>
+
+        <section class="stats-block">
+            <div class="panel-title-row">
+                <div>
+                    <h3>Aktuelle Wiedergaben</h3>
+                    <p class="panel-copy">Live-Ansicht aller aktuell laufenden Musik-, Radio- und AI-Radio-Wiedergaben.</p>
+                </div>
+                <span id="liveStatusBadge" class="badge success" th:text="${stats.summary.liveStreams > 0 ? 'Online' : 'Kein Stream aktiv'}">Online</span>
+            </div>
+            <div id="liveStatsList" class="stats-live-list" th:attr="hidden=${#lists.isEmpty(stats.liveItems)} ? 'hidden' : null">
+                <article class="list-row stats-live-row" th:each="item : ${stats.liveItems}">
+                    <div>
+                        <strong th:text="${item.title}">Titel</strong>
+                        <p th:text="${item.subtitle}">Quelle</p>
+                    </div>
+                    <div class="stats-live-meta">
+                        <span class="badge muted" th:text="${item.modeLabel}">Modus</span>
+                        <span class="badge success" th:text="${item.listenerCount + ' Hörer'}">0 Hörer</span>
+                    </div>
+                </article>
+            </div>
+            <div id="liveStatsEmpty" class="empty-state" th:attr="hidden=${!#lists.isEmpty(stats.liveItems)} ? 'hidden' : null">
+                Aktuell läuft keine öffentliche Wiedergabe.
+            </div>
+        </section>
+
+        <section class="stats-block">
+            <div class="panel-title-row">
+                <div>
+                    <h3>Streamzeit & Hörer im Zeitfenster</h3>
+                    <p class="panel-copy">Zeitverlauf der gestreamten Hörzeit und der eindeutigen Hörer über frei wählbare Zeitbereiche.</p>
+                </div>
+                <span id="chartRangeLabel" class="badge muted">30 Tage</span>
+            </div>
+
+            <div class="stats-range-tabs" id="statsRangeTabs">
+                <button class="chip-button stats-range-tab" type="button" data-range="1y">1y</button>
+                <button class="chip-button stats-range-tab" type="button" data-range="6m">6m</button>
+                <button class="chip-button stats-range-tab active" type="button" data-range="30t">30t</button>
+                <button class="chip-button stats-range-tab" type="button" data-range="7t">7t</button>
+                <button class="chip-button stats-range-tab" type="button" data-range="3t">3t</button>
+                <button class="chip-button stats-range-tab" type="button" data-range="24h">24h</button>
+                <button class="chip-button stats-range-tab" type="button" data-range="12h">12h</button>
+                <button class="chip-button stats-range-tab" type="button" data-range="3h">3h</button>
+                <button class="chip-button stats-range-tab" type="button" data-range="1h">1h</button>
+            </div>
+
+            <section class="stats-chart-overview">
+                <article class="mini-panel">
+                    <span class="mini-label">Gewählter Zeitraum</span>
+                    <strong id="chartSummaryTime">-</strong>
+                    <p>gestreamte Zeit</p>
+                </article>
+                <article class="mini-panel">
+                    <span class="mini-label">Eindeutige Hörer</span>
+                    <strong id="chartSummaryListeners">-</strong>
+                    <p>im gewählten Zeitfenster</p>
+                </article>
+                <article class="mini-panel">
+                    <span class="mini-label">Peak</span>
+                    <strong id="chartSummaryPeak">-</strong>
+                    <p>höchster Hörerwert pro Bucket</p>
+                </article>
+            </section>
+
+            <section class="stats-chart-grid">
+                <article class="panel chart-card">
+                    <div class="panel-title-row">
+                        <div>
+                            <h3>Gestreamte Zeit</h3>
+                            <p class="panel-copy">Wie lange in jedem Zeit-Bucket tatsächlich gestreamt wurde.</p>
+                        </div>
+                        <span class="badge muted">Zeit</span>
+                    </div>
+                    <div id="streamTimeChart" class="chart-surface" aria-label="Diagramm gestreamte Zeit"></div>
+                </article>
+                <article class="panel chart-card">
+                    <div class="panel-title-row">
+                        <div>
+                            <h3>Hörer</h3>
+                            <p class="panel-copy">Eindeutige Hörer pro Zeit-Bucket im gewählten Zeitraum.</p>
+                        </div>
+                        <span class="badge muted">Hörer</span>
+                    </div>
+                    <div id="listenerChart" class="chart-surface" aria-label="Diagramm Hörer"></div>
+                </article>
+            </section>
+
+            <details class="chart-table">
+                <summary>Zahlen als Tabelle <span id="chartTableCount" class="badge muted"></span></summary>
+                <div class="chart-table-scroll">
+                    <table>
+                        <thead>
+                            <tr><th>Zeitpunkt</th><th>Gestreamte Zeit</th><th>Eindeutige Hörer</th></tr>
+                        </thead>
+                        <tbody id="chartTableBody"></tbody>
+                    </table>
+                </div>
+            </details>
+        </section>
+
+        <section class="stats-board-grid">
+            <article class="panel">
+                <div class="panel-title-row">
+                    <div>
+                        <h3>Beliebte Tracks</h3>
+                        <p class="panel-copy">Die meistgehörten Titel der letzten 30 Tage.</p>
+                    </div>
+                </div>
+                <div id="topTracksList" class="leaderboard-list" th:attr="hidden=${#lists.isEmpty(stats.topTracks)} ? 'hidden' : null">
+                    <div class="list-row" th:each="item : ${stats.topTracks}">
+                        <div>
+                            <strong th:text="${item.title}">Track</strong>
+                            <p th:text="${item.subtitle}">Artist</p>
+                        </div>
+                        <span class="badge muted" th:text="${item.meta}">Meta</span>
+                    </div>
+                </div>
+                <div id="topTracksEmpty" class="empty-state" th:attr="hidden=${!#lists.isEmpty(stats.topTracks)} ? 'hidden' : null">
+                    Noch keine Track-Daten vorhanden.
+                </div>
+            </article>
+
+            <article class="panel">
+                <div class="panel-title-row">
+                    <div>
+                        <h3>Beliebte Artists</h3>
+                        <p class="panel-copy">Die meistgehörten Künstler der letzten 30 Tage.</p>
+                    </div>
+                </div>
+                <div id="topArtistsList" class="leaderboard-list" th:attr="hidden=${#lists.isEmpty(stats.topArtists)} ? 'hidden' : null">
+                    <div class="list-row" th:each="item : ${stats.topArtists}">
+                        <div>
+                            <strong th:text="${item.title}">Artist</strong>
+                            <p th:text="${item.subtitle}">Popularität</p>
+                        </div>
+                        <span class="badge muted" th:text="${item.meta}">Meta</span>
+                    </div>
+                </div>
+                <div id="topArtistsEmpty" class="empty-state" th:attr="hidden=${!#lists.isEmpty(stats.topArtists)} ? 'hidden' : null">
+                    Noch keine Artist-Daten vorhanden.
+                </div>
+            </article>
+
+            <article class="panel">
+                <div class="panel-title-row">
+                    <div>
+                        <h3>Radio & Quellen</h3>
+                        <p class="panel-copy">Die am längsten gehörten Radio- und AI-Radio-Quellen.</p>
+                    </div>
+                </div>
+                <div id="topSourcesList" class="leaderboard-list" th:attr="hidden=${#lists.isEmpty(stats.topSources)} ? 'hidden' : null">
+                    <div class="list-row" th:each="item : ${stats.topSources}">
+                        <div>
+                            <strong th:text="${item.title}">Quelle</strong>
+                            <p th:text="${item.subtitle}">Modus</p>
+                        </div>
+                        <span class="badge muted" th:text="${item.meta}">Meta</span>
+                    </div>
+                </div>
+                <div id="topSourcesEmpty" class="empty-state" th:attr="hidden=${!#lists.isEmpty(stats.topSources)} ? 'hidden' : null">
+                    Noch keine Radio- oder Quell-Daten vorhanden.
+                </div>
+            </article>
+        </section>
+
+        <section class="module-callout stats-note">
+            <strong>Datenschutzfreundliche Auswertung</strong>
+            <p>
+                Gespeichert werden Titel, Künstler, Quelle, Hördauer, Zeitpunkte und eine intern gehashte Hörer-Kennung.
+                Öffentlich sichtbar sind nur aggregierte Werte und keine offenen Discord-Identitäten.
+            </p>
+            <p>
+                Die Statistik kann dir für interne Auswertungen und Nutzungsübersichten helfen, ersetzt aber keine eigene rechtliche Prüfung
+                oder eine vollständige GEMA-Meldelogik.
+            </p>
+        </section>
+
+        <footer class="portal-footer">
+            <a class="ghost-button" href="/">Zur Startseite</a>
+            <div class="theme-switcher" role="group" aria-label="Farbschema">
+                <button class="theme-switch-option" type="button" data-theme-option="system" aria-pressed="true">System</button>
+                <button class="theme-switch-option" type="button" data-theme-option="dark" aria-pressed="false">Dunkel</button>
+                <button class="theme-switch-option" type="button" data-theme-option="light" aria-pressed="false">Hell</button>
+            </div>
+            <div class="footer-links">
+                <a href="/impressum">Impressum</a>
+                <a href="/datenschutz">Datenschutz</a>
+            </div>
+        </footer>
+    </section>
+</main>
+<div id="cookieNotice" class="cookie-notice" hidden>
+    <div class="cookie-notice-copy">
+        <strong>Cookie-Hinweis</strong>
+        <p>Diese Seite nutzt nur technisch notwendige Session-Cookies, damit Discord-Login und geschützte Bereiche stabil funktionieren.</p>
+    </div>
+    <div class="cookie-notice-actions">
+        <a id="cookieNoticeAccept" class="primary-button small-button" href="/cookies/accept">Akzeptieren</a>
+        <a id="cookieNoticeReject" class="ghost-button small-button" href="/cookies/reject">Ablehnen</a>
+    </div>
+</div>
+<script src="/cookie-hint.js" th:src="@{/cookie-hint.js(v=${assetVersion})}"></script>
+<script src="/public-stats.js" th:src="@{/public-stats.js(v=${assetVersion})}"></script>
+</body>
+</html>

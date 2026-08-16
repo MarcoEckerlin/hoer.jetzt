@@ -1,0 +1,2287 @@
+/* ==========================================================================
+   Discord Bot - Oberflaeche
+   --------------------------------------------------------------------------
+   Aufbau:
+     1. Design-Tokens (Dark / Light)
+     2. Basis und Typografie
+     3. Layout-Geruest
+     4. Sidebar
+     5. Panels und Karten
+     6. Formulare
+     7. Buttons und Schalter
+     8. Audio-Bereich
+     9. Listen, Regeln, Tickets
+    10. Statistik und Diagramme
+    11. Landing, Legal, Fehlerseiten
+    12. Responsive
+
+   Farben kommen ausschliesslich aus CSS-Variablen. Der helle Modus setzt
+   dieselben Variablen neu - dadurch braucht keine einzige Komponente eine
+   eigene Light-Regel.
+   ========================================================================== */
+
+/* == 1. Design-Tokens ==================================================== */
+
+:root {
+    color-scheme: dark;
+
+    /* Flaechen: von der dunkelsten Ebene (App-Hintergrund) nach vorne.
+       Die Werte stammen aus der neuen Oberflaeche - beide sollen wie ein
+       Haus aussehen, nicht wie zwei. Der Aufbau der Seiten bleibt unberuehrt:
+       geaendert sind ausschliesslich diese Variablen, keine einzige Regel
+       weiter unten. */
+    --bg: #0b0d12;
+    --bg-deep: #07090d;
+    --surface: #151821;
+    --surface-raised: #1c2029;
+    --surface-hover: #232836;
+    --surface-sunken: #10131a;
+
+    --line: #262b36;
+    --line-strong: #333a48;
+
+    --text: #e6e9ef;
+    --text-strong: #ffffff;
+    --muted: #9aa3b2;
+    --muted-strong: #c4cbd7;
+
+    /* Der Akzent ist jetzt hell statt dunkel. Deshalb muss die Schrift *auf*
+       ihm dunkel sein - weisse Schrift auf hellem Blau ergaebe einen Knopf,
+       den man ahnt statt liest (Kontrast 1.9 statt 8.3). */
+    --accent: #7ca9ff;
+    --accent-hover: #a3c3ff;
+    --accent-contrast: #0b0d12;
+    --accent-soft: rgba(124, 169, 255, 0.16);
+    --accent-ring: rgba(124, 169, 255, 0.45);
+
+    /* Diagrammfarben. Eigene Toene, gegen die Kartenflaeche geprueft: im
+       Helligkeitsband des dunklen Modus, ueber 3:1 Kontrast, und bei
+       Rot-Gruen-Schwaeche mit Delta E 19.6 klar zu unterscheiden. Die
+       Akzentfarbe der Oberflaeche waere als duenne Linie zu blass. */
+    --chart-1: #3987e5;
+    --chart-1-soft: rgba(57, 135, 229, 0.18);
+    --chart-2: #199e70;
+    --chart-2-soft: rgba(25, 158, 112, 0.18);
+
+    --success: #4ade80;
+    --success-contrast: #07120b;
+    --success-soft: rgba(74, 222, 128, 0.16);
+    --warn: #f5c451;
+    --warn-soft: rgba(245, 196, 81, 0.16);
+    --danger: #f87171;
+    --danger-contrast: #1a0707;
+    --danger-hover: #fca5a5;
+    --danger-soft: rgba(248, 113, 113, 0.16);
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.28);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.32);
+    --shadow-lg: 0 10px 32px rgba(0, 0, 0, 0.4);
+
+    --radius-xl: 16px;
+    --radius-lg: 12px;
+    --radius-md: 8px;
+    --radius-sm: 6px;
+
+    --gap: 16px;
+    --gap-lg: 24px;
+
+    --font-main: "Inter", "gg sans", "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
+    --font-mono: "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
+
+    --sidebar-width: 296px;
+    --transition: 140ms ease;
+}
+
+/* Heller Modus. Wird ueber data-theme am <html> gesetzt (siehe theme.js). */
+:root[data-theme="light"] {
+    color-scheme: light;
+
+    --bg: #f7f8fb;
+    --bg-deep: #eef0f6;
+    --surface: #ffffff;
+    --surface-raised: #ffffff;
+    --surface-hover: #f0f2f7;
+    --surface-sunken: #f7f8fb;
+
+    --line: #e2e6ee;
+    --line-strong: #cbd2e0;
+
+    --text: #12151c;
+    --text-strong: #000000;
+    --muted: #5c6472;
+    --muted-strong: #2b313d;
+
+    /* Nicht derselbe Blauton wie im dunklen Modus: #7ca9ff auf Weiss kommt
+       auf Kontrast 1.7 und ist als Text unbrauchbar. #3868cd besteht in
+       beide Richtungen - als Schrift auf hellem Grund (4.9) und als Flaeche
+       unter weisser Schrift (5.2). */
+    --accent: #3868cd;
+    --accent-hover: #2f5cbd;
+    --accent-contrast: #ffffff;
+    --accent-soft: rgba(56, 104, 205, 0.1);
+    --accent-ring: rgba(56, 104, 205, 0.35);
+
+    /* Eigene Stufen fuer den hellen Modus, kein Umkehren der dunklen: das
+       Gruen von oben kommt auf Weiss nur auf 2.8:1 und waere als duenne
+       Linie kaum zu sehen. */
+    --chart-1: #2a78d6;
+    --chart-1-soft: rgba(42, 120, 214, 0.14);
+    --chart-2: #0f8f61;
+    --chart-2-soft: rgba(15, 143, 97, 0.14);
+
+    --success: #15803d;
+    --success-contrast: #ffffff;
+    --success-soft: rgba(21, 128, 61, 0.12);
+    --warn: #8a6d0b;
+    --warn-soft: rgba(138, 109, 11, 0.12);
+    --danger: #c92a2a;
+    --danger-contrast: #ffffff;
+    --danger-hover: #a51f1f;
+    --danger-soft: rgba(201, 42, 42, 0.1);
+
+    --shadow-sm: 0 1px 2px rgba(30, 31, 34, 0.06);
+    --shadow-md: 0 2px 8px rgba(30, 31, 34, 0.08);
+    --shadow-lg: 0 8px 24px rgba(30, 31, 34, 0.12);
+}
+
+/* Nutzer, die Bewegung reduzieren wollen, bekommen keine Uebergaenge. */
+@media (prefers-reduced-motion: reduce) {
+    :root {
+        --transition: 0ms;
+    }
+
+    * {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+/* == 2. Basis ============================================================ */
+
+* {
+    box-sizing: border-box;
+}
+
+html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: var(--font-main);
+    font-size: 15px;
+    line-height: 1.5;
+    color: var(--text);
+    background: var(--bg);
+    -webkit-font-smoothing: antialiased;
+}
+
+a {
+    color: var(--accent);
+    text-decoration: none;
+    transition: color var(--transition);
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+img {
+    max-width: 100%;
+    display: block;
+}
+
+button,
+input,
+select,
+textarea {
+    font: inherit;
+    color: inherit;
+}
+
+:focus-visible {
+    outline: 2px solid var(--accent-ring);
+    outline-offset: 2px;
+}
+
+h1, h2, h3, h4 {
+    margin: 0;
+    color: var(--text-strong);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
+h1 { font-size: 1.5rem; }
+h2 { font-size: 1.125rem; }
+h3 { font-size: 1rem; }
+h4 { font-size: 0.9375rem; }
+
+p {
+    margin: 0;
+}
+
+code {
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    padding: 1px 5px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-sunken);
+    border: 1px solid var(--line);
+}
+
+/* Eigene Scrollbars - die Standard-Leisten wirken im dunklen Modus wie
+   Fremdkoerper. */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
+}
+
+*::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+*::-webkit-scrollbar-thumb {
+    background: var(--line-strong);
+    border-radius: 99px;
+}
+
+*::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.eyebrow {
+    margin: 0;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.section-kicker,
+.mini-label {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.panel-copy,
+.hint-copy,
+.stats-note {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.875rem;
+    line-height: 1.55;
+}
+
+.empty-state {
+    padding: 20px;
+    border: 1px dashed var(--line);
+    border-radius: var(--radius-lg);
+    color: var(--muted);
+    font-size: 0.875rem;
+    text-align: center;
+    background: var(--surface-sunken);
+}
+
+/* == 3. Layout-Geruest =================================================== */
+
+.dashboard-body,
+.landing-body,
+.error-body {
+    background: var(--bg);
+}
+
+.dashboard-shell,
+.portal-shell {
+    display: grid;
+    grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+    gap: var(--gap-lg);
+    max-width: 1680px;
+    margin: 0 auto;
+    padding: var(--gap-lg);
+    align-items: start;
+}
+
+.content-panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap);
+    min-width: 0;
+}
+
+.portal-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--gap);
+    padding: 18px 22px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-sm);
+}
+
+.portal-header h2 {
+    font-size: 1.25rem;
+}
+
+.header-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.status-cluster {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.portal-footer,
+.landing-footer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 16px 0 0;
+    margin-top: auto;
+    color: var(--muted);
+    font-size: 0.8125rem;
+    text-align: center;
+    border-top: 1px solid var(--line);
+}
+
+.portal-footer p {
+    margin: 0;
+}
+
+/* Im Footer soll der Umschalter nicht die ganze Breite einnehmen. */
+.portal-footer .theme-switcher,
+.landing-footer .theme-switcher {
+    width: auto;
+}
+
+.portal-footer-sidebar {
+    padding: 12px 0 0;
+    text-align: left;
+    border-top: 1px solid var(--line);
+}
+
+.footer-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: center;
+    font-size: 0.8125rem;
+}
+
+.footer-links a {
+    color: var(--muted);
+}
+
+.footer-links a:hover {
+    color: var(--text);
+}
+
+/* == 4. Sidebar ========================================================== */
+
+.sidebar-panel,
+.portal-sidebar {
+    position: sticky;
+    top: var(--gap-lg);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 18px;
+    max-height: calc(100vh - 2 * var(--gap-lg));
+    overflow-y: auto;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-sm);
+}
+
+.brand-block-rich {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--line);
+}
+
+.brand-block h1 {
+    font-size: 1.25rem;
+}
+
+.brand-media {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.brand-logo {
+    width: 44px;
+    height: 44px;
+    border-radius: var(--radius-lg);
+    object-fit: cover;
+    background: var(--surface-sunken);
+}
+
+.user-chip {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--surface-sunken);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+}
+
+.user-chip strong {
+    display: block;
+    font-size: 0.875rem;
+    color: var(--text-strong);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.user-chip p {
+    margin: 0;
+    font-size: 0.75rem;
+    color: var(--muted);
+}
+
+.avatar,
+.runtime-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+    background: var(--surface-hover);
+}
+
+.runtime-avatar {
+    width: 44px;
+    height: 44px;
+}
+
+.runtime-media {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.sidebar-panel .ghost-button {
+    justify-content: flex-start;
+    width: 100%;
+}
+
+.server-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px;
+    background: var(--surface-sunken);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+}
+
+.server-picker-card,
+.module-nav-card {
+    gap: 10px;
+}
+
+.guild-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.guild-header h2 {
+    font-size: 0.9375rem;
+}
+
+.sidebar-select-note {
+    font-size: 0.75rem;
+}
+
+.server-select-stack label {
+    font-size: 0.75rem;
+}
+
+.module-nav-list,
+.category-nav-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.module-nav-item,
+.category-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    width: 100%;
+    border: none;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--muted);
+    font-size: 0.9375rem;
+    font-weight: 500;
+    text-align: left;
+    cursor: pointer;
+    transition: background var(--transition), color var(--transition);
+}
+
+.module-nav-item:hover {
+    background: var(--surface-hover);
+    color: var(--text);
+}
+
+.module-nav-item.active {
+    background: var(--accent-soft);
+    color: var(--text-strong);
+    font-weight: 600;
+    box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.module-nav-item:focus-visible {
+    outline: 2px solid var(--accent-ring);
+    outline-offset: -2px;
+}
+
+/* Theme-Umschalter. Sitzt in der Sidebar und bleibt bewusst unauffaellig. */
+.theme-switcher {
+    display: flex;
+    gap: 4px;
+    padding: 4px;
+    background: var(--surface-sunken);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+}
+
+.theme-switch-option {
+    flex: 1;
+    padding: 7px 10px;
+    border: none;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--muted);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background var(--transition), color var(--transition);
+}
+
+.theme-switch-option:hover {
+    color: var(--text);
+}
+
+.theme-switch-option[aria-pressed="true"] {
+    background: var(--surface-raised);
+    color: var(--text-strong);
+    font-weight: 600;
+    box-shadow: var(--shadow-sm);
+}
+
+/* == 5. Panels und Karten ================================================ */
+
+.panel,
+.module-card,
+.feature-card,
+.chart-card,
+.mini-panel,
+.stats-block,
+.command-panel,
+.queue-panel,
+.track-panel,
+.audio-panel,
+.legal-card,
+.rule-card,
+.ticket-option-card,
+.visual-card,
+.hero-card,
+.runtime-card,
+.stat-box,
+.control-subpanel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-sm);
+}
+
+.panel,
+.module-card,
+.command-panel,
+.queue-panel,
+.track-panel,
+.audio-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 20px;
+    min-width: 0;
+}
+
+.panel-title-row,
+.list-header,
+.subpanel-heading,
+.command-section-header,
+.rule-header,
+.ticket-option-header,
+.track-title-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.subpanel-heading strong,
+.command-section-header h4 {
+    font-size: 0.9375rem;
+    color: var(--text-strong);
+}
+
+.module-anchor-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap);
+    scroll-margin-top: 24px;
+}
+
+.module-grid,
+.settings-grid,
+.primary-grid,
+.rule-grid,
+.compact-grid,
+.feature-grid,
+.stats-board-grid,
+.command-section-grid {
+    display: grid;
+    gap: var(--gap);
+}
+
+.module-grid,
+.feature-grid {
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+}
+
+.settings-grid,
+.rule-grid {
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.compact-grid {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.primary-grid,
+.stats-board-grid {
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.module-grid-extended {
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+}
+
+.module-grid.module-grid-extended[data-layout="single"] {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.module-grid.module-grid-extended[data-layout="pair"] {
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+}
+
+.module-card {
+    padding: 20px;
+    gap: 14px;
+    display: flex;
+    flex-direction: column;
+}
+
+.module-card-wide,
+.field-span-2 {
+    grid-column: 1 / -1;
+}
+
+.module-footer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    padding-top: 12px;
+    margin-top: auto;
+    border-top: 1px solid var(--line);
+}
+
+.module-callout {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 12px 14px;
+    border-radius: var(--radius-lg);
+    background: var(--accent-soft);
+    border: 1px solid var(--line);
+}
+
+.module-callout strong {
+    font-size: 0.875rem;
+    color: var(--text-strong);
+}
+
+.module-callout p {
+    margin: 0;
+    font-size: 0.8125rem;
+    color: var(--muted);
+}
+
+.mini-panel,
+.stat-box,
+.control-subpanel,
+.stats-block,
+.visual-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 14px 16px;
+}
+
+.mini-panel strong,
+.stat-box strong,
+.visual-card strong {
+    font-size: 1.375rem;
+    font-weight: 700;
+    color: var(--text-strong);
+    line-height: 1.2;
+}
+
+.mini-panel p,
+.stat-box span,
+.visual-card p {
+    margin: 0;
+    font-size: 0.8125rem;
+    color: var(--muted);
+}
+
+.control-subpanel {
+    gap: 12px;
+    background: var(--surface-sunken);
+}
+
+.system-action-row,
+.transport-row,
+.hero-actions,
+.hero-meta,
+.status-cluster,
+.inline-mini-actions,
+.cookie-notice-actions,
+.stats-range-tabs,
+.toggle-row,
+.sub-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+}
+
+.overview-strip,
+/*
+ * Kennzahlen stehen nebeneinander, nicht untereinander.
+ *
+ * Mit minmax(190px, 1fr) kippte die Reihe schon unter 800px Breite in eine
+ * Spalte - vier Kacheln untereinander, jede so breit wie der Bildschirm. Das
+ * ist keine Uebersicht mehr, sondern eine Liste, durch die man scrollt.
+ *
+ * Jetzt vier gleich breite Spalten, die schrumpfen duerfen. Erst auf dem Handy
+ * werden zwei Reihen daraus.
+ */
+.stats-status-strip {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+}
+
+@media (max-width: 720px) {
+    .stats-status-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* Als flex-Reihe schrumpften Queue, Status und Verbindung zu drei winzigen
+   Kaestchen zusammen. Gleich breite Rasterspalten sehen ruhiger aus und
+   lassen die Werte lesbar. */
+.stats-row {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.copy-list,
+.list-stack,
+.stacked-lists,
+.nested-rule-list,
+.rule-list,
+.stats-live-list,
+.leaderboard-list,
+.check-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/*
+ * Die Senderliste enthaelt bis zu neun Eintraege. Untereinander gestapelt
+ * riss sie die Radio-Spalte auf die dreifache Hoehe der Musik-Spalte auf und
+ * hinterliess daneben eine grosse Leerflaeche. Als umbrechende Chip-Reihe mit
+ * Hoehenbegrenzung bleibt der Block kompakt.
+ */
+.hint-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    max-height: 132px;
+    overflow-y: auto;
+    padding-top: 2px;
+}
+
+.check-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 8px;
+}
+
+.copy-list strong {
+    font-size: 0.875rem;
+    color: var(--text-strong);
+}
+
+.copy-list p {
+    margin: 0;
+    font-size: 0.8125rem;
+    color: var(--muted);
+}
+
+/* == Statusanzeigen ====================================================== */
+
+.badge,
+.status-pill,
+.hint-pill,
+.warning-pill,
+.stats-system-state {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    border-radius: 99px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.6;
+    white-space: nowrap;
+    background: var(--surface-hover);
+    color: var(--muted-strong);
+    border: 1px solid var(--line);
+}
+
+.badge.success,
+.status-pill.success,
+.stats-system-state.success {
+    background: var(--success-soft);
+    color: var(--success);
+    border-color: transparent;
+}
+
+.badge.error,
+.status-pill.error,
+.stats-system-state.error {
+    background: var(--danger-soft);
+    color: var(--danger);
+    border-color: transparent;
+}
+
+.badge.muted,
+.status-pill.muted {
+    background: transparent;
+    color: var(--muted);
+}
+
+.warning-pill {
+    background: var(--warn-soft);
+    color: var(--warn);
+    border-color: transparent;
+}
+
+/* Die Senderchips sind reine Information, keine Warnung - das Warn-Gelb
+   liess die ganze Liste braun und alarmierend wirken. */
+.hint-pill {
+    background: var(--surface-hover);
+    color: var(--muted-strong);
+    border-color: var(--line);
+    font-weight: 500;
+    font-size: 0.6875rem;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: inline-block;
+}
+
+.hint-pill:first-child {
+    background: var(--accent-soft);
+    color: var(--text-strong);
+    border-color: transparent;
+    font-weight: 600;
+}
+
+.status-banner {
+    padding: 12px 16px;
+    border-radius: var(--radius-lg);
+    font-size: 0.875rem;
+    font-weight: 500;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--muted-strong);
+}
+
+.status-banner:empty {
+    display: none;
+}
+
+.status-banner.info {
+    background: var(--accent-soft);
+    color: var(--text);
+    border-color: transparent;
+}
+
+.status-banner.success {
+    background: var(--success-soft);
+    color: var(--success);
+    border-color: transparent;
+}
+
+.status-banner.error {
+    background: var(--danger-soft);
+    color: var(--danger);
+    border-color: transparent;
+}
+
+.top-banner {
+    padding: 12px 14px;
+    border-radius: var(--radius-lg);
+    background: var(--warn-soft);
+    border: 1px solid transparent;
+    color: var(--warn);
+}
+
+.top-banner p {
+    margin: 4px 0 0;
+    font-size: 0.8125rem;
+    color: var(--muted);
+}
+
+/* == 6. Formulare ======================================================== */
+
+.field-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+.field-stack label {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--muted-strong);
+}
+
+.field-stack input,
+.field-stack select,
+.field-stack textarea,
+.inline-action input,
+.inline-action select {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-md);
+    background: var(--surface-sunken);
+    color: var(--text);
+    font-size: 0.9375rem;
+    transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+.field-stack textarea {
+    min-height: 96px;
+    resize: vertical;
+    line-height: 1.55;
+}
+
+.field-stack select[multiple] {
+    min-height: 132px;
+    padding: 6px;
+}
+
+.field-stack input:focus,
+.field-stack select:focus,
+.field-stack textarea:focus,
+.inline-action input:focus,
+.inline-action select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.field-stack input::placeholder,
+.field-stack textarea::placeholder {
+    color: var(--muted);
+    opacity: 0.75;
+}
+
+.field-stack input:disabled,
+.field-stack select:disabled,
+.field-stack textarea:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.field-subhint {
+    font-size: 0.75rem;
+    color: var(--muted);
+    line-height: 1.5;
+}
+
+.field-subhint code {
+    font-size: 0.75rem;
+}
+
+.inline-action {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.inline-action input,
+.inline-action select {
+    flex: 1 1 180px;
+    width: auto;
+}
+
+.check-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    border-radius: var(--radius-md);
+    background: var(--surface-sunken);
+    border: 1px solid var(--line);
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: background var(--transition);
+}
+
+.check-row:hover {
+    background: var(--surface-hover);
+}
+
+.check-row input {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+input[type="range"] {
+    width: 100%;
+    height: 4px;
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+
+/* Schiebeschalter */
+.switch {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+}
+
+.switch input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.switch-ui {
+    display: block;
+    width: 40px;
+    height: 22px;
+    border-radius: 99px;
+    background: var(--line-strong);
+    transition: background var(--transition);
+}
+
+.switch-ui::after {
+    content: "";
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #ffffff;
+    box-shadow: var(--shadow-sm);
+    transition: transform var(--transition);
+}
+
+.switch input:checked + .switch-ui {
+    background: var(--success);
+}
+
+.switch input:checked + .switch-ui::after {
+    transform: translateX(18px);
+}
+
+.switch input:focus-visible + .switch-ui {
+    outline: 2px solid var(--accent-ring);
+    outline-offset: 2px;
+}
+
+/* == 7. Buttons ========================================================== */
+
+.primary-button,
+.secondary-button,
+.ghost-button,
+.small-button,
+.chip-button,
+.danger-outline-button,
+.queue-action,
+.command-toggle,
+.stats-range-tab {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 9px 16px;
+    border-radius: var(--radius-md);
+    border: 1px solid transparent;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background var(--transition), border-color var(--transition),
+                color var(--transition), transform var(--transition);
+}
+
+.primary-button:disabled,
+.secondary-button:disabled,
+.ghost-button:disabled,
+.chip-button:disabled,
+.command-toggle:disabled,
+.queue-action:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.primary-button {
+    background: var(--accent);
+    color: var(--accent-contrast);
+}
+
+.primary-button:hover:not(:disabled) {
+    background: var(--accent-hover);
+}
+
+.secondary-button {
+    background: var(--surface-hover);
+    color: var(--text);
+    border-color: var(--line-strong);
+}
+
+.secondary-button:hover:not(:disabled) {
+    background: var(--line);
+    border-color: var(--line-strong);
+}
+
+.ghost-button {
+    background: transparent;
+    color: var(--muted);
+    border-color: transparent;
+}
+
+.ghost-button:hover:not(:disabled) {
+    background: var(--surface-hover);
+    color: var(--text);
+}
+
+.ghost-button.active-nav {
+    background: var(--accent-soft);
+    color: var(--text-strong);
+    box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.small-button,
+.chip-button,
+.stats-range-tab {
+    padding: 6px 12px;
+    font-size: 0.8125rem;
+    background: var(--surface-hover);
+    color: var(--muted-strong);
+    border-color: var(--line);
+}
+
+.small-button:hover,
+.chip-button:hover:not(:disabled),
+.stats-range-tab:hover {
+    background: var(--line);
+    color: var(--text);
+}
+
+.chip-button.accent,
+.chip-button.active-toggle,
+.stats-range-tab.active {
+    background: var(--accent);
+    color: var(--accent-contrast);
+    border-color: transparent;
+}
+
+.chip-button.danger,
+.danger-outline-button,
+.queue-action-danger {
+    background: transparent;
+    color: var(--danger);
+    border-color: var(--danger);
+}
+
+.chip-button.danger:hover:not(:disabled),
+.danger-outline-button:hover:not(:disabled),
+.queue-action-danger:hover:not(:disabled) {
+    background: var(--danger);
+    color: var(--danger-contrast);
+}
+
+/* Rueckmeldung nach dem Speichern (siehe save-feedback.js) */
+.primary-button[data-save-state="success"],
+.secondary-button[data-save-state="success"] {
+    background: var(--success);
+    border-color: transparent;
+    color: var(--success-contrast);
+}
+
+.primary-button[data-save-state="error"],
+.secondary-button[data-save-state="error"] {
+    background: var(--danger);
+    border-color: transparent;
+    color: var(--danger-contrast);
+}
+
+.command-toggle {
+    padding: 6px 12px;
+    font-size: 0.8125rem;
+    background: var(--success-soft);
+    color: var(--success);
+}
+
+.command-toggle:hover:not(:disabled) {
+    background: var(--success);
+    color: var(--success-contrast);
+}
+
+.command-toggle.off {
+    background: var(--surface-hover);
+    color: var(--muted);
+}
+
+/* == 8. Audio ============================================================ */
+
+.audio-layout,
+.audio-split-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--gap);
+    align-items: start;
+}
+
+/* Die Steuerung braucht mehr Platz als die Anzeige daneben. Ohne diese
+   Vorgabe teilte das auto-fit-Raster beide Spalten exakt gleich auf. */
+#module-audio.primary-grid {
+    grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+}
+
+@media (max-width: 1180px) {
+    #module-audio.primary-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+/*
+ * Die Track-Karte enthaelt Cover, Titel, Meta-Text und Fortschritt als
+ * Geschwister. Als flex-row nebeneinander gestellt, wurde daraus eine Reihe
+ * schmaler Spalten mit umbrechendem Text. Richtig ist ein Raster: Cover links
+ * ueber die volle Hoehe, alles andere untereinander in der zweiten Spalte.
+ */
+.track-card {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+    column-gap: 16px;
+    row-gap: 8px;
+    padding: 16px;
+    background: var(--surface-sunken);
+}
+
+.track-card > *:not(.track-artwork) {
+    grid-column: 2;
+}
+
+.track-artwork {
+    grid-column: 1;
+    grid-row: 1 / -1;
+    width: 88px;
+    height: 88px;
+    border-radius: var(--radius-lg);
+    object-fit: cover;
+    background: var(--surface-hover);
+}
+
+.track-card strong {
+    display: block;
+    font-size: 1.0625rem;
+    color: var(--text-strong);
+    line-height: 1.35;
+}
+
+.track-card p {
+    margin: 2px 0 0;
+    font-size: 0.8125rem;
+    color: var(--muted);
+}
+
+.track-title-row {
+    gap: 8px;
+    justify-content: flex-start;
+}
+
+.track-title-row .badge {
+    flex-shrink: 0;
+}
+
+.track-progress {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+}
+
+.track-progress-header,
+.track-progress-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 0.75rem;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.track-progress-bar {
+    position: relative;
+    height: 6px;
+    border-radius: 99px;
+    background: var(--line);
+    overflow: hidden;
+}
+
+.track-progress-fill {
+    height: 100%;
+    border-radius: 99px;
+    background: var(--accent);
+    /* Nur die Breite animieren - der Fortschritt wird per JS oft aktualisiert
+       und eine Transition auf allen Eigenschaften wuerde unnoetig Layout
+       auslösen. */
+    transition: width 400ms linear;
+}
+
+.transport-row {
+    gap: 8px;
+}
+
+.queue-panel {
+    max-height: 620px;
+}
+
+.queue-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.queue-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: var(--radius-md);
+    background: var(--surface-sunken);
+    border: 1px solid var(--line);
+    transition: background var(--transition), border-color var(--transition);
+}
+
+.queue-item:hover {
+    background: var(--surface-hover);
+}
+
+.queue-item-main {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1;
+}
+
+.queue-item-header strong {
+    font-size: 0.875rem;
+    color: var(--text-strong);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: block;
+}
+
+.queue-item p,
+.queue-item-meta {
+    margin: 0;
+    font-size: 0.75rem;
+    color: var(--muted);
+}
+
+.queue-index {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-hover);
+    color: var(--muted);
+    font-size: 0.75rem;
+    font-weight: 700;
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+}
+
+.queue-item-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.queue-action {
+    padding: 5px 9px;
+    font-size: 0.75rem;
+    background: transparent;
+    color: var(--muted);
+    border-color: var(--line);
+}
+
+.queue-action:hover:not(:disabled) {
+    background: var(--surface-hover);
+    color: var(--text);
+}
+
+.queue-action-secondary {
+    color: var(--muted);
+}
+
+.queue-drag-handle {
+    cursor: grab;
+    color: var(--muted);
+    padding: 0 4px;
+    user-select: none;
+    flex-shrink: 0;
+}
+
+.queue-drag-handle:hover {
+    color: var(--text);
+}
+
+.queue-drag-handle:active {
+    cursor: grabbing;
+}
+
+.queue-drag-handle.is-disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+.queue-item-draggable:active {
+    cursor: grabbing;
+}
+
+.queue-item-dragging {
+    opacity: 0.4;
+    border-style: dashed;
+}
+
+/* Einfuegemarke beim Umsortieren. box-shadow statt border, damit die
+   Zeilenhoehe beim Ziehen nicht springt. */
+.queue-drop-before {
+    box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.queue-drop-after {
+    box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+/* == 9. Listen, Regeln, Tickets ========================================== */
+
+.list-row,
+.rule-card,
+.ticket-option-card,
+.stats-live-row,
+.feature-card,
+.command-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 14px 16px;
+    border-radius: var(--radius-lg);
+    background: var(--surface-sunken);
+    border: 1px solid var(--line);
+}
+
+.list-row p,
+.stats-live-row p,
+.feature-card p,
+.command-card p {
+    margin: 0;
+    font-size: 0.8125rem;
+    color: var(--muted);
+}
+
+.stats-live-row strong,
+.command-card strong {
+    font-size: 0.9375rem;
+    color: var(--text-strong);
+}
+
+.stats-live-row {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.stats-live-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.75rem;
+    color: var(--muted);
+    flex-shrink: 0;
+}
+
+.rule-card,
+.ticket-option-card {
+    gap: 12px;
+    background: var(--surface);
+}
+
+.rule-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    font-size: 0.75rem;
+    color: var(--muted);
+}
+
+.command-grid,
+.command-section-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 10px;
+}
+
+.command-card {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.command-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-top: 14px;
+    border-top: 1px solid var(--line);
+}
+
+.command-section:first-of-type {
+    padding-top: 0;
+    border-top: none;
+}
+
+.guild-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.guild-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: background var(--transition);
+}
+
+.guild-item:hover {
+    background: var(--surface-hover);
+}
+
+.guild-item.active {
+    background: var(--accent-soft);
+}
+
+.guild-item p {
+    margin: 0;
+    font-size: 0.75rem;
+    color: var(--muted);
+}
+
+.guild-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.guild-icon.fallback {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--accent);
+    color: var(--accent-contrast);
+    font-weight: 700;
+    font-size: 0.8125rem;
+}
+
+.server-selector-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.server-selector-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 12px;
+}
+
+.server-selector-copy strong {
+    font-size: 0.9375rem;
+    color: var(--text-strong);
+}
+
+/* Upload-Bereich fuer Bot-Grafiken */
+.asset-upload-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+}
+
+.asset-upload-meta {
+    font-size: 0.75rem;
+    color: var(--muted);
+}
+
+.asset-upload-meta[data-state="success"] {
+    color: var(--success);
+}
+
+.asset-upload-meta[data-state="error"] {
+    color: var(--danger);
+}
+
+/* == 10. Statistik ======================================================= */
+
+.stats-layout {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap);
+}
+
+.stats-hero,
+.stats-system-banner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--gap);
+    padding: 22px;
+    border-radius: var(--radius-xl);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    box-shadow: var(--shadow-sm);
+}
+
+.stats-system-banner h2 {
+    font-size: 1.125rem;
+}
+
+.stats-system-banner .panel-copy {
+    max-width: 62ch;
+}
+
+.stats-chart-grid,
+/* Drei Werte, drei Spalten - 360px Mindestbreite hiess in der Praxis: fast
+   immer untereinander. */
+.stats-chart-overview {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--gap);
+}
+
+@media (max-width: 720px) {
+    .stats-chart-overview { grid-template-columns: 1fr; }
+}
+
+/* ---------------------------------------------------------------- Knoten */
+
+.node-liste {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 12px;
+    margin-top: 12px;
+}
+
+.node-karte {
+    background: var(--surface-sunken);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    padding: 14px 16px;
+}
+
+.node-karte.ist-weg { opacity: 0.6; border-color: var(--danger); }
+
+.node-kopf {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.node-name { font-weight: 650; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.node-ampel { width: 8px; height: 8px; border-radius: 50%; background: var(--success); flex: 0 0 auto; }
+.node-ampel.ist-weg { background: var(--danger); }
+
+.node-werte { display: flex; gap: 18px; flex-wrap: wrap; }
+.node-wert { display: flex; flex-direction: column; }
+.node-wert span { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.node-wert strong { font-size: 17px; font-variant-numeric: tabular-nums; }
+
+.node-balken { height: 4px; background: var(--surface-hover); border-radius: 999px; overflow: hidden; margin-top: 10px; }
+.node-balken-fuell { height: 100%; background: var(--chart-1); }
+.node-balken-fuell.ist-heiss { background: var(--danger); }
+
+.stats-chart-overview .mini-panel,
+.stats-status-strip .mini-panel {
+    background: var(--surface-sunken);
+}
+
+.chart-card {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 18px 20px;
+}
+
+.chart-surface {
+    position: relative;
+    width: 100%;
+}
+
+.chart-svg {
+    width: 100%;
+    height: auto;
+    display: block;
+    overflow: visible;
+}
+
+/* Hier steht mit Absicht gar keine fill-Eigenschaft.
+   "fill: none" waere derselbe Fehler wie vorher, nur andersherum: es schlaegt
+   das fill="url(#verlauf)" aus dem Skript und die Flaeche unter der Kurve
+   verschwindet ersatzlos. Wer eine Farbe im Attribut setzt, darf sie im
+   Stylesheet nicht noch einmal anfassen - auch nicht, um sie zu loeschen. */
+
+/* Bewusst OHNE stroke: die Farbe kommt je Diagramm als Attribut aus dem
+   Skript. Stuende sie hier, gaebe es keine Moeglichkeit, sie zu ueberschreiben -
+   CSS schlaegt Praesentationsattribute im SVG, nicht umgekehrt. Genau daran
+   waren beide Kurven blau, obwohl im Attribut gruen stand. */
+.chart-line {
+    fill: none;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.chart-point {
+    stroke: var(--surface);
+    stroke-width: 2;
+}
+
+.chart-grid-line {
+    stroke: var(--line);
+    stroke-width: 1;
+    stroke-dasharray: 3 4;
+}
+
+.chart-label-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 0.6875rem;
+    color: var(--muted);
+}
+
+.chart-label-row span {
+    white-space: nowrap;
+}
+
+.chart-empty {
+    padding: 36px 16px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.875rem;
+}
+
+/* == 11. Landing, Legal, Fehlerseiten ==================================== */
+
+.landing-shell,
+.legal-layout,
+.error-shell {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: var(--gap-lg);
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-lg);
+}
+
+/* Achtung: im Markup liegen landing-shell und landing-grid auf demselben
+   Element. Diese Regel muss deshalb nach .landing-shell stehen. */
+.landing-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+    gap: var(--gap-lg);
+    align-items: start;
+}
+
+.hero-card,
+.hero-card-wide,
+.visual-card-main {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 32px;
+}
+
+.hero-card h1 {
+    font-size: 2.125rem;
+    line-height: 1.15;
+    max-width: 20ch;
+}
+
+.hero-copy {
+    font-size: 1rem;
+    color: var(--muted);
+    line-height: 1.6;
+    max-width: 58ch;
+}
+
+/*
+ * Die drei Karten der rechten Spalte lagen als Flex-Zeile nebeneinander -
+ * daher die zwei extrem schmalen Saeulen, in denen jede Zeile nach zwei
+ * Woertern umbrach. Sie gehoeren untereinander.
+ */
+.hero-visual {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--gap);
+    min-width: 0;
+}
+
+.hero-illustration {
+    width: 100%;
+    max-height: 200px;
+    object-fit: contain;
+    border-radius: var(--radius-lg);
+}
+
+.visual-card {
+    gap: 8px;
+}
+
+.visual-card .badge {
+    align-self: flex-start;
+}
+
+.hero-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.8125rem;
+    color: var(--muted);
+}
+
+.legal-card {
+    padding: 28px 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    line-height: 1.65;
+}
+
+.legal-card h2 {
+    margin-top: 12px;
+}
+
+.error-shell {
+    min-height: 100vh;
+    align-items: center;
+    justify-content: center;
+}
+
+.error-card {
+    padding: 40px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    align-items: center;
+    max-width: 560px;
+}
+
+.error-card h1 {
+    font-size: 2.25rem;
+}
+
+.error-copy {
+    color: var(--muted);
+    line-height: 1.6;
+}
+
+.runtime-card {
+    padding: 18px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* Cookie-Hinweis */
+.cookie-notice {
+    position: fixed;
+    left: 50%;
+    bottom: 20px;
+    transform: translateX(-50%);
+    z-index: 60;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 16px;
+    width: min(760px, calc(100vw - 32px));
+    padding: 16px 20px;
+    background: var(--surface-raised);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-lg);
+}
+
+.cookie-notice-copy {
+    flex: 1 1 320px;
+    min-width: 0;
+}
+
+.cookie-notice-copy strong {
+    display: block;
+    font-size: 0.9375rem;
+    color: var(--text-strong);
+    margin-bottom: 3px;
+}
+
+.cookie-notice-copy p {
+    margin: 0;
+    font-size: 0.8125rem;
+    color: var(--muted);
+}
+
+/* == 12. Responsive ====================================================== */
+
+@media (max-width: 1180px) {
+    .dashboard-shell,
+    .portal-shell {
+        grid-template-columns: minmax(0, 1fr);
+        gap: var(--gap);
+        padding: var(--gap);
+    }
+
+    .sidebar-panel,
+    .portal-sidebar {
+        position: static;
+        max-height: none;
+    }
+
+    .module-nav-list,
+    .category-nav-list {
+        flex-direction: row;
+        flex-wrap: wrap;
+    }
+
+    .module-nav-item,
+    .category-nav-item {
+        width: auto;
+    }
+
+    .module-nav-item.active {
+        box-shadow: inset 0 -3px 0 var(--accent);
+    }
+
+    .audio-layout,
+    .audio-split-grid,
+    .landing-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .queue-panel {
+        max-height: none;
+    }
+}
+
+@media (max-width: 760px) {
+    body {
+        font-size: 14px;
+    }
+
+    .module-grid,
+    .module-grid-extended,
+    .module-grid.module-grid-extended[data-layout="pair"],
+    .feature-grid,
+    .stats-chart-grid,
+    .stats-chart-overview,
+    .command-grid,
+    .command-section-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .panel,
+    .module-card,
+    .command-panel,
+    .queue-panel,
+    .track-panel,
+    .audio-panel {
+        padding: 16px;
+    }
+
+    .hero-card,
+    .hero-card-wide,
+    .visual-card-main,
+    .legal-card {
+        padding: 22px;
+    }
+
+    .portal-header {
+        padding: 16px;
+    }
+
+    .track-card {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}
+
+@media (max-width: 520px) {
+    .dashboard-shell,
+    .portal-shell,
+    .landing-shell,
+    .legal-layout,
+    .error-shell {
+        padding: 12px;
+    }
+
+    .settings-grid,
+    .rule-grid,
+    .compact-grid,
+    .primary-grid,
+    .stats-board-grid,
+    .overview-strip,
+    .stats-status-strip,
+    .check-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .transport-row .chip-button,
+    .transport-row .secondary-button,
+    .transport-row .primary-button {
+        flex: 1 1 calc(50% - 8px);
+    }
+
+    .cookie-notice {
+        bottom: 12px;
+        padding: 14px;
+    }
+
+    .command-card,
+    .stats-live-row {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}
+
+/* Druckansicht: Navigation und Bedienelemente weglassen. */
+@media print {
+    .sidebar-panel,
+    .portal-sidebar,
+    .transport-row,
+    .cookie-notice,
+    .theme-switcher {
+        display: none !important;
+    }
+
+    .dashboard-shell,
+    .portal-shell {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+
+/* == Diagramme: Achsen, Zeiger, Tabelle ================================== */
+
+.chart-surface { position: relative; }
+
+.chart-svg { display: block; width: 100%; height: auto; }
+
+.chart-line {
+    fill: none;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+/* Gitter und Achsen bleiben im Hintergrund. Sie sind Hilfslinien, keine
+   Aussage - eine Achse, die so kraeftig ist wie die Kurve, streitet mit ihr. */
+.chart-grid-line { stroke: var(--line); stroke-width: 1; }
+
+.chart-axis-text {
+    fill: var(--muted);
+    font-size: 11px;
+    font-family: var(--font-main);
+}
+
+.chart-crosshair {
+    stroke: var(--muted);
+    stroke-width: 1;
+    stroke-dasharray: 3 3;
+    pointer-events: none;
+    transition: opacity var(--transition);
+}
+
+.chart-cursor {
+    stroke: var(--surface);
+    stroke-width: 2;
+    pointer-events: none;
+}
+
+.chart-hitbox { cursor: crosshair; }
+
+.chart-tooltip {
+    position: absolute;
+    top: 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 12px;
+    background: var(--surface-raised);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md);
+    font-size: 0.8125rem;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 2;
+}
+
+/* Ohne diese Zeile bleibt der Tooltip sichtbar, obwohl er "hidden" traegt:
+   das display:flex oben schlaegt die Vorgabe des Browsers fuer [hidden]. Im
+   Bild sass er als leere Pille links im Diagramm. */
+.chart-tooltip[hidden] { display: none; }
+
+.chart-tooltip strong { color: var(--text-strong); }
+.chart-tooltip span { color: var(--muted); font-size: 0.75rem; }
+
+.chart-table { margin-top: 16px; }
+
+.chart-table > summary {
+    cursor: pointer;
+    padding: 8px 0;
+    color: var(--muted);
+    font-size: 0.875rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.chart-table > summary:hover { color: var(--text); }
+.chart-table-scroll { max-height: 320px; overflow-y: auto; margin-top: 8px; }
+
+.chart-table table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+
+.chart-table th,
+.chart-table td {
+    text-align: left;
+    padding: 7px 12px;
+    border-bottom: 1px solid var(--line);
+}
+
+.chart-table th {
+    position: sticky;
+    top: 0;
+    background: var(--surface-sunken);
+    color: var(--muted);
+    font-weight: 600;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.chart-table td:not(:first-child) { font-variant-numeric: tabular-nums; }
