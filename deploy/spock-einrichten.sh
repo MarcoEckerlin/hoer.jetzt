@@ -56,6 +56,25 @@ erreichbar() {
     docker compose exec -T postgres pg_isready -U "$DB_USER" -d "$DB_NAME" >/dev/null 2>&1
 }
 
+# Eine Zahl abfragen - und darauf bestehen, dass es eine ist.
+#
+# Vorher wurde das Ergebnis direkt verglichen. Schlug die Abfrage fehl, kam
+# eine leere Zeichenkette zurueck (der Fehler geht nach stderr), und
+# [[ "" != "0" ]] war wahr - das Skript meldete dann "Gibt es schon." und
+# uebersprang genau den Schritt, den es haette tun sollen. Auf einer Node ohne
+# Spock sah eine gescheiterte Einrichtung damit aus wie eine gelungene.
+zahl() {
+    local ergebnis
+    ergebnis="$(psql_ -tAc "$1" 2>/dev/null || true)"
+    ergebnis="$(printf '%s' "$ergebnis" | tr -d '[:space:]')"
+    [[ "$ergebnis" =~ ^[0-9]+$ ]] || return 1
+    printf '%s' "$ergebnis"
+}
+
+spock_vorhanden() {
+    [[ "$(zahl "SELECT count(*) FROM pg_extension WHERE extname='spock'" || echo 0)" != "0" ]]
+}
+
 erreichbar || fail "PostgreSQL antwortet nicht. Laeuft der Stack?"
 
 case "${1:-}" in
@@ -79,10 +98,31 @@ anlegen)
     fi
 
     step "Tabellen in den Abgleich aufnehmen"
+
+    # Erst nachsehen, ob ueberhaupt etwas da ist. "0 Tabellen im Abgleich"
+    # sieht nach einem Spock-Problem aus, hat aber meistens einen banaleren
+    # Grund: die Datenbank ist leer, weil der Bot noch nicht gestartet ist -
+    # oder weil er auf eine andere Datenbank zeigt als dieses Skript.
+    VORHANDEN="$(zahl "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+                        WHERE n.nspname = 'public' AND c.relkind = 'r'" || echo 0)"
+    if [[ "$VORHANDEN" == "0" ]]; then
+        warn "In ${DB_NAME}.public liegt keine einzige Tabelle."
+        warn "    Der Abgleich haette dann nichts zu tun. Zuerst pruefen:"
+        warn "      docker compose ps core           laeuft der Bot?"
+        warn "      docker compose logs core | grep '\\[DB\\] Schema'"
+        warn "    und ob HJ_DB_NAME auf dieselbe Datenbank zeigt wie hier (${DB_NAME})."
+    fi
+
     # Muss nach jedem Schema-Zuwachs erneut laufen: eine Tabelle, die es beim
     # Anlegen noch nicht gab, wird nicht von selbst mitgenommen.
     psql_ -c "SELECT spock.repset_add_all_tables('default', ARRAY['public']);"
-    info "$(psql_ -tAc "SELECT count(*) || ' Tabellen im Abgleich' FROM spock.tables") "
+
+    IM_ABGLEICH="$(zahl "SELECT count(*) FROM spock.tables" || echo 0)"
+    info "${IM_ABGLEICH} von ${VORHANDEN} Tabellen im Abgleich"
+    if [[ "$VORHANDEN" != "0" && "$IM_ABGLEICH" == "0" ]]; then
+        warn "Tabellen sind da, aber keine im Abgleich - das ist ein echter Fund."
+        warn "    Nachsehen: SELECT * FROM spock.replication_set;"
+    fi
 
     warn "Tabellen ohne Primaerschluessel koennen nicht abgeglichen werden."
     psql_ -tAc "
@@ -99,10 +139,33 @@ verbinden)
     ZIEL="node${ZIEL_NR}"
     ABO="von_${ZIEL}"
 
+    # Die Nummer gehoert zur *anderen* Node. Wer hier die eigene eintraegt,
+    # legt ein Abonnement namens "von_node1" auf Node 1 an - das laeuft, zeigt
+    # aber auf die falsche Maschine und faellt erst auf, wenn Daten fehlen.
+    if [[ "$ZIEL_NR" == "$HJ_NODE_NR" ]]; then
+        fail "Das ist die eigene Nummer (${HJ_NODE_NR}). Gemeint ist die Nummer der anderen Node."
+    fi
+
+    spock_vorhanden || fail "Spock ist hier nicht eingerichtet - erst 'anlegen' auf dieser Node."
+
     step "Abonnement ${ABO}"
-    if [[ "$(psql_ -tAc "SELECT count(*) FROM spock.subscription WHERE sub_name='${ABO}'")" != "0" ]]; then
+    vorhanden="$(zahl "SELECT count(*) FROM spock.subscription WHERE sub_name='${ABO}'")" \
+        || fail "spock.subscription ist nicht lesbar - lief 'anlegen' auf dieser Node durch?"
+
+    if [[ "$vorhanden" != "0" ]]; then
         info "Gibt es schon."
     else
+        # Vor dem Anlegen nachsehen, ob die Gegenstelle ueberhaupt antwortet.
+        # sub_create legt sonst ein Abonnement an, das dauerhaft im Fehler
+        # steht - und die Ursache ("Connection refused") steht dann nur im
+        # Protokoll des Apply-Workers.
+        if ! docker compose exec -T postgres pg_isready -h "$ZIEL_IP" -p 5432 >/dev/null 2>&1; then
+            fail "$(printf '%s\n' \
+                "${ZIEL_IP}:5432 antwortet nicht." \
+                "    Auf der anderen Node muss der Stack mit HJ_SPOCK=true laufen -" \
+                "    nur docker-compose.spock.yml veroeffentlicht den Port auf der" \
+                "    privaten Adresse. Ohne das ist Postgres dort nur im Docker-Netz.")"
+        fi
         psql_ -c "SELECT spock.sub_create(
                       subscription_name := '${ABO}',
                       provider_dsn := 'host=${ZIEL_IP} port=5432 dbname=${DB_NAME} user=${DB_USER} password=${DB_PASS}');"
