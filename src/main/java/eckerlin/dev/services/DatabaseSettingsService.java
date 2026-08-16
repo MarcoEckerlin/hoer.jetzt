@@ -505,7 +505,13 @@ public class DatabaseSettingsService {
             }
         }
 
-        try (PreparedStatement delete = connection.prepareStatement("DELETE FROM deployment_lavalink_nodes WHERE bot_id = ?")) {
+        // Nur die von Hand gepflegten Zeilen austauschen. Selbst angemeldete und
+        // vom Autoscaling erzeugte Knoten kennt die Oberflaeche gar nicht - ohne
+        // diese Einschraenkung wuerde ein Klick auf "Speichern" im Adminbereich
+        // sie loeschen, und zwar unbemerkt: der Knoten liefe weiter, der Bot
+        // wuesste nur nichts mehr von ihm.
+        try (PreparedStatement delete = connection.prepareStatement(
+                "DELETE FROM deployment_lavalink_nodes WHERE bot_id = ? AND herkunft = 'manuell'")) {
             delete.setInt(1, botId);
             delete.executeUpdate();
         }

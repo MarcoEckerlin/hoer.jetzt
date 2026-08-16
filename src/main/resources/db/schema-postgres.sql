@@ -171,6 +171,39 @@ CREATE INDEX IF NOT EXISTS idx_deployment_nodes
 CREATE INDEX IF NOT EXISTS idx_nodes_tier
     ON deployment_lavalink_nodes (bot_id, tier, enabled);
 
+-- Woher ein Knoten stammt. Das entscheidet, wer ihn wieder loeschen darf:
+--   manuell - im Adminbereich eingetragen
+--   selbst  - hat sich per install.sh angemeldet
+--   auto    - vom Autoscaling bei Hetzner erzeugt
+-- Wichtig, weil das Speichern im Adminbereich die Knotentabelle austauscht
+-- (loeschen und neu schreiben). Ohne diese Spalte wuerde ein Klick auf
+-- "Speichern" jeden selbst angemeldeten Knoten mitnehmen - unbemerkt, denn
+-- die Oberflaeche kennt ihn gar nicht.
+ALTER TABLE deployment_lavalink_nodes
+    ADD COLUMN IF NOT EXISTS herkunft varchar(16) NOT NULL DEFAULT 'manuell';
+
+-- Adresse des Knoten-Agenten (Neustart, Version, Selbsttest). Leer bei
+-- Knoten, die von Hand eingetragen wurden - dort gibt es nur "Neu verbinden".
+ALTER TABLE deployment_lavalink_nodes
+    ADD COLUMN IF NOT EXISTS agent_url text;
+
+-- Wann sich der Knoten zuletzt gemeldet hat. Das Autoscaling raeumt nur
+-- Knoten ab, die es selbst erzeugt hat und die sich laenger nicht melden.
+ALTER TABLE deployment_lavalink_nodes
+    ADD COLUMN IF NOT EXISTS zuletzt_gesehen timestamp;
+
+-- Server-ID bei Hetzner, damit ein abgebauter Knoten auch dort verschwindet.
+ALTER TABLE deployment_lavalink_nodes
+    ADD COLUMN IF NOT EXISTS hetzner_id bigint;
+
+-- Bewusst *kein* UNIQUE auf (bot_id, node_name): in bestehenden Installationen
+-- koennen doppelte Namen liegen - der Lader verwirft den zweiten stillschweigend,
+-- die Tabelle laesst sie aber zu. Ein nachtraeglicher eindeutiger Index wuerde
+-- beim Schemalauf scheitern und den Bot am Starten hindern. Die Eindeutigkeit
+-- stellt stattdessen KnotenRegistrierungService beim Eintragen her.
+CREATE INDEX IF NOT EXISTS idx_nodes_herkunft
+    ON deployment_lavalink_nodes (bot_id, herkunft);
+
 -- ---------------------------------------------------------------------------
 -- Tickets, Statistik, Dateien
 -- ---------------------------------------------------------------------------
