@@ -109,18 +109,10 @@ Betriebsbereich unter `#/betrieb/…` ist wieder sichtbar.
 
 ## Frühere Releases — v2026.08.15.5
 
-**Achtung, dieses Release wechselt die Datenbank.** MariaDB wird zu PostgreSQL,
-und Redis kommt dazu. Vor dem Start einmal umziehen:
-
-```bash
-ALT_DB_HOST=<alte-adresse> ALT_DB_USER=<nutzer> ALT_DB_PASSWORD=<passwort> \
-    bash /opt/hoerjetzt/main/deploy/umzug-postgres.sh
-```
-
-Das Skript sichert, legt das Schema an, überträgt per `pgloader` und zählt
-gegen. Bricht etwas ab, läuft der alte Stand unverändert weiter — es gibt
-keinen Punkt, an dem beide Datenbanken kaputt wären. Erst wenn alle Zahlen
-stimmen, umschalten.
+**Dieses Release wechselte die Datenbank** von MariaDB auf PostgreSQL, und
+Redis kam dazu. Das Umzugsskript ist entfallen — es hat seinen Zweck erfüllt,
+und eine Anleitung für einen Weg, den niemand mehr geht, ist nur eine
+Fehlerquelle mehr.
 
 Der Bot läuft ab jetzt als **Shard-Verbund**. Mit einer Node und ohne Angabe
 ändert sich nichts: er fragt Discord nach der empfohlenen Zahl, meist eine.
@@ -402,13 +394,6 @@ cd /opt/hoerjetzt/main && bash install.sh
 ```bash
 git clone -b lavalink https://github.com/MarcoEckerlin/hoer.jetzt.git /opt/hoerjetzt-node
 cd /opt/hoerjetzt-node && bash install.sh
-```
-
-**Von einer alten JAR-Installation umsteigen** (stoppt die alten Dienste, sichert
-die Datenbank, übernimmt die alte `config.json`):
-
-```bash
-cd /opt/hoerjetzt/main && bash deploy-alles.sh
 ```
 
 ---

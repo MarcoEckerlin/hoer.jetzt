@@ -71,9 +71,6 @@ wenn der Bot neu startet.
 **Datenbank** — PostgreSQL läuft im Stack mit, es ist nichts vorzubereiten.
 Das Schema legt der Bot beim ersten Start selbst an.
 
-Wer von einer bestehenden MariaDB kommt: `deploy/umzug-postgres.sh` bringt die
-Daten hinüber und zählt gegen.
-
 **Host** — Debian 12 oder Ubuntu 22.04/24.04, Docker. Fehlt Docker,
 installiert der Installer ihn.
 
@@ -694,12 +691,11 @@ Zwischenspeicher.
 
 ## Alles auf einmal ausrollen
 
-Für den Wechsel von der alten JAR-Installation auf den Docker-Stack — und für
-jedes spätere „bau mir alles neu":
+Für „bau mir alles neu":
 
 ```bash
-cd /opt/hoerjetzt/main && git pull
-bash deploy-alles.sh
+cd /opt/hoerjetzt/main && git fetch origin main && git reset --hard origin/main
+bash install.sh
 ```
 
 Das Skript geht der Reihe nach vor und fragt vor allem nach, was nicht
@@ -729,9 +725,8 @@ Freigabe je Server.
 ## Privates Repository
 
 Solange das Repository öffentlich ist, kommt jeder Host anonym an den Code.
-Wird es privat, gilt das für deine eigenen Hosts genauso — `install.sh`,
-`deploy-alles.sh` und das nächtliche Update laufen sonst in eine
-Passwortabfrage und bleiben stehen.
+Wird es privat, gilt das für deine eigenen Hosts genauso — `install.sh` und
+das nächtliche Update laufen sonst in eine Passwortabfrage und bleiben stehen.
 
 **Auf jedem Host einmal:**
 
@@ -780,11 +775,11 @@ aus einer privaten Registry zu ziehen.
 Von Hand, alle vier Zweige auf den neuesten Stand:
 
 ```bash
-cd /opt/hoerjetzt/main && bash deploy-alles.sh
+bash /opt/hoerjetzt/main/deploy/auto-update.sh --jetzt
 ```
 
 `git pull` funktioniert hier nicht zuverlässig: Releases werden neu gebaut und
-force-gepusht, die Historie ändert sich also. `deploy-alles.sh` benutzt deshalb
+force-gepusht, die Historie ändert sich also. `auto-update.sh` benutzt deshalb
 `fetch` + `reset --hard`.
 
 ### Einzelne Audio-Knoten
@@ -951,8 +946,6 @@ bash /opt/hoerjetzt/main/deploy/auto-update.sh --pruefen
 
 **AI-Radio oder KI sagt „nicht freigeschaltet"** — erwartetes Verhalten, beide
 sind je Server gesperrt. Freigabe im Adminbereich.
-
-Ausführlicher: [`Kontext/Installation/06-fehlersuche.md`](Kontext/Installation/06-fehlersuche.md).
 
 ---
 

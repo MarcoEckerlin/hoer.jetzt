@@ -80,12 +80,5 @@ Server auf dem Knoten landen.
 
 ## Dokumentation
 
-[`Kontext/Installation/`](Kontext/Installation/) — Serveranforderungen,
-Erstinstallation, Discord-Berechtigungen, Datenbank, Betrieb, Fehlersuche.
-
-## Ohne Docker
-
-Die Skripte unter `deploy/` richten den Stack direkt auf einem Debian-Server
-ein. Sie erwarten den Anwendungscode und sind damit nur aus den
-Komponentenzweigen heraus sinnvoll — für neue Installationen ist Docker der
-einfachere Weg.
+[`ANLEITUNG.md`](ANLEITUNG.md) — Einrichtung, Betrieb, Fehlersuche.
+[`BEFEHLE.md`](BEFEHLE.md) — Spickzettel für den Alltag.
