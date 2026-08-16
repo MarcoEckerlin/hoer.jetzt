@@ -11,7 +11,39 @@ Es gibt zwei Sorten Host, und fast jeder Unterschied kommt daher:
 
 ---
 
-## Dieses Release ausrollen — v2026.08.15.5
+## Dieses Release ausrollen — v2026.08.16.11
+
+**Der Adminbereich war unter PostgreSQL für niemanden erreichbar.** Die
+Admin-Liste wurde mit `FIELD(role,…)` sortiert — das gibt es nur in MariaDB.
+Unter PostgreSQL scheiterte die Abfrage, der Fehler wurde nur als WARN
+geloggt, und die Liste blieb leer: kein Bot-Admin, `/admin` antwortete mit
+403. Auch `HJ_BOT_ADMIN_IDS` half nicht — die Notfalltür trägt den Eintrag
+zwar ein, gelesen wurde er über genau diese Abfrage.
+
+Dieselbe Ursache steckte an vier weiteren Stellen, die den Umzug von MariaDB
+überlebt hatten: `INSERT IGNORE` (Altimport der Admins, Rechtematrix) sowie
+`ON DUPLICATE KEY UPDATE`, `UNIX_TIMESTAMP()` und `NOW() - INTERVAL ? SECOND`
+im Wiedergabezustand. Praktisch hieß das: die Rechtematrix ließ sich nicht
+speichern, und ein Update riss die Wiedergabe ab, statt sie fortzusetzen —
+beides stumm, weil diese Schreibvorgänge ihre Fehler verschlucken.
+
+Dazu ein Nebenfund: PostgreSQL kennt kein `ON UPDATE current_timestamp`.
+`updated_at` wird beim Upsert jetzt ausdrücklich gesetzt, sonst hätte
+`loadRecent()` den Schnappschuss nach Ablauf des Fensters nie wieder gefunden.
+
+Nur der Zweig `core` ändert sich — keine Schemaänderung, kein Umzug:
+
+```bash
+bash /opt/hoerjetzt/main/deploy/auto-update.sh --jetzt
+docker logs hoerjetzt-core-1 | grep -i "Bot-Admins konnten nicht geladen"
+```
+
+Die zweite Zeile muss **leer** bleiben. Danach am Webdashboard anmelden — der
+Betriebsbereich unter `#/betrieb/…` ist wieder sichtbar.
+
+---
+
+## Frühere Releases — v2026.08.15.5
 
 **Achtung, dieses Release wechselt die Datenbank.** MariaDB wird zu PostgreSQL,
 und Redis kommt dazu. Vor dem Start einmal umziehen:
