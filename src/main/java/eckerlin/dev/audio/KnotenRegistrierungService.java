@@ -142,6 +142,67 @@ public class KnotenRegistrierungService {
         }
     }
 
+    /** Was in der Tabelle steht - auch ueber Knoten, die noch nicht verbunden sind. */
+    public record Eintrag(
+            String name,
+            String adresse,
+            String stufe,
+            String herkunft,
+            String agentUrl,
+            Long hetznerId,
+            String zuletztGesehen,
+            boolean aktiv
+    ) {
+    }
+
+    /**
+     * Alle eingetragenen Knoten.
+     *
+     * <p>Bewusst aus der Tabelle und nicht aus der Lavalink-Bibliothek: die
+     * kennt nur, was verbunden ist. Ein gerade erst erzeugter Server taucht
+     * dort minutenlang nicht auf - und genau in dieser Zeit will man in der
+     * Oberflaeche sehen, dass er im Kommen ist, statt sich zu fragen, ob das
+     * Anlegen ueberhaupt geklappt hat.</p>
+     */
+    public java.util.List<Eintrag> alleEintraege() {
+        java.util.List<Eintrag> gefunden = new java.util.ArrayList<>();
+        String sql = """
+                SELECT node_name, server_uri, tier, herkunft, agent_url, hetzner_id, zuletzt_gesehen, enabled
+                  FROM deployment_lavalink_nodes
+                 WHERE bot_id = ?
+                 ORDER BY herkunft, node_name
+                """;
+
+        try (Connection verbindung = DB.connection();
+             PreparedStatement anweisung = verbindung.prepareStatement(sql)) {
+            anweisung.setInt(1, botId);
+            try (ResultSet ergebnis = anweisung.executeQuery()) {
+                while (ergebnis.next()) {
+                    // wasNull() bezieht sich immer auf die zuletzt gelesene
+                    // Spalte. Erst den Zeitstempel zu lesen und danach zu
+                    // fragen, haette die Antwort fuer den Zeitstempel geliefert
+                    // - und hetzner_id waere nie null gewesen.
+                    long hetzner = ergebnis.getLong("hetzner_id");
+                    Long hetznerId = ergebnis.wasNull() ? null : hetzner;
+                    java.sql.Timestamp gesehen = ergebnis.getTimestamp("zuletzt_gesehen");
+                    gefunden.add(new Eintrag(
+                            sauber(ergebnis.getString("node_name")),
+                            sauber(ergebnis.getString("server_uri")),
+                            sauber(ergebnis.getString("tier")),
+                            sauber(ergebnis.getString("herkunft")),
+                            sauber(ergebnis.getString("agent_url")),
+                            hetznerId,
+                            gesehen == null ? "" : gesehen.toInstant().toString(),
+                            ergebnis.getBoolean("enabled")
+                    ));
+                }
+            }
+        } catch (SQLException fehler) {
+            Alert.send("WARN", "AUDIO", "Knotentabelle nicht lesbar: " + fehler.getMessage());
+        }
+        return gefunden;
+    }
+
     public Optional<String> agentUrl(String name) {
         try (Connection connection = DB.connection();
              PreparedStatement anweisung = connection.prepareStatement(

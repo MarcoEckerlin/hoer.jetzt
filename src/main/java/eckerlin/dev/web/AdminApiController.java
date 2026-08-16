@@ -4,8 +4,10 @@ import eckerlin.dev.audio.AudioService;
 import eckerlin.dev.audio.AutoScaleService;
 import eckerlin.dev.audio.ErreichbarkeitService;
 import eckerlin.dev.audio.KnotenAgentService;
+import eckerlin.dev.audio.KnotenRegistrierungService;
 import eckerlin.dev.security.ZweiFaktorService;
 import eckerlin.dev.web.dto.AudioNodeUsageView;
+import eckerlin.dev.web.dto.KnotenUebersichtView;
 import eckerlin.dev.services.AdminAccessService;
 import eckerlin.dev.services.AdminConfigurationService;
 import eckerlin.dev.services.BotPresenceService;
@@ -44,6 +46,7 @@ public class AdminApiController {
     private final AutoScaleService autoScaleService;
     private final ErreichbarkeitService erreichbarkeitService;
     private final ZweiFaktorService zweiFaktorService;
+    private final KnotenRegistrierungService knotenRegistrierungService;
 
     public AdminApiController(
             AdminAccessService adminAccessService,
@@ -55,12 +58,14 @@ public class AdminApiController {
             KnotenAgentService knotenAgentService,
             AutoScaleService autoScaleService,
             ErreichbarkeitService erreichbarkeitService,
-            ZweiFaktorService zweiFaktorService
+            ZweiFaktorService zweiFaktorService,
+            KnotenRegistrierungService knotenRegistrierungService
     ) {
         this.knotenAgentService = knotenAgentService;
         this.autoScaleService = autoScaleService;
         this.erreichbarkeitService = erreichbarkeitService;
         this.zweiFaktorService = zweiFaktorService;
+        this.knotenRegistrierungService = knotenRegistrierungService;
         this.adminAccessService = adminAccessService;
         this.adminConfigurationService = adminConfigurationService;
         this.botPresenceService = botPresenceService;
@@ -191,6 +196,76 @@ public class AdminApiController {
         return new ActionResponse(true, umgezogen == 0
                 ? "Alle Server liegen bereits auf der passenden Stufe."
                 : umgezogen + " Server umgezogen.");
+    }
+
+    /**
+     * Knoten fuer die Betriebsansicht - Tabelle und Lavalink zusammengefuehrt.
+     *
+     * <p>Getrennt von {@code /audio/nodes}, das die bisherige
+     * Verwaltungsoberflaeche benutzt. Deren Antwortform zu aendern haette dort
+     * stillschweigend Felder verschwinden lassen.</p>
+     */
+    @GetMapping("/audio/knoten")
+    public List<KnotenUebersichtView> audioKnoten(HttpSession session) {
+        adminAccessService.requireAdmin(requireSession(session));
+
+        List<AudioNodeUsageView> verbunden = audioService.knotenAuslastung();
+        List<KnotenUebersichtView> ergebnis = new java.util.ArrayList<>();
+        java.util.Set<String> gesehen = new java.util.HashSet<>();
+
+        for (KnotenRegistrierungService.Eintrag eintrag : knotenRegistrierungService.alleEintraege()) {
+            AudioNodeUsageView live = verbunden.stream()
+                    .filter(k -> k.name().equals(eintrag.name()))
+                    .findFirst()
+                    .orElse(null);
+            gesehen.add(eintrag.name());
+
+            // "anmarsch" ist der Zustand, den es vorher nicht gab: das
+            // Autoscaling hat den Server angelegt, er installiert sich gerade
+            // und meldet sich in ein paar Minuten. Ohne eigenen Zustand saehe
+            // er aus wie ein ausgefallener Knoten.
+            String zustand = live != null && live.erreichbar() ? "verbunden"
+                    : !eintrag.aktiv() && "auto".equals(eintrag.herkunft()) ? "anmarsch"
+                    : "still";
+
+            ergebnis.add(new KnotenUebersichtView(
+                    eintrag.name(),
+                    eintrag.adresse(),
+                    live != null ? live.stufe() : eintrag.stufe(),
+                    eintrag.herkunft(),
+                    zustand,
+                    live != null && live.erreichbar(),
+                    !eintrag.agentUrl().isBlank(),
+                    eintrag.hetznerId(),
+                    eintrag.zuletztGesehen(),
+                    live == null ? 0 : live.obergrenze(),
+                    live == null ? 0 : live.spielend(),
+                    live == null ? 0 : live.gesamt(),
+                    live == null ? 0 : live.cpuLast(),
+                    live == null ? 0 : live.laufzeitSekunden(),
+                    live == null ? -1 : live.strafpunkte(),
+                    live == null ? List.of() : live.server()
+            ));
+        }
+
+        // Knoten, die verbunden sind, aber nicht in der Tabelle stehen. Das
+        // kommt bei einem Deployment-Knoten aus der Konfiguration vor - er
+        // gehoert trotzdem in die Ansicht, sonst fehlt in der Uebersicht
+        // ausgerechnet der, auf dem alles laeuft.
+        for (AudioNodeUsageView live : verbunden) {
+            if (gesehen.contains(live.name())) {
+                continue;
+            }
+            ergebnis.add(new KnotenUebersichtView(
+                    live.name(), live.adresse(), live.stufe(), "konfiguration",
+                    live.erreichbar() ? "verbunden" : "still",
+                    live.erreichbar(), false, null, "",
+                    live.obergrenze(), live.spielend(), live.gesamt(),
+                    live.cpuLast(), live.laufzeitSekunden(), live.strafpunkte(), live.server()
+            ));
+        }
+
+        return ergebnis;
     }
 
     // ------------------------------------------------------------------
