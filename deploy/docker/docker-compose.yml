@@ -1,0 +1,228 @@
+# hoer.jetzt - Stack fuer einen Host.
+#
+#   cp .env.beispiel .env      # ausfuellen
+#   docker compose up -d
+#
+# Die Datenbank laeuft ab Stufe 1 des Umbaus als PostgreSQL mit im Stack -
+# siehe UMBAU-ARCHITEKTUR.md. Wer noch eine externe Datenbank benutzt, setzt
+# HJ_DB_HOST auf deren Adresse; der Dienst hier stoert dann nicht weiter.
+#
+# Audio-Knoten koennen hier mitlaufen oder auf eigenen Hosts stehen - siehe
+# docker-compose.lavalink.yml.
+
+name: hoerjetzt
+
+# Die Komponentenzweige liegen NEBEN main, nicht darin:
+#   /opt/hoerjetzt/main/deploy/docker   <- diese Datei
+#   /opt/hoerjetzt/core                 <- Bauverzeichnis
+# Deshalb drei Ebenen hoch. Wer anders ablegt, setzt HJ_QUELLEN in der .env
+# auf das Verzeichnis, in dem core, ai-radio und lavalink liegen.
+
+services:
+
+  core:
+    image: ghcr.io/marcoeckerlin/hoerjetzt-core:${CORE_TAG:-latest}
+    build:
+      context: ${HJ_QUELLEN:-../../..}/core
+    restart: unless-stopped
+    environment:
+      HJ_BOT_TOKEN: ${HJ_BOT_TOKEN:?Bot-Token fehlt}
+      HJ_BOT_ID: ${HJ_BOT_ID:-1}
+      HJ_DB_HOST: ${HJ_DB_HOST:-postgres}
+      HJ_DB_PORT: ${HJ_DB_PORT:-5432}
+      HJ_DB_NAME: ${HJ_DB_NAME:-discordbot}
+      HJ_DB_USER: ${HJ_DB_USER:-discordbot}
+      HJ_DB_PASSWORD: ${HJ_DB_PASSWORD:?Datenbank-Passwort fehlt}
+      HJ_WEB_PORT: 8080
+      HJ_WEB_BASE_URL: ${HJ_WEB_BASE_URL:?Oeffentliche Adresse fehlt}
+      HJ_WEB_REDIRECT_URI: ${HJ_WEB_BASE_URL}/auth/discord/callback
+      HJ_DISCORD_CLIENT_ID: ${HJ_DISCORD_CLIENT_ID:?Client-ID fehlt}
+      HJ_DISCORD_CLIENT_SECRET: ${HJ_DISCORD_CLIENT_SECRET:?Client-Secret fehlt}
+      HJ_MUSIC_BRAIN_BASE_URL: http://ai-radio:8091
+      # Ohne diese drei findet der Bot beim allerersten Start keinen Knoten:
+      # in der Datenbank steht noch keiner, weil ihn niemand eintragen konnte.
+      HJ_LAVALINK_NAME: free-1
+      HJ_LAVALINK_URI: http://lavalink-free-1:2333
+      HJ_LAVALINK_PASSWORD: ${HJ_LAVALINK_PASSWORD:?Lavalink-Passwort fehlt}
+      # Sekunden zwischen zwei Abgleichen der Knotentabelle. Damit kommt ein
+      # neuer Audio-Knoten von selbst dazu - ohne den Bot neu zu starten.
+      # 0 schaltet die Wache ab.
+      HJ_LAVALINK_WATCH_SECONDS: ${HJ_LAVALINK_WATCH_SECONDS:-30}
+      # Duerfen Standard-Server auf einen Premium-Knoten ausweichen, wenn alle
+      # Standard-Knoten ausgelastet sind? Sonst blieben sie stumm, waehrend
+      # nebenan Kapazitaet frei steht. Premium behaelt Vorrang.
+      HJ_LAVALINK_FREE_OVERFLOW: ${HJ_LAVALINK_FREE_OVERFLOW:-true}
+      # Redis: gemeinsamer Kurzzeitspeicher der Prozesse dieser Node.
+      # Leerer Host = Einzelbetrieb, alles laeuft wie bisher.
+      # Wo die Anmeldungen liegen. Fehlt die Zeile, kommt der Schalter aus
+      # der .env nie im Container an - und der Bot laeuft mit Sitzungen im
+      # Arbeitsspeicher weiter, ohne dass jemand merkt warum.
+      HJ_SESSION_STORE: ${HJ_SESSION_STORE:-}
+
+      HJ_REDIS_HOST: ${HJ_REDIS_HOST:-redis}
+      HJ_REDIS_PORT: ${HJ_REDIS_PORT:-6379}
+      # Shards. Ohne Angabe fragt der Bot Discord nach der empfohlenen Zahl.
+      # Bei mehreren Prozessen duerfen sich VON/BIS nie ueberlappen - Discord
+      # wirft sonst beide hinaus, die dieselbe Nummer fahren.
+      HJ_SHARDS_GESAMT: ${HJ_SHARDS_GESAMT:-}
+      HJ_SHARD_VON: ${HJ_SHARD_VON:-}
+      HJ_SHARD_BIS: ${HJ_SHARD_BIS:-}
+      HJ_NODE_NR: ${HJ_NODE_NR:-1}
+      # Nur auf der Steuer-Node gesetzt: dort nimmt core die Meldungen der
+      # Agenten entgegen. Auf allen anderen Nodes bleibt es leer, dann ist die
+      # Schnittstelle dicht.
+      HJ_CONTROLLER_TOKEN: ${HJ_CONTROLLER_TOKEN:-}
+      HJ_LLM_OLLAMA_URL: ${HJ_LLM_OLLAMA_URL:-http://127.0.0.1:11434}
+      HJ_LLM_MODEL: ${HJ_LLM_MODEL:-phi-3.5-mini-instruct}
+    # Kein Port nach aussen mehr: web liegt davor und leitet weiter.
+    expose:
+      - "8080"
+    depends_on:
+      lavalink-free-1:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks: [hoerjetzt]
+
+  # ---------------------------------------------------------------- Daten
+  #
+  # PostgreSQL statt MariaDB. Der Grund steht in UMBAU-ARCHITEKTUR.md: nur
+  # Postgres traegt die spaetere Multi-Master-Replikation zwischen den Nodes.
+  #
+  # Kein Port nach aussen - nur die Dienste in diesem Netz sprechen mit ihr.
+  # Wer von aussen hineinsehen will, nimmt einen SSH-Tunnel.
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${HJ_DB_NAME:-discordbot}
+      POSTGRES_USER: ${HJ_DB_USER:-discordbot}
+      POSTGRES_PASSWORD: ${HJ_DB_PASSWORD:?Datenbank-Passwort fehlt}
+      # Ohne das legt Postgres die Daten mit der Locale des Abbilds an, und
+      # eine spaetere Aenderung erzwingt ein Neuaufsetzen.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      - postgres-daten:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${HJ_DB_USER:-discordbot} -d ${HJ_DB_NAME:-discordbot}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks: [hoerjetzt]
+
+  # ---------------------------------------------------------------- Web
+  #
+  # Die Oberflaeche laeuft ab Stufe 3 als eigener Dienst - React, ausgeliefert
+  # von nginx. Sie liegt vor core und leitet /api und /auth dorthin weiter:
+  # ein Ursprung fuer alles, sonst braeuchte das Sitzungs-Cookie CORS-Ausnahmen.
+  #
+  # Der Port der Weboberflaeche wandert damit von core hierher.
+  web:
+    image: ghcr.io/marcoeckerlin/hoerjetzt-web:${WEB_TAG:-latest}
+    build:
+      context: ${HJ_QUELLEN:-../../..}/web
+    restart: unless-stopped
+    environment:
+      HJ_CORE_HOST: core
+      HJ_CORE_PORT: 8080
+    ports:
+      - "${HJ_WEB_BIND:-127.0.0.1}:${HJ_WEB_PORT_HOST:-8080}:80"
+    depends_on:
+      - core
+    networks: [hoerjetzt]
+
+  # Bewusst ohne Persistenz und ohne Replikation zwischen Nodes: alles hier
+  # ist entweder fluechtig oder gehoert ohnehin dieser Node. Repliziertes
+  # Redis waere eine zweite verteilte Datenbank mit denselben Problemen und
+  # ohne Gewinn.
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+    networks: [hoerjetzt]
+
+  ai-radio:
+    image: ghcr.io/marcoeckerlin/hoerjetzt-ai-radio:${AI_RADIO_TAG:-latest}
+    build:
+      context: ${HJ_QUELLEN:-../../..}/ai-radio
+    restart: unless-stopped
+    environment:
+      HJ_BOT_ID: ${HJ_BOT_ID:-1}
+      HJ_DB_HOST: ${HJ_DB_HOST:-postgres}
+      HJ_DB_PORT: ${HJ_DB_PORT:-5432}
+      HJ_DB_NAME: ${HJ_DB_NAME:-discordbot}
+      HJ_DB_USER: ${HJ_DB_USER}
+      HJ_DB_PASSWORD: ${HJ_DB_PASSWORD}
+      HJ_LISTEN_HOST: 0.0.0.0
+      HJ_LLM_OLLAMA_URL: ${HJ_LLM_OLLAMA_URL:-http://127.0.0.1:11434}
+      HJ_LLM_MODEL: ${HJ_LLM_MODEL:-phi-3.5-mini-instruct}
+    # Kein Port nach aussen: nur core spricht mit diesem Dienst.
+    networks: [hoerjetzt]
+
+  # ---------------------------------------------------------------- Audio
+  #
+  # Ein Standard-Knoten laeuft immer mit, damit der Stack allein lauffaehig
+  # ist. Weitere Knoten - vor allem Premium - gehoeren auf eigene Hosts.
+
+  lavalink-free-1:
+    image: ghcr.io/marcoeckerlin/hoerjetzt-lavalink:${LAVALINK_TAG:-latest}
+    build:
+      context: ${HJ_QUELLEN:-../../..}/lavalink
+    restart: unless-stopped
+    environment:
+      LAVALINK_SERVER_PASSWORD: ${HJ_LAVALINK_PASSWORD:?Lavalink-Passwort fehlt}
+      LAVALINK_TIER: free
+      LAVALINK_PORT: 2333
+      YOUTUBE_PLUGIN_VERSION: ${YOUTUBE_PLUGIN_VERSION:-1.18.2}
+      YOUTUBE_PLUGIN_SNAPSHOT: ${YOUTUBE_PLUGIN_SNAPSHOT:-false}
+      # hoch | mittel | sparsam - siehe entrypoint.sh im lavalink-Zweig.
+      LAVALINK_QUALITAET: ${LAVALINK_QUALITAET:-hoch}
+      # Altersbeschraenkte Titel gibt YouTube nur an angemeldete Clients.
+      YOUTUBE_OAUTH: ${YOUTUBE_OAUTH:-false}
+      YOUTUBE_REFRESH_TOKEN: ${YOUTUBE_REFRESH_TOKEN:-}
+      # Entschluesselung ausgelagert - siehe Dienst yt-cipher unten.
+      # Leer setzen, um wieder das Plugin selbst rechnen zu lassen.
+      YT_CIPHER_URL: ${YT_CIPHER_URL-http://yt-cipher:8001}
+      YT_CIPHER_PASSWORD: ${YT_CIPHER_PASSWORD:-}
+      YT_CIPHER_USERAGENT: hoerjetzt
+    depends_on:
+      - yt-cipher
+    networks: [hoerjetzt]
+
+  # ---------------------------------------------------------------- Cipher
+  #
+  # YouTube verschluesselt die Stream-Adresse mit einer Funktion aus seinem
+  # Player-Skript und tauscht dieses Skript im Wochentakt. Kommt das Plugin
+  # nicht mehr mit, steht im Log
+  #
+  #   Problematic YouTube player script .../base.js detected
+  #   (issue detected with script: must find sig function)
+  #
+  # und es spielt gar nichts mehr - auch nichts Altersbeschraenktes. Dieser
+  # kleine Dienst uebernimmt den Schritt und wird deutlich haeufiger
+  # nachgezogen als eine Plugin-Veroeffentlichung.
+  #
+  # Kein Port nach aussen: nur die Knoten in diesem Netz sprechen mit ihm.
+  yt-cipher:
+    image: ghcr.io/kikkia/yt-cipher:master
+    restart: unless-stopped
+    environment:
+      PORT: 8001
+      API_TOKEN: ${YT_CIPHER_PASSWORD:-}
+      OVERRIDE_PLAYER_VARIANT: IAS
+    networks: [hoerjetzt]
+
+volumes:
+  postgres-daten:
+
+networks:
+  hoerjetzt:
+    driver: bridge

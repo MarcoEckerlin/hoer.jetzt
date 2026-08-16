@@ -1,0 +1,10 @@
+[Unit]
+Description=hoer.jetzt - Update auf das neueste Release
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/hoerjetzt/main/deploy/auto-update.sh
+# Das Skript wartet notfalls bis zu zwei Stunden auf eine Wiedergabepause.
+TimeoutStartSec=4h
