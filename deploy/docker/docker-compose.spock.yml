@@ -36,6 +36,16 @@ services:
       POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
     command:
       - postgres
+      # Muss hier stehen, seit die Startzeile ueberschrieben wird.
+      #
+      # PostgreSQL lauscht von Haus aus nur auf localhost. Ohne diese Zeile
+      # laeuft der Dienst, der Healthcheck ist gruen - pg_isready geht ueber
+      # den lokalen Socket - und trotzdem bekommen der Bot im Nachbarcontainer
+      # und die andere Node "Connection refused". Das ist die unangenehmste
+      # Sorte Fehler: alles sieht gesund aus, und die Ursache steht nicht dort,
+      # wo man sie sucht.
+      - -c
+      - listen_addresses=*
       # Ohne diese sechs laeuft Spock nicht - und der Fehler kommt spaet:
       # das Abbild startet, die Erweiterung laesst sich anlegen, und erst der
       # erste Abgleich scheitert.
@@ -60,7 +70,14 @@ services:
     ports:
       - "${HJ_PRIVAT_IP:-127.0.0.1}:5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${HJ_DB_USER:-discordbot} -d ${HJ_DB_NAME:-discordbot}"]
+      # Mit -h ueber TCP, nicht ueber den lokalen Socket.
+      #
+      # Ohne -h meldet pg_isready "gesund", sobald der Dienst laeuft - auch
+      # wenn er auf keiner Netzwerkadresse lauscht. Genau das war der Fall,
+      # als hier listen_addresses fehlte: Container gruen, Bot in der
+      # Neustartschleife. Ein Healthcheck, der den Weg des Nutzers nicht geht,
+      # prueft die falsche Frage.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${HJ_DB_USER:-discordbot} -d ${HJ_DB_NAME:-discordbot}"]
       interval: 10s
       timeout: 5s
       retries: 12
