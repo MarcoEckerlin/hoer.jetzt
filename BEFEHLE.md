@@ -11,7 +11,71 @@ Es gibt zwei Sorten Host, und fast jeder Unterschied kommt daher:
 
 ---
 
-## Dieses Release ausrollen — v2026.08.16.11
+## Dieses Release ausrollen — v2026.08.16.12
+
+**Knoten melden sich selbst an, und der Bot kann sie neu starten.** Bisher
+endete `install.sh` mit einem Zettel, den man von Hand in den Adminbereich
+übertrug — wer das vergaß, hatte einen laufenden Lavalink, den der Bot nicht
+kannte, ohne jede Fehlermeldung.
+
+**Vor dem Ausrollen** zwei Geheimnisse in `/opt/hoerjetzt/.env` anlegen. Ohne
+sie bleibt alles beim Alten, es geht nichts kaputt:
+
+```bash
+echo "HJ_NODE_TOKEN=$(head -c 48 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | cut -c1-32)"  >> /opt/hoerjetzt/.env
+echo "HJ_AGENT_TOKEN=$(head -c 48 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | cut -c1-32)" >> /opt/hoerjetzt/.env
+```
+
+`HJ_NODE_TOKEN` ist der Weg hin (jeder Knoten kennt es), `HJ_AGENT_TOKEN` der
+Weg zurück. Getrennt, damit ein abgegriffenes Anmeldetoken nicht ausreicht, um
+auf allen Hosts Container neu zu starten. **Ohne gesetztes `HJ_NODE_TOKEN` ist
+der Anmeldeendpunkt geschlossen, nicht offen.**
+
+Autoscaling ist zusätzlich, freiwillig und ohne Token aus:
+
+```bash
+cat >> /opt/hoerjetzt/.env <<'EOF'
+HJ_HETZNER_TOKEN=<Read-&-Write-Token aus der Cloud Console>
+HJ_AUTOSCALE=true
+HJ_AUTOSCALE_TYPE=cx33
+HJ_AUTOSCALE_LOCATION=hel1
+HJ_AUTOSCALE_MAX=4
+EOF
+```
+
+Dann wie immer:
+
+```bash
+bash /opt/hoerjetzt/main/deploy/auto-update.sh --jetzt
+```
+
+Auf jedem **Knoten-Host** einmal `update.sh` — es richtet den Agenten mit ein
+und fragt nichts erneut ab:
+
+```bash
+cd /opt/hoerjetzt-node
+git fetch origin lavalink && git reset --hard origin/lavalink
+bash update.sh
+```
+
+Nachsehen:
+
+```bash
+systemctl status hoerjetzt-knoten-agent --no-pager
+docker logs hoerjetzt-core-1 | grep "hat sich angemeldet"
+```
+
+Weiter darin: **Knotenansicht neu** (Kennzahlen oben, je Knoten eine Zeile,
+Erreichbarkeit zum Loadbalancer und zu allen Agenten, Container-Neustart und
+Aktualisierung je Knoten); **Knoten anlegen** im Webinterface mit zweitem
+Faktor (TOTP — das Autoscaling läuft bewusst ohne, es muss auch nachts
+reagieren); **Knotenname ist der Rechnername**, nicht mehr `free-1`; Server-
+Symbole und Betrieb-Zugang durchgängig; **Hell/Dunkel gemessen** statt
+geschätzt — drei Stellen lagen im hellen Modus unter der Lesbarkeitsgrenze.
+
+---
+
+## Frühere Releases — v2026.08.16.11
 
 **Der Adminbereich war unter PostgreSQL für niemanden erreichbar.** Die
 Admin-Liste wurde mit `FIELD(role,…)` sortiert — das gibt es nur in MariaDB.
