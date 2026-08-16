@@ -530,7 +530,10 @@ a { color: inherit; text-decoration: none; }
     font-weight: 650;
     font-size: 15px;
     border-bottom: 1px solid var(--linie);
-    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.12);
+    /* Der Schatten unter der Kopfzeile muss im hellen Modus dunkel und im
+       dunklen hell sein - ein fester schwarzer Wert ist auf dunklem Grund
+       schlicht nicht zu sehen. */
+    box-shadow: 0 1px 0 color-mix(in srgb, var(--linie) 70%, transparent);
 }
 
 .modulleiste-kopf span {
@@ -830,10 +833,23 @@ select.eingabe { appearance: none; cursor: pointer; }
     font: inherit;
     cursor: pointer;
     position: relative;
-    opacity: 0.6;
+    /*
+     * "Aus" wird ueber Farbe und Strichart gezeigt, nicht ueber opacity.
+     *
+     * Vorher stand hier opacity: 0.6. Die trifft aber auch die Zeile mit
+     * .leise darin - gedaempft mal gedaempft ergab im hellen Modus Kontrast
+     * 2.57, gemessen. Ein abgeschalteter Befehl ist kein Schmuckelement: man
+     * muss lesen koennen, welcher es ist, um ihn einzuschalten.
+     */
+    color: var(--text-leise);
+    border-style: dashed;
 }
 
-.befehl.ist-an { opacity: 1; border-color: var(--gruen); }
+.befehl.ist-an {
+    color: var(--text);
+    border-style: solid;
+    border-color: var(--gruen);
+}
 .befehl code { font-size: 14px; font-weight: 600; }
 .befehl .leise { font-size: 12px; }
 .befehl-zustand { position: absolute; top: 10px; right: 12px; font-size: 11px; text-transform: uppercase; color: var(--text-leise); }
@@ -926,7 +942,10 @@ select.eingabe { appearance: none; cursor: pointer; }
 
 .sender:hover { border-color: var(--akzent); }
 .sender.ist-an { border-color: var(--gruen); }
-.sender:disabled { opacity: 0.55; cursor: default; }
+/* Auch hier keine opacity mehr - 0.55 kam im hellen Modus auf Kontrast 2.34.
+   Ein gesperrter Sender soll erkennbar gesperrt sein, aber lesbar bleiben,
+   sonst raet man beim Suchen. */
+.sender:disabled { color: var(--text-leise); border-style: dashed; cursor: default; }
 
 /* Umschalter fuer das Farbschema. */
 .farbschema {
@@ -1098,11 +1117,13 @@ select.eingabe { appearance: none; cursor: pointer; }
     color: var(--text);
     font: inherit;
     cursor: pointer;
-    opacity: 0.65;
+    /* Farbe statt opacity - siehe .befehl. Sonst wird die .leise-Zeile
+       darin ein zweites Mal gedaempft. */
+    color: var(--text-leise);
 }
 
-.modulkachel:hover { opacity: 1; border-color: var(--akzent); }
-.modulkachel.ist-an { opacity: 1; border-color: var(--gruen); }
+.modulkachel:hover { color: var(--text); border-color: var(--akzent); }
+.modulkachel.ist-an { color: var(--text); border-color: var(--gruen); }
 
 /* ------------------------------------------------------------ Schmale Fenster
 
