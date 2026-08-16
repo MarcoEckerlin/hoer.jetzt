@@ -25,8 +25,25 @@ sagen() { printf '[agent] %s\n' "$*"; }
 fehler() { printf '[agent] FEHLER: %s\n' "$*" >&2; exit 1; }
 
 [[ -f "$UMGEBUNG" ]] || fehler "${UMGEBUNG} nicht gefunden."
-# shellcheck disable=SC1090
-set -a; source "$UMGEBUNG"; set +a
+
+# Gelesen, nicht ausgefuehrt - siehe denselben Kommentar in
+# deploy/spock-einrichten.sh. Ein Dollarzeichen im Passwort wuerde bei
+# "source" als Variable gelesen und das Skript unter "set -u" abbrechen.
+umgebung_lesen() {
+    local zeile schluessel wert
+    while IFS= read -r zeile || [[ -n "$zeile" ]]; do
+        [[ "$zeile" =~ ^[[:space:]]*# ]] && continue
+        [[ "$zeile" == *=* ]] || continue
+        schluessel="${zeile%%=*}"
+        wert="${zeile#*=}"
+        schluessel="${schluessel//[[:space:]]/}"
+        [[ "$schluessel" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+        printf -v "$schluessel" '%s' "$wert"
+        export "${schluessel?}"
+    done < "$1"
+}
+
+umgebung_lesen "$UMGEBUNG"
 
 : "${HJ_CONTROLLER_URL:?HJ_CONTROLLER_URL setzen - Adresse der Steuer-Node}"
 : "${HJ_CONTROLLER_TOKEN:?HJ_CONTROLLER_TOKEN setzen}"

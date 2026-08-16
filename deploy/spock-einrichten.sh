@@ -35,8 +35,32 @@ warn() { printf '    \033[1;33m%s\033[0m\n' "$*"; }
 fail() { printf '\n\033[1;31mFEHLER: %s\033[0m\n' "$*" >&2; exit 1; }
 
 [[ -f "$UMGEBUNG" ]] || fail "${UMGEBUNG} nicht gefunden."
-# shellcheck disable=SC1090
-set -a; source "$UMGEBUNG"; set +a
+
+# Die .env wird gelesen, nicht ausgefuehrt.
+#
+# Vorher stand hier "source". Damit ist die Datei ein Shell-Skript: ein
+# Dollarzeichen in einem Passwort wird als Variable gelesen, und unter
+# "set -u" bricht das Skript mit "K4vz4D6tZN: unbound variable" ab - einer
+# Meldung, die nach einem Fehler im Skript aussieht und in Wahrheit ein
+# gueltiges Passwort ist. Ein Passwort mit einem Backtick darin waere sogar
+# ausgefuehrt worden.
+#
+# printf -v setzt den Wert buchstaeblich, ohne jede Ersetzung.
+umgebung_lesen() {
+    local zeile schluessel wert
+    while IFS= read -r zeile || [[ -n "$zeile" ]]; do
+        [[ "$zeile" =~ ^[[:space:]]*# ]] && continue
+        [[ "$zeile" == *=* ]] || continue
+        schluessel="${zeile%%=*}"
+        wert="${zeile#*=}"
+        schluessel="${schluessel//[[:space:]]/}"
+        [[ "$schluessel" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+        printf -v "$schluessel" '%s' "$wert"
+        export "${schluessel?}"
+    done < "$1"
+}
+
+umgebung_lesen "$UMGEBUNG"
 
 : "${HJ_NODE_NR:?HJ_NODE_NR in der .env setzen - jede Node braucht eine eigene Nummer}"
 : "${HJ_PRIVAT_IP:?HJ_PRIVAT_IP setzen - die 10.x-Adresse dieser Maschine im Hetzner-Netz}"
