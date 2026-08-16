@@ -149,18 +149,43 @@ anlegen)
         warn "    Danach 'anlegen' hier noch einmal laufen lassen."
     fi
 
+    # Tabelle fuer Tabelle, nicht in einem Rutsch.
+    #
+    # repset_add_all_tables() bricht beim ersten Problem ab - eine einzige
+    # Tabelle ohne Primaerschluessel genuegt, und *keine* Tabelle landet im
+    # Abgleich. Das sah dann aus wie "Spock tut nichts", war aber ein
+    # fehlender Schluessel an einer Stelle. Einzeln aufgenommen bleibt der
+    # Schaden auf die betroffene Tabelle begrenzt, und man sieht, welche es
+    # war.
+    #
     # Muss nach jedem Schema-Zuwachs erneut laufen: eine Tabelle, die es beim
-    # Anlegen noch nicht gab, wird nicht von selbst mitgenommen.
-    psql_ -c "SELECT spock.repset_add_all_tables('default', ARRAY['public']);"
+    # letzten Lauf noch nicht gab, wird nicht von selbst mitgenommen.
+    ZUGEFUEGT=0
+    UEBERSPRUNGEN=""
+    while read -r tabelle; do
+        [[ -n "$tabelle" ]] || continue
+        if psql_ -qtAc "SELECT spock.repset_add_table('default', '${tabelle}');" >/dev/null 2>&1; then
+            ZUGEFUEGT=$((ZUGEFUEGT + 1))
+        else
+            UEBERSPRUNGEN="${UEBERSPRUNGEN} ${tabelle}"
+        fi
+    done < <(psql_ -tAc "
+        SELECT c.relname
+        FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'public' AND c.relkind = 'r'
+          AND NOT EXISTS (SELECT 1 FROM spock.tables t WHERE t.relid = c.oid)
+        ORDER BY c.relname" 2>/dev/null || true)
 
     IM_ABGLEICH="$(zahl "SELECT count(*) FROM spock.tables" || echo 0)"
-    info "${IM_ABGLEICH} von ${VORHANDEN} Tabellen im Abgleich"
-    if [[ "$VORHANDEN" != "0" && "$IM_ABGLEICH" == "0" ]]; then
-        warn "Tabellen sind da, aber keine im Abgleich - das ist ein echter Fund."
-        warn "    Nachsehen: SELECT * FROM spock.replication_set;"
+    info "${IM_ABGLEICH} von ${VORHANDEN} Tabellen im Abgleich (${ZUGEFUEGT} neu)"
+
+    if [[ -n "$UEBERSPRUNGEN" ]]; then
+        warn "Nicht aufgenommen:${UEBERSPRUNGEN}"
+        warn "    Fast immer ein fehlender Primaerschluessel. Spock repliziert"
+        warn "    UPDATE und DELETE nur mit Schluessel - ohne ihn waere nicht"
+        warn "    bestimmbar, welche Zeile gemeint ist."
     fi
 
-    warn "Tabellen ohne Primaerschluessel koennen nicht abgeglichen werden."
     psql_ -tAc "
         SELECT '    ohne Schluessel: ' || string_agg(c.relname, ', ')
         FROM pg_class c
