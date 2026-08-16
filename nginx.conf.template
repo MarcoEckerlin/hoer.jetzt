@@ -1,0 +1,118 @@
+# Welches Protokoll der Nutzer wirklich benutzt hat.
+#
+# Hier liegt der Grund fuer "400 Bad Request - The plain HTTP request was sent
+# to HTTPS port" und fuer Adressen der Form http://hoer.jetzt:443/dashboard.
+#
+# Frueher stand in der Weiterleitung schlicht "X-Forwarded-Proto $scheme".
+# $scheme ist aber das Protokoll *dieser* Verbindung - und die ist unverschluesselt,
+# weil TLS eine Ebene weiter aussen endet (Cloudflare, Load Balancer). Damit
+# ueberschrieb nginx das ehrliche "https" des Load Balancers mit "http".
+#
+# core baut daraus seine Adressen zusammen: Port 443 (vom Load Balancer) und
+# Protokoll http (von hier) ergeben http://hoer.jetzt:443 - eine Adresse, die
+# Cloudflare zu Recht mit 400 beantwortet, weil sie unverschluesselt an einen
+# verschluesselten Port geht. Die Weiterleitung nach dem Anmelden lief genau
+# dorthin.
+#
+# Also: was von aussen kommt, gilt. Nur wenn nichts kommt - dann steht kein
+# Proxy davor - zaehlt die eigene Verbindung.
+map $http_x_forwarded_proto $hj_proto {
+    ""      $scheme;
+    default $http_x_forwarded_proto;
+}
+
+# Der Port muss zum Protokoll passen. Sonst entsteht dieselbe Unstimmigkeit
+# noch einmal, nur andersherum.
+map $hj_proto $hj_port {
+    https   443;
+    default 80;
+}
+
+# Weboberflaeche und Weiterleitung an core.
+#
+# Warum ueberhaupt weiterleiten und nicht direkt aus dem Browser an core?
+# Wegen der Sitzung: sie haengt an einem Cookie, und ein Cookie ueber zwei
+# Ursprünge hinweg mitzuschicken verlangt CORS samt Ausnahmen. Ein Ursprung
+# fuer alles ist einfacher und dichter.
+
+upstream core {
+    server ${HJ_CORE_HOST}:${HJ_CORE_PORT};
+    keepalive 16;
+}
+
+server {
+    listen 80;
+    server_name _;
+
+    # Gebaute Dateien tragen einen Hash im Namen - die duerfen ewig liegen.
+    location /assets/ {
+        root /usr/share/nginx/html;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        access_log off;
+    }
+
+    # Alles, was core gehoert.
+    location ~ ^/(api|auth|login|logout|public|impressum|datenschutz|stats|invite|cookies)(/|$) {
+        proxy_pass http://core;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $hj_proto;
+        proxy_set_header X-Forwarded-Port $hj_port;
+        # Fuer die spaeteren Live-Verbindungen (Stufe 3, Player-Zustand).
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 300s;
+    }
+
+    # Die alte Oberflaeche ist raus.
+    #
+    # Sie war der Rueckweg, solange die neue noch nicht alles konnte. Jetzt
+    # kann sie es - alle dreizehn Modulseiten sind da - und zwei Oberflaechen
+    # nebeneinander sind ab diesem Punkt kein Sicherheitsnetz mehr, sondern
+    # zwei Stellen, an denen dieselbe Einstellung anders aussieht.
+    #
+    # Im core-Zweig liegen die Vorlagen weiterhin; erreichbar sind sie nur
+    # noch ueber den Betriebsbereich, der /admin und dessen Dateien
+    # weiterleitet.
+
+    # Die alten Thymeleaf-Seiten laden ihre Skripte und Stile direkt aus der
+    # Wurzel (/panel.css, /dashboard-panel.js). Ohne diese Regel faenge die
+    # React-Anwendung sie mit ihrer index.html ab - die Seite kaeme dann ohne
+    # Gestaltung und ohne Funktion heraus, und zwar lautlos.
+    location ~ ^/(admin-panel|asset-upload|cookie-hint|dashboard-panel|panel-icons|panel-upload|panel|public-stats|public|save-feedback|theme)\.(js|css)$ {
+        proxy_pass http://core;
+        proxy_set_header Host $host;
+    }
+
+    # Der Betriebsbereich liegt wieder hier.
+    #
+    # Er war eine Zeit lang eine getrennte Anwendung mit eigenem Abbild und
+    # eigenem Port. Sicherheitstechnisch sauberer - was nicht installiert ist,
+    # kann nicht angegriffen werden - im Alltag aber umstaendlich: zweiter
+    # Container, zweiter Reverse-Proxy-Eintrag, und die Anmeldung musste ueber
+    # denselben Ursprung laufen, sonst kam man nicht hinein.
+    #
+    # Geschuetzt wird er jetzt dort, wo es zaehlt: der Bot prueft bei jedem
+    # einzelnen Aufruf, ob die Sitzung Bot-Administrator ist. Die Oberflaeche
+    # blendet den Bereich nur zusaetzlich aus.
+    location /admin {
+        proxy_pass http://core;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $hj_proto;
+        proxy_set_header X-Forwarded-Port $hj_port;
+    }
+
+    # Alles andere ist die React-Anwendung. Sie fuehrt ihre Wege selbst,
+    # deshalb landet jeder unbekannte Pfad auf der index.html.
+    location / {
+        root /usr/share/nginx/html;
+        try_files $uri $uri/ /index.html;
+    }
+
+    gzip on;
+    gzip_types text/css application/javascript application/json image/svg+xml;
+    gzip_min_length 1024;
+}
