@@ -170,9 +170,9 @@ done
 # ------------------------------------------------------------------ Agent
 
 # Der Agent wird mitgezogen, wenn er schon eingerichtet ist. einrichten.sh
-# liest die bestehenden Werte aus /etc/hoerjetzt-agent.env - es fragt also
+# liest die bestehenden Werte aus /etc/hoerjetzt-knoten-agent.env - es fragt also
 # nichts erneut ab und schaltet insbesondere die Selbstanmeldung nicht ab.
-if [[ -f /etc/hoerjetzt-agent.env ]]; then
+if [[ -f /etc/hoerjetzt-knoten-agent.env ]]; then
     step "Knoten-Agent"
     bash "${HIER}/agent/einrichten.sh" || warn "Agent liess sich nicht erneuern - der Knoten laeuft trotzdem."
 else

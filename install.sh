@@ -307,12 +307,19 @@ else
     warn "Knoten antwortet noch nicht - beim ersten Start werden Plugins geladen."
 fi
 
+# Der Knoten heisst wie die Maschine, nicht "free-1". Ein Name wie "free-1"
+# ist nur auf diesem Host eindeutig - ueber alle Hosts hinweg hiessen zwei
+# erste Knoten gleich, und bei doppelten Namen verwirft der Bot stillschweigend
+# den zweiten. Mehrere Knoten auf demselben Host bekommen die Nummer angehaengt.
+KNOTEN_NAME="$(hostname -s)"
+[[ "$INSTANZ" != "1" ]] && KNOTEN_NAME="${KNOTEN_NAME}-${INSTANZ}"
+
 step "Knoten-Agent"
 info "Der Agent erlaubt Neustart und Aktualisierung dieses Knotens aus dem"
 info "Webinterface heraus - und meldet ihn beim Bot an."
 
 HJ_NODE_CONTAINER="$NAME" \
-HJ_NODE_NAME="${LAVALINK_TIER}-${INSTANZ}" \
+HJ_NODE_NAME="$KNOTEN_NAME" \
 HJ_NODE_ADDRESS="http://${LAVALINK_BIND}:${LAVALINK_PORT}" \
 HJ_LAVALINK_PASSWORD="$HJ_LAVALINK_PASSWORD" \
 HJ_NODE_TIER="$LAVALINK_TIER" \
@@ -326,15 +333,15 @@ step "Fertig"
 echo
 if [[ -n "$HJ_CORE_URL" ]]; then
     info "Der Knoten meldet sich selbst an und taucht im Adminbereich von allein auf."
-    info "    Name:     ${LAVALINK_TIER}-${INSTANZ}"
+    info "    Name:     ${KNOTEN_NAME}"
     info "    Adresse:  http://${LAVALINK_BIND}:${LAVALINK_PORT}"
     info "    Stufe:    ${LAVALINK_TIER}"
     echo
     info "Dauert es laenger als eine Minute:"
-    info "    journalctl -u hoerjetzt-agent -n 40"
+    info "    journalctl -u hoerjetzt-knoten-agent -n 40"
 else
     info "Im Adminbereich unter Lavalink eintragen:"
-    info "    Name:     ${LAVALINK_TIER}-${INSTANZ}"
+    info "    Name:     ${KNOTEN_NAME}"
     info "    Adresse:  http://${LAVALINK_BIND}:${LAVALINK_PORT}"
     info "    Passwort: ${HJ_LAVALINK_PASSWORD}"
     info "    Stufe:    ${LAVALINK_TIER}"

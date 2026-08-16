@@ -32,6 +32,7 @@ import hmac
 import json
 import os
 import shlex
+import socket
 import subprocess
 import threading
 import time
@@ -52,7 +53,14 @@ AGENT_PORT = int(wert("HJ_AGENT_PORT", "8099"))
 AGENT_BIND = wert("HJ_AGENT_BIND", "0.0.0.0")
 
 CONTAINER = wert("HJ_NODE_CONTAINER", "hoerjetzt-lavalink-1")
-KNOTEN_NAME = wert("HJ_NODE_NAME", CONTAINER)
+
+# Der Knoten heisst wie die Maschine. Frueher hiess er "free-1", "free-2" -
+# auf einem Host eindeutig, ueber alle Hosts hinweg aber nicht: zwei Maschinen
+# mit je einem ersten Knoten hiessen beide "free-1", und bei doppelten Namen
+# verwirft der Bot stillschweigend den zweiten. Bei automatisch erzeugten
+# Servern faellt das erst recht ins Gewicht - dort vergibt niemand von Hand
+# eine Nummer.
+KNOTEN_NAME = wert("HJ_NODE_NAME") or socket.gethostname().split(".")[0]
 KNOTEN_VERZEICHNIS = wert("HJ_NODE_DIR", "/opt/hoerjetzt-node")
 
 CORE_URL = wert("HJ_CORE_URL").rstrip("/")
@@ -64,8 +72,8 @@ AGENT_URL = wert("HJ_AGENT_URL")
 HETZNER_ID = wert("HETZNER_SERVER_ID")
 VOM_AUTOSCALING = wert("HJ_AUTOSCALED", "false").lower() == "true"
 
-LAUFPROTOKOLL = "/var/log/hoerjetzt-agent-update.log"
-LAUF_UNIT = "hoerjetzt-node-update"
+LAUFPROTOKOLL = "/var/log/hoerjetzt-knoten-agent-update.log"
+LAUF_UNIT = "hoerjetzt-knoten-update"
 
 
 # ---------------------------------------------------------------- Werkzeuge
@@ -161,7 +169,7 @@ def aktualisieren():
     erschlagen - und zwar genau dann, wenn schon alles Alte geloescht war.
 
     Als transiente Unit haengt der Lauf nicht mehr am Agenten und ueberlebt
-    dessen Neustart. Nebeneffekt: "systemctl status hoerjetzt-node-update"
+    dessen Neustart. Nebeneffekt: "systemctl status hoerjetzt-knoten-update"
     zeigt auch nach einem Fehlschlag noch, was los war.
     """
     if lauf_aktiv():
@@ -276,7 +284,7 @@ def anmeldeschleife():
 # ---------------------------------------------------------------- HTTP
 
 class Griff(BaseHTTPRequestHandler):
-    server_version = "hoerjetzt-agent/" + VERSION
+    server_version = "hoerjetzt-knoten-agent/" + VERSION
 
     def log_message(self, format, *args):
         # Der Standard schreibt jede Anfrage nach stderr - bei einem

@@ -13,7 +13,7 @@ Type=simple
 # Alle Einstellungen und Geheimnisse in einer Datei, chmod 600. Nichts davon
 # gehoert in die Unit selbst: die liegt unter /etc/systemd/system und ist fuer
 # jeden lesbar.
-EnvironmentFile=/etc/hoerjetzt-agent.env
+EnvironmentFile=/etc/hoerjetzt-knoten-agent.env
 ExecStart=/usr/bin/python3 /opt/hoerjetzt-node/agent/agent.py
 Restart=always
 RestartSec=5
