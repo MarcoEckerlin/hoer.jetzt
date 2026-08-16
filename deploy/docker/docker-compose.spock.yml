@@ -1,0 +1,75 @@
+# hoer.jetzt - PostgreSQL mit Spock (Multi-Master)
+#
+#   docker compose -f docker-compose.yml -f docker-compose.spock.yml up -d
+#
+# Ersetzt den gewoehnlichen postgres-Dienst aus docker-compose.yml durch einen
+# mit Spock. Zusammen aufgerufen gewinnt diese Datei - deshalb steht hier nur
+# das, was sich unterscheidet.
+#
+# ---------------------------------------------------------------------------
+# Warum ein fertiges Abbild und nicht "Erweiterung nachinstallieren"
+#
+# Spock ist keine gewoehnliche Erweiterung. Es braucht einen **gepatchten
+# PostgreSQL-Quellbaum** - im Spock-Repository liegen dafuer .diff-Dateien je
+# Hauptversion, die vor dem Uebersetzen angewandt werden. Ein
+# "CREATE EXTENSION spock" auf einem Standard-Postgres schlaegt fehl.
+#
+# Deshalb das fertige Abbild von pgEdge. Wer es selbst bauen will, braucht
+# PostgreSQL aus dem Quelltext samt Patches - machbar, aber dann auch bei
+# jedem Sicherheitsupdate wieder.
+#
+# PRUEFEN, BEVOR DU DICH DARAUF VERLAESST: pgEdge nennt diese Abbilder
+# "Enterprise Postgres". Ob sie fuer deinen Fall frei nutzbar sind, steht
+# nicht in dieser Datei - das ist eine Lizenzfrage, keine technische.
+# Spock selbst steht unter der PostgreSQL-Lizenz.
+# ---------------------------------------------------------------------------
+
+services:
+
+  postgres:
+    image: ${HJ_PG_IMAGE:-ghcr.io/pgedge/pgedge-postgres:16-spock5-standard}
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${HJ_DB_NAME:-discordbot}
+      POSTGRES_USER: ${HJ_DB_USER:-discordbot}
+      POSTGRES_PASSWORD: ${HJ_DB_PASSWORD:?Datenbank-Passwort fehlt}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    command:
+      - postgres
+      # Ohne diese sechs laeuft Spock nicht - und der Fehler kommt spaet:
+      # das Abbild startet, die Erweiterung laesst sich anlegen, und erst der
+      # erste Abgleich scheitert.
+      - -c
+      - wal_level=logical
+      - -c
+      - shared_preload_libraries=spock
+      - -c
+      - track_commit_timestamp=on
+      # Je Node ein Slot und ein Sender. 10 laesst Luft fuer acht Nodes.
+      - -c
+      - max_worker_processes=16
+      - -c
+      - max_replication_slots=16
+      - -c
+      - max_wal_senders=16
+    volumes:
+      - postgres-daten:/var/lib/postgresql/data
+    # Im privaten Hetzner-Netz erreichbar, damit die anderen Nodes anbinden
+    # koennen - nach aussen bleibt der Port zu. HJ_PRIVAT_IP ist die 10.x-
+    # Adresse dieser Maschine.
+    ports:
+      - "${HJ_PRIVAT_IP:-127.0.0.1}:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${HJ_DB_USER:-discordbot} -d ${HJ_DB_NAME:-discordbot}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks: [hoerjetzt]
+
+volumes:
+  postgres-daten:
+
+networks:
+  hoerjetzt:
+    driver: bridge
