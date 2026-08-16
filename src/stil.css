@@ -18,7 +18,18 @@
     --akzent-2: #b98cff;
     --gruen: #4ade80;
     --rot: #f87171;
+    --warn: #fbbf24;
+    --gold: #f0c674;
     --akzent-schrift: #0b0d12;
+    /*
+     * Wie stark ein Knopf auf Mauskontakt reagiert.
+     *
+     * Frueher stand in der Regel fest "filter: brightness(1.08)". Auf dunklem
+     * Grund heisst aufhellen "hervortreten" - im hellen Modus heisst es "in
+     * Richtung Weiss verschwinden", und genau so sah es dort auch aus. Der
+     * Faktor gehoert deshalb ins Farbschema und nicht in die Regel.
+     */
+    --hover-helligkeit: 1.12;
     --schatten: 0 10px 30px rgba(0, 0, 0, 0.35);
     --radius: 14px;
     --schrift: "gg sans", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
@@ -50,7 +61,13 @@
        der Lesbarkeitsgrenze. Gemessen, nicht geschaetzt. */
     --gruen: #137035;
     --rot: #c92a2a;
+    /* #fbbf24 kommt auf weissem Grund auf Kontrast 1.7 und ist als Schrift
+       unlesbar - die Warnfarbe braucht im hellen Modus einen eigenen Ton. */
+    --warn: #92620a;
+    --gold: #8a6516;
     --akzent-schrift: #ffffff;
+    /* Abdunkeln statt aufhellen - siehe oben. */
+    --hover-helligkeit: 0.94;
     /* Im hellen Modus ein leiser Schatten: derselbe schwarze Schlagschatten
        wirkt auf hellem Grund wie ein Fleck. */
     --schatten: 0 8px 24px rgba(18, 21, 28, 0.12);
@@ -145,7 +162,7 @@ a { color: inherit; text-decoration: none; }
     transition: transform .12s ease, filter .12s ease;
     white-space: nowrap;
 }
-.knopf:hover { filter: brightness(1.08); transform: translateY(-1px); }
+.knopf:hover { filter: brightness(var(--hover-helligkeit)); transform: translateY(-1px); }
 .knopf:disabled { opacity: 0.5; cursor: default; filter: none; transform: none; }
 .knopf-gross { padding: 15px 30px; font-size: 17px; }
 .knopf-hell { background: var(--flaeche-2); color: var(--text); border-color: var(--linie); }
@@ -1021,7 +1038,7 @@ select.eingabe { appearance: none; cursor: pointer; }
 
 .benutzermenue-zeile:hover { background: var(--flaeche-2); color: var(--text); }
 .benutzermenue-zeile.ist-warnung { color: var(--rot); }
-.benutzermenue-zeile.ist-warnung:hover { background: rgba(248, 113, 113, 0.12); }
+.benutzermenue-zeile.ist-warnung:hover { background: color-mix(in srgb, var(--rot) 12%, transparent); }
 .benutzermenue .farbschema { margin: 2px 2px 6px; }
 
 /* ------------------------------------------------------------ Uebersicht */
@@ -1148,8 +1165,8 @@ select.eingabe { appearance: none; cursor: pointer; }
 .technikzeile > strong { font-size: 20px; font-weight: 650; }
 .einfarbig { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; }
 
-.marke.ist-gut { color: var(--gruen); border-color: rgba(74, 222, 128, 0.35); }
-.marke.ist-schlecht { color: var(--rot); border-color: rgba(248, 113, 113, 0.35); }
+.marke.ist-gut { color: var(--gruen); border-color: color-mix(in srgb, var(--gruen) 35%, transparent); }
+.marke.ist-schlecht { color: var(--rot); border-color: color-mix(in srgb, var(--rot) 35%, transparent); }
 .marke.ist-warnung { color: var(--akzent-2); border-color: var(--linie); }
 
 /* Symbole in der Modulleiste.
@@ -1167,3 +1184,240 @@ select.eingabe { appearance: none; cursor: pointer; }
 .modulknopf.ist-aktiv .modulknopf-symbol,
 .modulknopf:hover .modulknopf-symbol { opacity: 1; }
 .symbol { display: block; }
+
+/* ===========================================================================
+ * Betriebsansicht: Knoten, Erreichbarkeit, Schichten
+ *
+ * Die Ampel gab es im Markup schon lange, im Stylesheet aber nie - ein <span>
+ * ohne Groesse und ohne Farbe ist schlicht unsichtbar. Dasselbe galt fuer
+ * .ist-weg, .ist-still und .marke.warn. Der Zustand eines Knotens stand also
+ * nirgends, und die Seite las sich als gleichfoermiger Block.
+ * ======================================================================== */
+
+.ampel {
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    flex: none;
+    background: var(--text-leise);
+    /* Der Ring traegt die Farbe mit - bei einer 10px-Flaeche allein waere der
+       Unterschied zwischen gruen und rot fuer Rot-Gruen-Schwaeche kaum
+       auszumachen. */
+    box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 18%, transparent);
+    color: var(--text-leise);
+}
+
+.ampel.ist-gut { background: var(--gruen); color: var(--gruen); }
+.ampel.ist-warten { background: var(--akzent-2); color: var(--akzent-2); }
+.ampel.ist-lahm { background: var(--warn); color: var(--warn); }
+.ampel.ist-weg { background: var(--rot); color: var(--rot); }
+.ampel.ist-aus { background: var(--text-leise); color: var(--text-leise); }
+
+.marke.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, transparent); }
+.marke.gold { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 40%, transparent); }
+
+.notiz-gut { border-color: var(--gruen); color: var(--gruen); }
+
+/* --- Blöcke ------------------------------------------------------------- */
+
+.block { margin: 26px 0; }
+.block-kopf { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.block-titel { margin: 0 0 12px; font-size: 15px; letter-spacing: .02em; color: var(--text-leise); }
+.block-kopf .block-titel { margin-bottom: 0; }
+
+.kopf-knoepfe { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* --- Autoscaling-Streifen ----------------------------------------------- */
+
+.streifen {
+    border: 1px solid var(--linie);
+    border-radius: var(--radius);
+    background: var(--flaeche);
+    padding: 14px 16px;
+}
+.streifen.ist-aus { opacity: .8; }
+.streifen-kopf { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.streifen p { margin: 8px 0 0; }
+
+/* --- Erreichbarkeit ------------------------------------------------------ */
+
+.messungen {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 8px;
+}
+.messung {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    grid-template-areas: "ampel name wert" "ampel ziel wert";
+    align-items: center;
+    column-gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--linie);
+    border-radius: 10px;
+    background: var(--flaeche);
+}
+.messung .ampel { grid-area: ampel; }
+.messung-name { grid-area: name; font-weight: 600; }
+.messung-ziel { grid-area: ziel; font-size: 12px; }
+.messung-wert { grid-area: wert; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.messung.ist-weg .messung-wert { color: var(--rot); font-size: 12px; }
+
+/* --- Knotenliste --------------------------------------------------------- */
+
+.knotenliste { display: flex; flex-direction: column; gap: 10px; }
+
+.knotenzeile {
+    border: 1px solid var(--linie);
+    border-radius: var(--radius);
+    background: var(--flaeche);
+    overflow: hidden;
+}
+.knotenzeile.zustand-still { border-color: color-mix(in srgb, var(--rot) 35%, var(--linie)); }
+.knotenzeile.zustand-anmarsch { border-color: color-mix(in srgb, var(--akzent-2) 35%, var(--linie)); }
+
+.knotenzeile-kopf {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 16px;
+    background: none;
+    border: 0;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.knotenzeile-kopf:hover { background: var(--flaeche-2); }
+
+.knotenzeile-name { display: flex; flex-direction: column; min-width: 0; flex: 1 1 200px; }
+.knotenzeile-name strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.knotenzeile-name .einfarbig { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.knotenzeile-marken { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.knotenzeile-zahlen { display: flex; gap: 18px; }
+.zahl { display: flex; flex-direction: column; align-items: flex-end; font-variant-numeric: tabular-nums; }
+.zahl-titel { font-size: 11px; color: var(--text-leise); }
+
+.knotenzeile-pfeil { color: var(--text-leise); }
+
+.knotenzeile .balken { margin: 0; border-radius: 0; }
+
+.knotenzeile-inhalt {
+    padding: 4px 16px 16px;
+    border-top: 1px solid var(--linie);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+/* Auf schmalen Fenstern rutschen die Zahlen unter den Namen, statt ihn auf
+   zwei Zeichen zusammenzuquetschen. */
+@media (max-width: 860px) {
+    .knotenzeile-kopf { flex-wrap: wrap; }
+    .knotenzeile-zahlen { width: 100%; justify-content: space-between; gap: 8px; }
+    .zahl { align-items: flex-start; }
+}
+
+.paare { display: flex; flex-wrap: wrap; gap: 22px; margin: 0; }
+.paare div { display: flex; flex-direction: column; }
+.paare dt { font-size: 11px; color: var(--text-leise); }
+.paare dd { margin: 0; font-variant-numeric: tabular-nums; }
+
+.zeile-kopf { font-size: 11px; color: var(--text-leise); text-transform: uppercase; letter-spacing: .04em; }
+
+/* --- Schicht (Protokoll, Anlegen) ---------------------------------------- */
+
+.schicht {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: color-mix(in srgb, var(--grund) 72%, transparent);
+    backdrop-filter: blur(6px);
+}
+.schicht-fenster {
+    width: min(760px, 100%);
+    max-height: 82vh;
+    overflow: auto;
+    background: var(--flaeche);
+    border: 1px solid var(--linie);
+    border-radius: var(--radius);
+    box-shadow: var(--schatten);
+    padding: 18px 20px 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+.schicht-kopf { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.schicht-kopf h2 { margin: 0; font-size: 17px; }
+
+.protokoll {
+    margin: 0;
+    padding: 12px 14px;
+    background: var(--flaeche-2);
+    border: 1px solid var(--linie);
+    border-radius: 10px;
+    font-size: 12.5px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 52vh;
+    overflow: auto;
+}
+
+/* ===========================================================================
+ * Serversymbol und Betriebszugang
+ *
+ * Das Symbol eines Servers wird an zwei Orten gezeigt - in der Leiste und im
+ * Kopf der Uebersicht. Die Ersatzdarstellung (Kuerzel statt Logo) lag vorher
+ * zweimal im JavaScript und war zweimal verschieden.
+ * ======================================================================== */
+
+.serverknopf-bild {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: inherit;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* Sonst schiebt ein langes Kuerzel den Kreis auseinander. */
+    overflow: hidden;
+}
+
+/* Der Betriebszugang unten in der Serverleiste. Bewusst abgesetzt: er fuehrt
+   aus der Serversicht heraus und ist kein weiterer Server. */
+.serverknopf-betrieb {
+    margin-top: 6px;
+    border-top: 1px solid var(--linie);
+    padding-top: 14px;
+    border-radius: 50%;
+    color: var(--text-leise);
+}
+.serverknopf-betrieb::before {
+    /* Der Trennstrich gehoert ueber den Knopf, nicht an ihn - sonst wandert
+       er beim Zeigen mit der Ecke mit. */
+    content: "";
+    position: absolute;
+    top: -8px;
+    left: 8px;
+    right: 8px;
+    height: 1px;
+    background: var(--linie);
+}
+.serverknopf-betrieb .serverknopf-bild { font-size: 20px; }
+.serverknopf-betrieb:hover { color: var(--akzent-schrift); }
+
+.serverkopf-bild.ist-leer,
+.serverknopf-bild.ist-leer {
+    background: var(--flaeche-2);
+    color: var(--text);
+    font-weight: 650;
+    letter-spacing: .02em;
+}

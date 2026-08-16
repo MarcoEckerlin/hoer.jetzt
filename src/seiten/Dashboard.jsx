@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { api } from "../lib/api.js";
 import { MODULE } from "../module/verzeichnis.js";
+import Serversymbol from "../teile/Serversymbol.jsx";
 import Benutzerleiste from "../teile/Benutzerleiste.jsx";
+import { SYMBOLE } from "../teile/Symbole.jsx";
 
 /**
  * Das Dashboard, aufgebaut wie Discord selbst.
@@ -26,6 +28,16 @@ export default function Dashboard({ server }) {
     const [fehler, setFehler] = useState(null);
     const [laedt, setLaedt] = useState(true);
     const [offen, setOffen] = useState(false);
+    // Einmal hier statt einmal in der Benutzerleiste und einmal fuer den
+    // Betriebsknopf: sonst fragen zwei Bausteine dasselbe ab, und der zweite
+    // zeichnet einen Sekundenbruchteil spaeter nach.
+    const [ich, setIch] = useState(null);
+
+    useEffect(() => {
+        api("GET", "/api/dashboard/me").then(setIch).catch(() => setIch(null));
+    }, []);
+
+    const botAdmin = !!ich?.botAdmin;
 
     const guildId = ort.guildId || server[0]?.id || null;
     const modulId = MODULE.some((m) => m.id === ort.modul) ? ort.modul : MODULE[0].id;
@@ -106,10 +118,31 @@ export default function Dashboard({ server }) {
                         title={s.name}
                     >
                         <span className="serverknopf-marke" />
-                        {s.iconUrl ? <img src={s.iconUrl} alt="" /> : kuerzel(s.name)}
+                        <Serversymbol server={s} className="serverknopf-bild" />
                         <span className="serverknopf-hinweis">{s.name}</span>
                     </button>
                 ))}
+
+                {/*
+                  Der Betriebsbereich lag bisher nur im aufklappbaren
+                  Benutzermenue unten links - man musste wissen, dass es ihn
+                  gibt. Hier steht er dort, wo Discord die Server-Verwaltung
+                  hat: unten in derselben Leiste, mit demselben Knopf.
+                  Sichtbar nur fuer Bot-Admins; das ist Bequemlichkeit, kein
+                  Schutz - der Bot prueft jeden Aufruf ohnehin einzeln.
+                */}
+                {botAdmin && (
+                    <a
+                        className="serverknopf serverknopf-betrieb"
+                        href="/dashboard#/betrieb/verbund"
+                        onClick={() => window.setTimeout(() => window.location.reload(), 0)}
+                        title="Betrieb"
+                    >
+                        <span className="serverknopf-marke" />
+                        <span className="serverknopf-bild ist-leer">{SYMBOLE.verbund}</span>
+                        <span className="serverknopf-hinweis">Betrieb</span>
+                    </a>
+                )}
             </aside>
 
             <nav className="modulleiste">
@@ -136,7 +169,7 @@ export default function Dashboard({ server }) {
                     ))}
                 </div>
 
-                <Benutzerleiste />
+                <Benutzerleiste ich={ich} />
             </nav>
 
             <main className="dashboard-inhalt">
@@ -166,11 +199,3 @@ function ausAdresse() {
     return treffer ? { guildId: treffer[1], modul: treffer[2] } : {};
 }
 
-function kuerzel(name) {
-    return (name || "?")
-        .split(/\s+/)
-        .slice(0, 2)
-        .map((w) => w[0])
-        .join("")
-        .toUpperCase();
-}

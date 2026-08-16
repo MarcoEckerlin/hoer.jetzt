@@ -1,5 +1,6 @@
 import React from "react";
 import { MODULE } from "./verzeichnis.js";
+import Serversymbol from "../teile/Serversymbol.jsx";
 
 /**
  * Die Startseite eines Servers.
@@ -22,9 +23,7 @@ export default function Uebersicht({ server, konfig, gehe }) {
     return (
         <>
             <header className="serverkopf">
-                {server?.iconUrl
-                    ? <img className="serverkopf-bild" src={server.iconUrl} alt="" />
-                    : <div className="serverkopf-bild ist-leer">{(server?.name || "?")[0]}</div>}
+                <Serversymbol server={server} className="serverkopf-bild" />
                 <div>
                     <h1>{server?.name}</h1>
                     <p className="leise">

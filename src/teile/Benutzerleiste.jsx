@@ -15,13 +15,18 @@ import Farbschema from "./Farbschema.jsx";
  * tun. Ein Aufruf im Hintergrund liesse die Seite mit einer Sitzung
  * zurueck, die es nicht mehr gibt.</p>
  */
-export default function Benutzerleiste() {
-    const [ich, setIch] = useState(null);
+export default function Benutzerleiste({ ich: mitgegeben }) {
+    const [eigen, setEigen] = useState(null);
     const [offen, setOffen] = useState(false);
+    const ich = mitgegeben ?? eigen;
 
+    // Nur fragen, wenn niemand die Angaben mitgibt. Das Dashboard hat sie
+    // ohnehin schon - dort waere ein zweiter Aufruf derselben Adresse nur ein
+    // zweites Zeichnen kurz nach dem ersten.
     useEffect(() => {
-        api("GET", "/api/dashboard/me").then(setIch).catch(() => setIch(null));
-    }, []);
+        if (mitgegeben !== undefined) return;
+        api("GET", "/api/dashboard/me").then(setEigen).catch(() => setEigen(null));
+    }, [mitgegeben]);
 
     // Klick daneben schliesst das Menue. Ohne das bleibt es offen, bis man
     // wieder genau den Knopf trifft - der haeufigste Grund, warum solche
