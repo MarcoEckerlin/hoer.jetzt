@@ -110,6 +110,27 @@ DOCKER="${ARBEIT}/main/deploy/docker"
 
 COMPOSE=(-f "$COMPOSE_DATEI")
 
+# Die Erweiterungsdatei muss mit, sonst macht jedes Update sie rueckgaengig.
+#
+# Vorher stand hier nur docker-compose.yml. Wer den Verbund mit Spock
+# aufgesetzt hatte, bekam beim naechsten Update wieder das Standard-Abbild
+# postgres:16-alpine untergeschoben - und auf dem gibt es die Erweiterung
+# nicht. Die Daten im Volume ueberleben das, die Replikation nicht: danach
+# meldet psql nur noch 'relation "spock.node" does not exist'. Die Einrichtung
+# war also nicht "noch offen", sie konnte kein Update ueberstehen.
+#
+# HJ_COMPOSE_EXTRA nimmt weitere Dateien auf, durch Leerzeichen getrennt.
+# HJ_SPOCK=true ist die Abkuerzung fuer den haeufigen Fall.
+if grep -q '^HJ_SPOCK=true' "$UMGEBUNG" 2>/dev/null; then
+    COMPOSE+=(-f "docker-compose.spock.yml")
+fi
+for zusatz in $(grep '^HJ_COMPOSE_EXTRA=' "$UMGEBUNG" 2>/dev/null | cut -d= -f2- || true); do
+    [[ -f "${DOCKER}/${zusatz}" ]] || fehler "In HJ_COMPOSE_EXTRA steht ${zusatz}, die Datei gibt es nicht."
+    COMPOSE+=(-f "$zusatz")
+done
+
+sagen "Compose: ${COMPOSE[*]}"
+
 # ------------------------------------------------------------------ Zuhoerer
 
 # Fragt den mitlaufenden Knoten, wie viele Wiedergaben gerade aktiv sind.
