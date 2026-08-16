@@ -163,10 +163,6 @@ public class AutoScaleService {
 
         ueberSchwelleSeit = null;
 
-        // Ruhe heisst: gemuetliche Last *und* auf mindestens einem
-        // Autoscaling-Knoten spielt nichts. Nur die Last zu betrachten waere
-        // falsch - ein Knoten mit zehn stillen Servern hat auch wenig Last,
-        // aber die Server muessten beim Abbau umziehen.
         if (last < abbauSchwelle()) {
             if (ruheSeit == null) {
                 ruheSeit = Instant.now();
@@ -229,10 +225,26 @@ public class AutoScaleService {
             return;
         }
 
+        // Nur "spielend" blockiert den Abbau, nicht "gesamt".
+        //
+        // Zuerst stand hier beides. Das klang vorsichtig, hiess in der Praxis
+        // aber, dass nie abgebaut wurde: bei vier Knoten und verstreuten
+        // Servern ist selten einer voellig leer, und stille Verbindungen
+        // loesen sich nicht von selbst auf. Der Bot haette also hochskaliert
+        // und die Server bis zum Monatsende behalten.
+        //
+        // Eine stille Verbindung umzuhaengen ist harmlos - es laeuft ja kein
+        // Ton, der abreissen koennte. Die Bibliothek verteilt sie beim
+        // Wegfallen des Knotens von selbst neu.
         for (AudioNodeUsageView eintrag : knoten) {
             Long hetznerId = auto.get(eintrag.name());
-            if (hetznerId == null || eintrag.spielend() > 0 || eintrag.gesamt() > 0) {
+            if (hetznerId == null || eintrag.spielend() > 0) {
                 continue;
+            }
+
+            if (eintrag.gesamt() > 0) {
+                Alert.send("INFO", "AUDIO", "Knoten %s wird abgebaut - %d stille Verbindung(en) ziehen um."
+                        .formatted(eintrag.name(), eintrag.gesamt()));
             }
 
             if (hetznerService.loeschen(hetznerId)) {
@@ -246,7 +258,7 @@ public class AutoScaleService {
             return;
         }
 
-        letzteMeldung = "Wenig los, aber kein Autoscaling-Knoten ist leer.";
+        letzteMeldung = "Wenig los, aber auf jedem Autoscaling-Knoten läuft noch etwas.";
     }
 
     // ------------------------------------------------------------------ Daten

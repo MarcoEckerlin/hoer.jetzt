@@ -22,7 +22,16 @@
    Der Akzent unterscheidet sich zwischen den Modi, und das muss er: das helle
    Blau des dunklen Modus kommt auf weissem Grund auf Kontrast 1.7 und ist als
    Text unlesbar. Ein Farbwert fuer beide Modi geht bei einem hellen Akzent
-   nicht auf. */
+   nicht auf.
+
+   Der dunkle Satz steht zusaetzlich auf :root, damit er auch dann gilt, wenn
+   noch kein data-theme gesetzt ist. Vorher hingen saemtliche Farben allein am
+   Attribut - blieb theme.js aus (blockiert, Skriptfehler, alter Cache), war
+   kein einziges Farbtoken definiert, und die Seite fiel auf die Standardfarben
+   des Browsers zurueck: schwarze Schrift auf Weiss in einem Aufbau, der dunkel
+   gedacht ist. Dieselbe Reihenfolge wie in den anderen beiden Stylesheets -
+   dunkel als Grundlage, hell als Ausnahme. */
+:root,
 html[data-theme="dark"]{
   --blurple:#7ca9ff; --blurple-hover:#a3c3ff; --blurple-contrast:#0b0d12;
   --green:#4ade80; --green-hover:#86efac; --green-bright:#4ade80; --green-contrast:#07120b;
@@ -48,7 +57,12 @@ html[data-theme="light"]{
   --bg-rail:#eef0f6; --bg-nav:#ffffff; --bg-main:#f7f8fb;
   --bg-card:#ffffff; --bg-card-alt:#f7f8fb; --bg-input:#ffffff;
   --bg-hover:#f0f2f7; --bg-active:#e5e9f2;
-  --text-strong:#000000; --text:#12151c; --text-muted:#5c6472; --text-faint:#79828f;
+  /* --text-faint war in beiden Modi derselbe Grauton. Im dunklen Modus geht
+     das auf (4.56 auf der Karte), im hellen nicht: dort kam er auf 3.89 auf
+     Weiss und auf 3.47 ueber der Hover-Flaeche - also ueberall unter der
+     Lesbarkeitsgrenze. Gemessen, nicht geschaetzt; #5f6773 haelt auch auf der
+     aktiven Flaeche noch 4.70. */
+  --text-strong:#000000; --text:#12151c; --text-muted:#5c6472; --text-faint:#5f6773;
   --border:#e2e6ee; --border-strong:#cbd2e0;
   --shadow-low:0 1px 0 rgba(18,21,28,.06);
   --shadow-bar:0 -4px 12px rgba(18,21,28,.10);

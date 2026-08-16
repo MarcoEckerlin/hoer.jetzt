@@ -106,7 +106,7 @@ public class HetznerService {
 
         JSONObject anfrage = new JSONObject()
                 .put("name", name)
-                .put("server_type", umgebung("HJ_AUTOSCALE_TYPE", "cx22"))
+                .put("server_type", umgebung("HJ_AUTOSCALE_TYPE", "cx33"))
                 .put("image", umgebung("HJ_AUTOSCALE_IMAGE", "debian-12"))
                 .put("location", umgebung("HJ_AUTOSCALE_LOCATION", "hel1"))
                 .put("start_after_create", true)
