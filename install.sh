@@ -66,6 +66,18 @@ geheim() {
 # unter "set -o pipefail" bricht das ganze Skript wortlos ab.
 zufall() { head -c 48 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | cut -c1-32; }
 
+# Ja/Nein-Abfrage.
+#
+# Fehlte hier bisher - das uebrige Skript fragt mit einem read von Hand. Eine
+# fehlende Funktion in einer if-Bedingung ist besonders unangenehm: "set -e"
+# greift dort nicht, die Bedingung gilt schlicht als falsch, und die
+# Installation laeuft mit der stillen Vorgabe weiter.
+ja() {
+    local __a=""
+    read -r -p "    $1 (j/n) [${2:-j}]: " __a || true
+    [[ "${__a:-${2:-j}}" =~ ^[jJ] ]]
+}
+
 # Wie frage, aber eine leere Antwort ist erlaubt.
 frage_leer() {
     local __v="$1" __t="$2" __e=""
