@@ -42,7 +42,23 @@ frage() {
 
 geheim() {
     local __v="$1" __t="$2" __e=""
-    while [[ -z "$__e" ]]; do read -r -s -p "    ${__t}: " __e || true; echo; done
+    while :; do
+        __e=""
+        while [[ -z "$__e" ]]; do read -r -s -p "    ${__t}: " __e || true; echo; done
+
+        # Ein Dollarzeichen in der .env ist nicht bloss unschoen, es kommt
+        # falsch an: Docker Compose ersetzt "$name" durch eine leere
+        # Zeichenkette und warnt nur beilaeufig ("variable is not set").
+        # Das Passwort im Container ist dann ein anderes als das hier
+        # eingetippte - und der Fehler faellt erst auf, wenn sich jemand von
+        # aussen verbinden will.
+        if [[ "$__e" == *'$'* ]]; then
+            warn "Dollarzeichen gehen in der .env nicht - Docker Compose ersetzt sie."
+            warn "Bitte einen Wert ohne \$ waehlen."
+            continue
+        fi
+        break
+    done
     printf -v "$__v" '%s' "$__e"
 }
 
@@ -181,7 +197,21 @@ HJ_SESSION_STORE=""
 echo
 info "Mehrere Nodes im Verbund gleichen ihre Datenbanken ueber Spock ab."
 info "Dafuer braucht Postgres ein anderes Abbild und einen Port im privaten Netz."
-if [[ -n "$PRIVAT_IP" ]] && ja "Diese Node ist Teil eines Verbunds?" n; then
+
+# Die Frage wird immer gestellt, auch ohne erkannte private Adresse.
+#
+# Vorher hing sie an "[[ -n $PRIVAT_IP ]] &&" - wurde keine gefunden, blieb
+# die Frage einfach aus, HJ_SPOCK leer, und die Installation lief scheinbar
+# sauber durch. Sichtbar wurde es erst Stunden spaeter beim ersten
+# spock-einrichten.sh: "extension spock is not available". Eine
+# uebersprungene Frage ist die teuerste Art, eine Vorgabe zu setzen.
+if [[ -z "$PRIVAT_IP" ]]; then
+    warn "Keine private Adresse gefunden. Fuer einen Verbund muss eine da sein -"
+    warn "bei Hetzner ein Private Network in der Konsole."
+fi
+
+if ja "Diese Node ist Teil eines Verbunds?" n; then
+    [[ -n "$PRIVAT_IP" ]] || fail "Ohne private Adresse kein Verbund - erst ein Private Network zuweisen."
     HJ_SPOCK="true"
     HJ_SESSION_STORE="datenbank"
     # Ohne diese Datei laeuft ein Standard-Postgres ohne die Erweiterung, und
