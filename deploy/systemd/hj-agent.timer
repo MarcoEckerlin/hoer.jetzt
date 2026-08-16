@@ -1,0 +1,12 @@
+[Unit]
+Description=hoer.jetzt Agent, jede Minute
+
+[Timer]
+OnBootSec=90s
+OnUnitActiveSec=60s
+# Ohne Streuung melden sich bei einem Stromausfall alle Nodes gleichzeitig.
+RandomizedDelaySec=15s
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target
