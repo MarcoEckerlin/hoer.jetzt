@@ -69,6 +69,13 @@ DB_USER="${HJ_DB_USER:-discordbot}"
 DB_PASS="${HJ_DB_PASSWORD:?Datenbank-Passwort fehlt}"
 KNOTEN="node${HJ_NODE_NR}"
 
+# Fuer die Hinweistexte: mit welchen -f der Nutzer den Stack ansprechen muss.
+# Wer HJ_SPOCK gesetzt hat, braucht beide Dateien - ein blosses
+# "docker compose ps" arbeitet sonst mit einer anderen Dienstliste als der,
+# die tatsaechlich laeuft.
+COMPOSE_HINWEIS=""
+[[ "${HJ_SPOCK:-}" == "true" ]] && COMPOSE_HINWEIS="-f docker-compose.yml -f docker-compose.spock.yml"
+
 cd "${ARBEIT}/main/deploy/docker"
 
 # psql im Container - so muss auf dem Host kein Client liegen.
@@ -131,10 +138,15 @@ anlegen)
                         WHERE n.nspname = 'public' AND c.relkind = 'r'" || echo 0)"
     if [[ "$VORHANDEN" == "0" ]]; then
         warn "In ${DB_NAME}.public liegt keine einzige Tabelle."
-        warn "    Der Abgleich haette dann nichts zu tun. Zuerst pruefen:"
-        warn "      docker compose ps core           laeuft der Bot?"
-        warn "      docker compose logs core | grep '\\[DB\\] Schema'"
-        warn "    und ob HJ_DB_NAME auf dieselbe Datenbank zeigt wie hier (${DB_NAME})."
+        warn "    Der Abgleich haette dann nichts zu tun - der Bot hat das Schema"
+        warn "    noch nicht angelegt. Nachsehen (Verzeichnis beachten, die"
+        warn "    Compose-Datei liegt in docker/, nicht hier):"
+        warn ""
+        warn "      cd ${ARBEIT}/main/deploy/docker"
+        warn "      docker compose ${COMPOSE_HINWEIS} ps core"
+        warn "      docker compose ${COMPOSE_HINWEIS} logs --tail 60 core"
+        warn ""
+        warn "    Danach 'anlegen' hier noch einmal laufen lassen."
     fi
 
     # Muss nach jedem Schema-Zuwachs erneut laufen: eine Tabelle, die es beim
