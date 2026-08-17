@@ -186,6 +186,7 @@ export default function Dashboard({ server }) {
                         server={aktuell}
                         konfig={konfig}
                         neuLaden={laden}
+                        botAdmin={botAdmin}
                         gehe={(m) => gehe({ modul: m })}
                     />
                 )}

@@ -1403,13 +1403,26 @@ select.eingabe { appearance: none; cursor: pointer; }
 .serverknopf-bild {
     width: 100%;
     height: 100%;
+    /* Nicht schrumpfen: in der Flex-Zeile des Knopfes wuerde das Bild sonst
+       zusammengedrueckt und verloere sein Seitenverhaeltnis. */
+    flex: none;
     object-fit: cover;
     border-radius: inherit;
+    overflow: hidden;
+}
+
+/*
+ * Zentriert wird nur das Kuerzel, nicht das Bild.
+ *
+ * "display: flex" auf einem <img> nimmt ihm die Behandlung als ersetztes
+ * Element - die Groesse richtet sich dann nicht mehr nach dem Bild, und es
+ * wirkt gestaucht. Fuer den <span> mit den Anfangsbuchstaben ist Flex dagegen
+ * genau richtig.
+ */
+.serverknopf-bild.ist-leer {
     display: flex;
     align-items: center;
     justify-content: center;
-    /* Sonst schiebt ein langes Kuerzel den Kreis auseinander. */
-    overflow: hidden;
 }
 
 /* Der Betriebszugang unten in der Serverleiste. Bewusst abgesetzt: er fuehrt

@@ -13,7 +13,7 @@ import Serversymbol from "../teile/Serversymbol.jsx";
  * <p>Alles hier kommt aus Daten, die ohnehin schon geladen sind. Kein
  * zusaetzlicher Aufruf - eine Uebersicht, die eine Sekunde laedt, ist keine.</p>
  */
-export default function Uebersicht({ server, konfig, gehe }) {
+export default function Uebersicht({ server, konfig, gehe, botAdmin }) {
     const module = MODULE.filter((m) => m.aktiv);
     const aktive = module.filter((m) => m.aktiv(konfig));
     const ruhende = module.filter((m) => !m.aktiv(konfig));
@@ -74,18 +74,28 @@ export default function Uebersicht({ server, konfig, gehe }) {
                 </section>
             )}
 
-            <section className="karte-flach">
-                <h2>Freigaben</h2>
-                <p className="leise">
-                    Diese drei vergibt ein Bot-Administrator, nicht der Serverbetreiber — sie kosten
-                    Rechenzeit oder Wiedergabekapazität.
-                </p>
-                <div className="kachelreihe">
-                    <Freigabe titel="KI-Chat" frei={rechte.llmChat} />
-                    <Freigabe titel="AI-Radio" frei={rechte.aiRadio} />
-                    <Freigabe titel="Premium-Audio" frei={rechte.premiumAudio} />
-                </div>
-            </section>
+            {/*
+              Freigaben sieht nur, wer sie auch vergeben kann.
+              Fuer einen Serverbetreiber ist der Block eine Sackgasse: er zeigt
+              drei Dinge als "gesperrt", die er selbst nicht aendern kann, und
+              legt damit eine Bitte nahe, die er nirgends stellen kann. Wer
+              Bot-Administrator ist, sieht ihn weiterhin - dort ist er eine
+              Arbeitsanzeige.
+            */}
+            {botAdmin && (
+                <section className="karte-flach">
+                    <h2>Freigaben</h2>
+                    <p className="leise">
+                        Diese drei vergibt ein Bot-Administrator, nicht der Serverbetreiber — sie
+                        kosten Rechenzeit oder Wiedergabekapazität.
+                    </p>
+                    <div className="kachelreihe">
+                        <Freigabe titel="KI-Chat" frei={rechte.llmChat} />
+                        <Freigabe titel="AI-Radio" frei={rechte.aiRadio} />
+                        <Freigabe titel="Premium-Audio" frei={rechte.premiumAudio} />
+                    </div>
+                </section>
+            )}
         </>
     );
 }
