@@ -34,6 +34,17 @@ services:
       POSTGRES_USER: ${HJ_DB_USER:-discordbot}
       POSTGRES_PASSWORD: ${HJ_DB_PASSWORD:?Datenbank-Passwort fehlt}
       POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+      # Das pgEdge-Abbild legt seine Daten unter /var/lib/pgsql/16/data ab -
+      # ein Red-Hat-Pfad. Das offizielle Abbild nimmt /var/lib/postgresql/data,
+      # und dort haengt auch das Volume.
+      #
+      # Ohne diese Zeile schrieb PostgreSQL also in die Container-Schicht,
+      # waehrend das Volume leer danebenlag. Folge: jedes Neuerzeugen des
+      # Containers loescht die Datenbank - und zwar lautlos, denn ein leeres
+      # PGDATA fuehrt einfach zu einem frischen initdb. Nach aussen sah das aus
+      # wie "die Tabellen sind weg", "spock.node existiert nicht mehr",
+      # "0 von 0 Tabellen im Abgleich" - drei Symptome, eine Ursache.
+      PGDATA: /var/lib/postgresql/data
     command:
       - postgres
       # Muss hier stehen, seit die Startzeile ueberschrieben wird.

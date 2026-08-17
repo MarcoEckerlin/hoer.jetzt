@@ -111,6 +111,29 @@ erreichbar || fail "PostgreSQL antwortet nicht. Laeuft der Stack?"
 case "${1:-}" in
 
 anlegen)
+    # Liegen die Daten ueberhaupt im Volume?
+    #
+    # Das pgEdge-Abbild bringt PGDATA=/var/lib/pgsql/16/data mit, das Volume
+    # haengt aber unter /var/lib/postgresql/data. Faellt das auseinander,
+    # schreibt PostgreSQL in die Container-Schicht und jedes Neuerzeugen des
+    # Containers loescht die Datenbank - lautlos, denn ein leeres Verzeichnis
+    # fuehrt zu einem frischen initdb. Das kostet einen Abend, wenn man es
+    # nicht weiss, und eine Sekunde, wenn man danach fragt.
+    step "Ablageort der Daten"
+    DATENPFAD="$(psql_ -tAc 'SHOW data_directory' 2>/dev/null | tr -d '[:space:]' || true)"
+    if [[ "$DATENPFAD" != "/var/lib/postgresql/data" ]]; then
+        warn "PostgreSQL schreibt nach ${DATENPFAD:-unbekannt}."
+        warn "    Dort haengt kein Volume - die Datenbank ueberlebt kein"
+        warn "    'docker compose up --force-recreate'. In docker-compose.spock.yml"
+        warn "    gehoert PGDATA=/var/lib/postgresql/data."
+        warn ""
+        warn "    Erst das in Ordnung bringen, sonst ist der Verbund beim"
+        warn "    naechsten Neustart wieder weg."
+        echo
+    else
+        info "${DATENPFAD} - liegt im Volume."
+    fi
+
     step "Erweiterung"
     # Schlaegt hier "could not open extension control file" fehl, laeuft ein
     # Standard-Postgres statt des Spock-Abbilds - siehe docker-compose.spock.yml.
