@@ -46,6 +46,28 @@ services:
       # wo man sie sucht.
       - -c
       - listen_addresses=*
+      # Ohne diese Zeile laeuft alles - ausser der Replikation selbst.
+      #
+      # PostgreSQL fuehrt eine Positivliste erlaubter Output-Plugins. Spock
+      # bringt seines mit (spock_output), steht dort aber nicht drauf. Folge:
+      # der Apply-Worker darf den Slot nicht anlegen, startet, scheitert und
+      # startet alle fuenf Sekunden neu:
+      #
+      #   ERROR: library "spock_output" may not be used as an output plugin
+      #
+      # Von aussen sieht das aus wie "Spock tut nichts": Erweiterung da,
+      # Manager laeuft, Abonnement angelegt und aktiviert, Tabellen im
+      # Replikationsset - und trotzdem Status "down" und null Slots.
+      - -c
+      - output_plugin_libraries=pgoutput,test_decoding,spock_output
+      # Meldungen nach stdout, nicht in eine Datei im Datenverzeichnis.
+      #
+      # Das Abbild schaltet den Logging-Collector ein; damit landet alles in
+      # PGDATA/log/ und "docker logs" zeigt nur die Zeilen bis zur Umleitung.
+      # Der Fehler oben stand stundenlang dort und war ueber den ersten Griff
+      # eines jeden Docker-Nutzers nicht zu sehen.
+      - -c
+      - logging_collector=off
       # Ohne diese sechs laeuft Spock nicht - und der Fehler kommt spaet:
       # das Abbild startet, die Erweiterung laesst sich anlegen, und erst der
       # erste Abgleich scheitert.
