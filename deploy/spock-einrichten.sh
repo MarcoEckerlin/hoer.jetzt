@@ -121,17 +121,25 @@ anlegen)
     # nicht weiss, und eine Sekunde, wenn man danach fragt.
     step "Ablageort der Daten"
     DATENPFAD="$(psql_ -tAc 'SHOW data_directory' 2>/dev/null | tr -d '[:space:]' || true)"
-    if [[ "$DATENPFAD" != "/var/lib/postgresql/data" ]]; then
+
+    # Nicht den Pfad raten, sondern nachsehen, ob dort ein Volume haengt.
+    # Die beiden Abbilder legen ihre Daten an verschiedenen Stellen ab
+    # (/var/lib/pgsql/16/data beim pgEdge-Abbild, /var/lib/postgresql/data beim
+    # offiziellen) - fest verglichen haette man den naechsten Abbildwechsel
+    # wieder falsch gemeldet.
+    if [[ -n "$DATENPFAD" ]] && docker inspect -f '{{range .Mounts}}{{.Destination}}{{"\n"}}{{end}}' \
+            "$(docker compose ps -q postgres 2>/dev/null)" 2>/dev/null | grep -qx "$DATENPFAD"; then
+        info "${DATENPFAD} - liegt im Volume."
+    else
         warn "PostgreSQL schreibt nach ${DATENPFAD:-unbekannt}."
-        warn "    Dort haengt kein Volume - die Datenbank ueberlebt kein"
-        warn "    'docker compose up --force-recreate'. In docker-compose.spock.yml"
-        warn "    gehoert PGDATA=/var/lib/postgresql/data."
+        warn "    Dort haengt kein Volume: die Daten liegen in der"
+        warn "    Container-Schicht und sind beim naechsten"
+        warn "    'docker compose up --force-recreate' weg - lautlos, denn ein"
+        warn "    leeres Verzeichnis fuehrt einfach zu einem frischen initdb."
         warn ""
         warn "    Erst das in Ordnung bringen, sonst ist der Verbund beim"
         warn "    naechsten Neustart wieder weg."
         echo
-    else
-        info "${DATENPFAD} - liegt im Volume."
     fi
 
     step "Erweiterung"

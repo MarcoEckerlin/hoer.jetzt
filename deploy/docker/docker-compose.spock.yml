@@ -34,17 +34,6 @@ services:
       POSTGRES_USER: ${HJ_DB_USER:-discordbot}
       POSTGRES_PASSWORD: ${HJ_DB_PASSWORD:?Datenbank-Passwort fehlt}
       POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
-      # Das pgEdge-Abbild legt seine Daten unter /var/lib/pgsql/16/data ab -
-      # ein Red-Hat-Pfad. Das offizielle Abbild nimmt /var/lib/postgresql/data,
-      # und dort haengt auch das Volume.
-      #
-      # Ohne diese Zeile schrieb PostgreSQL also in die Container-Schicht,
-      # waehrend das Volume leer danebenlag. Folge: jedes Neuerzeugen des
-      # Containers loescht die Datenbank - und zwar lautlos, denn ein leeres
-      # PGDATA fuehrt einfach zu einem frischen initdb. Nach aussen sah das aus
-      # wie "die Tabellen sind weg", "spock.node existiert nicht mehr",
-      # "0 von 0 Tabellen im Abgleich" - drei Symptome, eine Ursache.
-      PGDATA: /var/lib/postgresql/data
     command:
       - postgres
       # Muss hier stehen, seit die Startzeile ueberschrieben wird.
@@ -74,7 +63,28 @@ services:
       - -c
       - max_wal_senders=16
     volumes:
-      - postgres-daten:/var/lib/postgresql/data
+      # Der Ablageort des pgEdge-Abbilds, nicht der des offiziellen.
+      #
+      # Das pgEdge-Abbild legt seine Daten unter /var/lib/pgsql/16/data ab -
+      # ein Red-Hat-Pfad - und laeuft dabei *nicht* als root. Das offizielle
+      # Abbild startet als root und reicht danach an postgres weiter; deshalb
+      # kann es ein frisches Volume uebernehmen, dieses hier nicht:
+      #
+      #   initdb: error: could not change permissions of directory
+      #   "/var/lib/postgresql/data": Operation not permitted
+      #
+      # Der erste Versuch war, PGDATA auf den Pfad des offiziellen Abbilds zu
+      # biegen. Genau daran ist es gescheitert - ein leeres Volume gehoert
+      # root, und der Container darf es nicht uebernehmen.
+      #
+      # Haengt das Volume dagegen an einem Verzeichnis, das im Abbild schon
+      # existiert, uebernimmt Docker beim ersten Mal Inhalt *und* Eigentuemer
+      # von dort. Deshalb hier der Pfad des Abbilds, statt gegen das Abbild
+      # anzukaempfen.
+      #
+      # Eigener Volumename: derselbe Name an zwei Pfaden waere mehrdeutig -
+      # Docker weiss dann nicht, von welchem Verzeichnis aus es befuellen soll.
+      - pgdaten-spock:/var/lib/pgsql/16/data
     # Im privaten Hetzner-Netz erreichbar, damit die anderen Nodes anbinden
     # koennen - nach aussen bleibt der Port zu. HJ_PRIVAT_IP ist die 10.x-
     # Adresse dieser Maschine.
@@ -96,7 +106,11 @@ services:
     networks: [hoerjetzt]
 
 volumes:
+  # postgres-daten bleibt deklariert, weil die Basisdatei es fuer denselben
+  # Dienst einhaengt und Compose Einhaengepunkte zusammenfuehrt statt sie zu
+  # ersetzen. Es bleibt dabei leer - benutzt wird pgdaten-spock.
   postgres-daten:
+  pgdaten-spock:
 
 networks:
   hoerjetzt:
