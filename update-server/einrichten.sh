@@ -53,34 +53,77 @@ KOPF
 # ------------------------------------------------------------------ 1  Lage
 
 step "Adresse"
-frage HJ_UPDATE_HOST "Oeffentlicher Name" "update.system.hoer.jetzt"
-frage HJ_ACME_MAIL   "Mailadresse fuer das Zertifikat"
+frage HJ_UPDATE_NAME "Oeffentlicher Name" "update.system.hoer.jetzt"
 
-# Die Zertifizierungsstelle loest den Namen selbst auf und klopft an Port 80.
-# Zeigt der Name woandershin, scheitert das erst nach dem Start - mit einer
-# Meldung tief im Caddy-Protokoll. Lieber jetzt nachsehen.
+info ""
+info "Dieser Dienst geht bewusst an Cloudflare und am Nginx Proxy Manager"
+info "vorbei: Client-Zertifikate ueberleben keinen Reverse-Proxy. Wer TLS"
+info "terminiert, sieht das Zertifikat des Knotens - und was dahinter liegt,"
+info "sieht nur noch das der Zwischenstelle. Deshalb ein eigener Port, den"
+info "der Router direkt hierher weiterleitet, und Port 80 bleibt unberuehrt."
+frage HJ_HTTPS_PORT "Auf welchem Port soll der Update-Server lauschen" "8443"
+
+# Der Port gehoert in den Namen. Genau diese Schreibweise erwartet Docker als
+# Verzeichnis unter /etc/docker/certs.d/, und dieselbe steht spaeter im
+# Registry-Namen und in jeder URL. Eine zweite Variable dafuer waere eine
+# Stelle mehr, an der die beiden auseinanderlaufen koennen.
+HJ_UPDATE_HOST="${HJ_UPDATE_NAME}:${HJ_HTTPS_PORT}"
+
+
+info ""
+info ""
+info "Das Serverzertifikat kommt aus der eigenen CA, nicht von Let's"
+info "Encrypt. Die Gegenstellen sind ausschliesslich eigene Maschinen -"
+info "die tragen die CA ohnehin, weil sie sich selbst damit ausweisen."
+info "Damit braucht es weder Port 80 noch eine Stelle von aussen."
+
+# Zeigt der Name auf Cloudflare statt hierher, laeuft der Verkehr durch deren
+# Proxy - und dann kommt kein Client-Zertifikat mehr an. Das faellt sonst erst
+# auf, wenn der erste Knoten sich nicht ausweisen kann, und sieht dort wie ein
+# Fehler im Ausweis aus.
 step "Namensaufloesung"
-ZIEL="$(getent hosts "$HJ_UPDATE_HOST" 2>/dev/null | awk '{print $1}' | head -n1 || true)"
+ZIEL="$(getent hosts "$HJ_UPDATE_NAME" 2>/dev/null | awk '{print $1}' | head -n1 || true)"
 EIGEN="$(curl -fsS -m 8 https://api.ipify.org 2>/dev/null || true)"
+
+hinter_cloudflare() {
+    case "$1" in
+        2606:4700:*|2803:f800:*|2405:b500:*|2405:8100:*|2a06:98c0:*|2c0f:f248:*) return 0 ;;
+        104.1[6-9].*|104.2[0-7].*|172.6[4-9].*|172.7[01].*|173.245.*|188.114.*|190.93.*|197.234.*|198.41.*) return 0 ;;
+    esac
+    return 1
+}
+
 if [[ -z "$ZIEL" ]]; then
-    warn "${HJ_UPDATE_HOST} laesst sich nicht aufloesen."
-    warn "Ohne A-Record bekommt Caddy kein Zertifikat."
+    warn "${HJ_UPDATE_NAME} laesst sich nicht aufloesen."
+    warn "Ohne Eintrag bekommt Caddy zwar trotzdem ein Zertifikat (DNS-01),"
+    warn "aber kein Knoten findet den Server."
+    ja "Trotzdem weiter?" n || fail "Abgebrochen."
+elif hinter_cloudflare "$ZIEL"; then
+    warn "${HJ_UPDATE_NAME} zeigt auf ${ZIEL} - das ist Cloudflare."
+    warn ""
+    warn "Der Eintrag steht auf Proxy (orange Wolke). So kommt hier nie ein"
+    warn "Client-Zertifikat an, und jeder Knoten wird abgewiesen."
+    warn ""
+    warn "In Cloudflare fuer genau diesen Namen auf 'DNS only' umstellen"
+    warn "(graue Wolke) und auf ${EIGEN:-die Adresse dieses Anschlusses} zeigen lassen."
+    warn "Cloudflare reicht Port ${HJ_HTTPS_PORT} im Proxy-Modus ohnehin nicht durch."
     ja "Trotzdem weiter?" n || fail "Abgebrochen."
 elif [[ -n "$EIGEN" && "$ZIEL" != "$EIGEN" ]]; then
-    warn "${HJ_UPDATE_HOST} zeigt auf ${ZIEL}, dieser Anschluss ist ${EIGEN}."
-    warn "Stimmt das nicht, schlaegt die Zertifikatspruefung fehl."
+    warn "${HJ_UPDATE_NAME} zeigt auf ${ZIEL}, dieser Anschluss ist ${EIGEN}."
+    warn "Stimmt das nicht, findet kein Knoten hierher."
     ja "Trotzdem weiter?" n || fail "Abgebrochen."
 else
-    info "${HJ_UPDATE_HOST} -> ${ZIEL}"
+    info "${HJ_UPDATE_NAME} -> ${ZIEL}"
 fi
 
-# Belegte Ports sind der haeufigste Grund, warum der Start abbricht.
-for port in 80 443; do
-    if command -v ss >/dev/null 2>&1 && ss -ltn 2>/dev/null | grep -q ":${port} "; then
-        fail "Port ${port} ist belegt. Caddy braucht beide - 80 fuer die Pruefung."
-    fi
-done
-info "Port 80 und 443 sind frei."
+# Nur der eigene Port. Port 80 und 443 werden nicht mehr angefasst - die
+# duerfen dem Nginx Proxy Manager gehoeren.
+step "Port"
+if command -v ss >/dev/null 2>&1 && ss -ltn 2>/dev/null | grep -q ":${HJ_HTTPS_PORT} "; then
+    fail "Port ${HJ_HTTPS_PORT} ist belegt. Entweder freiraeumen oder einen anderen waehlen."
+fi
+info "Port ${HJ_HTTPS_PORT} ist frei. 80 und 443 bleiben unberuehrt."
+info "Im Router weiterleiten: ${HJ_HTTPS_PORT} -> ${EIGEN:-dieser Host}:${HJ_HTTPS_PORT}"
 
 step "Verwaltung"
 info "Forgejo lauscht nur oertlich. Nach aussen geht allein /v2/ ueber Caddy."
@@ -88,6 +131,10 @@ info "Fuer die Oberflaeche vom Arbeitsplatz aus:"
 info "    ssh -L 3000:127.0.0.1:3000 root@$(hostname -s 2>/dev/null || echo dieser-host)"
 frage HJ_GIT_BIND "Auf welcher Adresse lauschen" "127.0.0.1"
 frage HJ_ADMIN    "Benutzername fuer die Verwaltung" "marco"
+# Forgejo verlangt beim Anlegen eines Kontos eine Mailadresse. Sie wird
+# nie benutzt - es geht kein Mailversand von hier aus - steht aber im
+# Konto, also lieber eine echte als etwas Ausgedachtes.
+frage HJ_ADMIN_MAIL "Mailadresse fuer das Forgejo-Konto" "system@hoer.jetzt"
 
 info "Die Oberflaeche des Updaters - Freigaben, Knoten, Protokoll -"
 info "liegt auf einem eigenen Port und gehoert ins private Netz."
@@ -99,7 +146,11 @@ frage HJ_PULT_PORT "Auf welchem Port" "8090"
 # ------------------------------------------------------------------ 2  Schluessel
 
 step "Schluessel erzeugen"
-bash "${HIER}/schluessel.sh" erzeugen || fail "Die Schluessel liessen sich nicht erzeugen."
+# Der Name geht mit: er landet als SAN im Serverzertifikat. Ohne
+# passenden SAN lehnt jeder moderne Client ab - der CN allein zaehlt
+# seit Jahren nicht mehr.
+HJ_UPDATE_NAME="$HJ_UPDATE_NAME" bash "${HIER}/schluessel.sh" erzeugen \
+    || fail "Die Schluessel liessen sich nicht erzeugen."
 
 # ------------------------------------------------------------------ 3  Passwort
 
@@ -134,8 +185,11 @@ cat > "$UMGEBUNG" <<ENV
 #
 # Hier steht nur ein Hash. Das Klartext-Passwort wurde einmal angezeigt und
 # ist auf diesem Host nirgends gespeichert - auch nicht hier.
+# Traegt den Port mit - dieselbe Schreibweise wie in der URL, im
+# Registry-Namen und unter /etc/docker/certs.d/.
 HJ_UPDATE_HOST=${HJ_UPDATE_HOST}
-HJ_ACME_MAIL=${HJ_ACME_MAIL}
+HJ_UPDATE_NAME=${HJ_UPDATE_NAME}
+HJ_HTTPS_PORT=${HJ_HTTPS_PORT}
 HJ_GIT_BIND=${HJ_GIT_BIND}
 HJ_HASH_KNOTEN=${HJ_HASH_KNOTEN}
 HJ_VERWALTER_NAME=${HJ_ADMIN}
@@ -166,7 +220,7 @@ info "Forgejo antwortet."
 step "Verwaltungskonto"
 docker compose exec -T -u git forgejo forgejo admin user create \
     --admin --username "$HJ_ADMIN" --password "$PW_ADMIN" \
-    --email "$HJ_ACME_MAIL" --must-change-password=false >/dev/null \
+    --email "$HJ_ADMIN_MAIL" --must-change-password=false >/dev/null \
     || fail "Verwaltungskonto liess sich nicht anlegen."
 info "$HJ_ADMIN"
 
@@ -207,8 +261,8 @@ step "Caddy starten"
 printf 'noch nichts veroeffentlicht\n' | aus_schreiben release/aktuell \
     || fail "Auslieferungsverzeichnis nicht beschreibbar."
 docker compose up -d || fail "Start fehlgeschlagen."
-info "Warte auf das Zertifikat..."
-sleep 20
+info "Warte auf den Start..."
+sleep 10
 
 # ------------------------------------------------------------------ 4b  Eigener Zugang
 #
@@ -224,15 +278,22 @@ mkdir -p "$DOCKERAUSWEIS"
 cp "${HIER}/schluessel/update-ausweis.crt" "${DOCKERAUSWEIS}/client.cert"
 cp "${HIER}/schluessel/update-ausweis.key" "${DOCKERAUSWEIS}/client.key"
 chmod 600 "${DOCKERAUSWEIS}/client.key"
+# Und die CA. Ohne sie lehnt Docker den Server ab - das Zertifikat kommt
+# nicht mehr von Let's Encrypt, also steht es in keinem Systemspeicher.
+# Die Meldung lautete sonst "x509: certificate signed by unknown authority".
+cp "${HIER}/schluessel/ca.crt" "${DOCKERAUSWEIS}/ca.crt"
+
 info "$DOCKERAUSWEIS"
 
 # Der Name muss auf diesem Host nach innen zeigen. Sonst liefe der Push zum
 # Router hinaus und wieder herein - und NAT-Hairpin koennen viele Anschluesse
 # nicht. Erst hier, nach der Namenspruefung weiter oben: vorher haette der
 # Eintrag genau die Kontrolle unbrauchbar gemacht, die er stoeren wuerde.
-if ! grep -q "[[:space:]]${HJ_UPDATE_HOST}\$" /etc/hosts 2>/dev/null; then
-    printf '127.0.0.1 %s\n' "$HJ_UPDATE_HOST" >> /etc/hosts
-    info "/etc/hosts: ${HJ_UPDATE_HOST} -> 127.0.0.1"
+# Ohne Port - /etc/hosts kennt nur Namen. Der Port steckt in
+# HJ_UPDATE_HOST, hier ist deshalb HJ_UPDATE_NAME richtig.
+if ! grep -q "[[:space:]]${HJ_UPDATE_NAME}$" /etc/hosts 2>/dev/null; then
+    printf '127.0.0.1 %s\n' "$HJ_UPDATE_NAME" >> /etc/hosts
+    info "/etc/hosts: ${HJ_UPDATE_NAME} -> 127.0.0.1"
 else
     info "/etc/hosts hat den Eintrag bereits."
 fi
@@ -251,28 +312,56 @@ probe() {
     fi
 }
 S="${HIER}/schluessel"
+
+# Die CA gehoert in den Knoten-Bereich. Sie ist kein Geheimnis - ein
+# CA-Zertifikat ist der oeffentliche Teil - aber ohne sie kann ein
+# frischer Knoten den Server nicht pruefen. Sie liegt hinter dem
+# Knoten-Passwort, weil dort ohnehin alles liegt, was ein neuer Rechner
+# als erstes braucht.
+aus_schreiben knoten/ca.crt < "${S}/ca.crt" \
+    || fail "ca.crt liess sich nicht ausliefern."
+info "/knoten/ca.crt bereitgestellt."
+
+# --cacert bei jedem Aufruf: das Serverzertifikat kommt aus der eigenen
+# CA und steht in keinem Systemspeicher. Ohne die Angabe scheiterte jede
+# Probe an der Vertrauenskette statt an dem, was sie pruefen soll - und
+# die Meldung wiese in die falsche Richtung.
+PRUEF=(--cacert "${S}/ca.crt")
 AUSWEIS=(--cert "${S}/update-ausweis.crt" --key "${S}/update-ausweis.key")
 
+# Kurzform, damit die Proben lesbar bleiben. --cacert steckt in PRUEF: das
+# Serverzertifikat kommt aus der eigenen CA und steht in keinem Systemspeicher.
+# Ohne die Angabe scheiterte jede Probe an der Vertrauenskette statt an dem,
+# was sie pruefen soll - und die Meldung wiese in die falsche Richtung.
+code() {
+    curl -s -o /dev/null -w '%{http_code}' -m 15 "${PRUEF[@]}" "$@" || echo 0
+}
+
 probe "Ausweis oeffnet den Release-Bereich" \
-    curl -fsS -m 15 "${AUSWEIS[@]}" "https://${HJ_UPDATE_HOST}/release/aktuell"
+    curl -fsS -m 15 "${PRUEF[@]}" "${AUSWEIS[@]}" "https://${HJ_UPDATE_HOST}/release/aktuell"
 probe "ohne Ausweis bleibt er zu" \
-    test 403 = "$(curl -s -o /dev/null -w '%{http_code}' -m 15 \
-                  "https://${HJ_UPDATE_HOST}/release/aktuell" || echo 0)"
+    test 403 = "$(code "https://${HJ_UPDATE_HOST}/release/aktuell")"
 probe "Ausweis oeffnet die Registry" \
-    curl -fsS -m 15 "${AUSWEIS[@]}" "https://${HJ_UPDATE_HOST}/v2/"
+    curl -fsS -m 15 "${PRUEF[@]}" "${AUSWEIS[@]}" "https://${HJ_UPDATE_HOST}/v2/"
 probe "ohne Ausweis bleibt sie zu" \
-    test 403 = "$(curl -s -o /dev/null -w '%{http_code}' -m 15 \
-                  "https://${HJ_UPDATE_HOST}/v2/" || echo 0)"
+    test 403 = "$(code "https://${HJ_UPDATE_HOST}/v2/")"
 probe "Knoten-Bereich nimmt das Passwort" \
-    curl -fsS -m 15 -u "knoten:${PW_KNOTEN}" "https://${HJ_UPDATE_HOST}/knoten/"
+    curl -fsS -m 15 "${PRUEF[@]}" -u "knoten:${PW_KNOTEN}" "https://${HJ_UPDATE_HOST}/knoten/"
 probe "Knoten-Bereich weist Falsches ab" \
-    test 401 = "$(curl -s -o /dev/null -w '%{http_code}' -m 15 \
-                  -u 'knoten:falsch' "https://${HJ_UPDATE_HOST}/knoten/" || echo 0)"
+    test 401 = "$(code -u 'knoten:falsch' "https://${HJ_UPDATE_HOST}/knoten/")"
 # Der Ausweis darf gerade nicht ins Installationsverzeichnis - sonst waeren
 # die beiden Stufen in Wahrheit eine.
 probe "Ausweis oeffnet /knoten/ NICHT" \
-    test 401 = "$(curl -s -o /dev/null -w '%{http_code}' -m 15 "${AUSWEIS[@]}" \
-                  "https://${HJ_UPDATE_HOST}/knoten/" || echo 0)"
+    test 401 = "$(code "${AUSWEIS[@]}" "https://${HJ_UPDATE_HOST}/knoten/")"
+# Das Serverzertifikat muss auf den Namen mit Port passen. Ein fehlender SAN
+# faellt sonst erst auf dem ersten Knoten auf, und dort sieht es nach einem
+# Fehler im Ausweis aus.
+probe "Serverzertifikat passt zum Namen" \
+    curl -fsS -m 15 --cacert "${S}/ca.crt" "${AUSWEIS[@]}" \
+        "https://${HJ_UPDATE_HOST}/release/aktuell"
+probe "ohne die CA wird der Server abgelehnt" \
+    test 0 = "$(curl -s -o /dev/null -w '%{http_code}' -m 15 \
+                "${AUSWEIS[@]}" "https://${HJ_UPDATE_HOST}/release/aktuell" || echo 0)"
 
 
 # --------------------------------------------------------------- Torwaechter
@@ -332,6 +421,12 @@ fi
 
 # ------------------------------------------------------------------ 6  Ende
 
+# Der Fingerabdruck der CA. Beim Aufsetzen eines Knotens muss derselbe
+# erscheinen - das ist die einzige Pruefung, die der erste, noch
+# ungepruefte Abruf der CA zulaesst.
+CA_FINGER="$(openssl x509 -in "${HIER}/schluessel/ca.crt" -noout \
+    -fingerprint -sha256 | cut -d= -f2- | tr -d ':')"
+
 step "Jetzt notieren"
 cat <<ENDE
 
@@ -341,7 +436,14 @@ cat <<ENDE
 
           Neuen Knoten aufsetzen - das ist die ganze Zeile:
 
-          curl -fsSLu knoten https://${HJ_UPDATE_HOST}/knoten/aufsetzen.sh -o a.sh && bash a.sh
+          curl -fsSLku knoten https://${HJ_UPDATE_HOST}/knoten/aufsetzen.sh -o a.sh && bash a.sh
+
+          Das k in -fsSLku: der Server weist sich mit der eigenen CA aus,
+          und die kennt ein frischer Rechner noch nicht. Dieser eine
+          Abruf laeuft deshalb ungeprueft. Das Skript holt danach die CA
+          und zeigt ihren Fingerabdruck - er muss dem hier entsprechen:
+
+      CA-Fingerabdruck  ${CA_FINGER}
 
       Updater           ${HJ_ADMIN} / ${PW_PULT}
                         http://${HJ_PULT_BIND}:${HJ_PULT_PORT}/

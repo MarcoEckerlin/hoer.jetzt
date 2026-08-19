@@ -2,8 +2,14 @@
 #
 # hoer.jetzt - aus einer leeren Maschine einen Knoten machen.
 #
-#   curl -fsSLu knoten https://update.system.hoer.jetzt/knoten/aufsetzen.sh -o a.sh
+#   curl -fsSLku knoten https://update.system.hoer.jetzt:8443/knoten/aufsetzen.sh -o a.sh
 #   bash a.sh
+#
+# Das -k ist noetig, nicht bequem: der Server weist sich mit einem
+# Zertifikat aus der eigenen CA aus, und die kennt ein frischer Rechner
+# noch nicht. Dieser eine Abruf laeuft deshalb ungeprueft. Das Skript
+# holt gleich danach die CA und zeigt ihren Fingerabdruck zum Abgleich -
+# ab da ist jeder weitere Aufruf geprueft.
 #
 # Das "-u knoten" ohne Doppelpunkt ist Absicht: curl fragt das Passwort dann
 # selbst ab, statt es in die Befehlszeile und damit in die Shell-Historie zu
@@ -135,6 +141,39 @@ B="$(openssl rsa  -noout -modulus -in "${AUSWEIS}/update.key" 2>/dev/null | open
 [[ -n "$A" && "$A" == "$B" ]] || fail "Zertifikat und Schluessel gehoeren nicht zusammen."
 info "Zertifikat und Schluessel passen zueinander."
 
+
+# ------------------------------------------------------------------ 3b  CA
+
+# Der Server weist sich mit einem Zertifikat aus der eigenen CA aus, nicht
+# mit einem von Let's Encrypt. Diese Maschine kennt sie noch nicht - also
+# holen wir sie, bevor irgendetwas anderes geprueft werden kann.
+#
+# Der Haken, damit er ausgesprochen ist: dieser eine Abruf laeuft ungeprueft
+# (-k). Anders geht es beim ersten Kontakt nicht - man kann die CA nicht mit
+# sich selbst pruefen. Deshalb der Fingerabdruck: einrichten.sh hat ihn beim
+# Aufsetzen des Servers angezeigt. Stimmen die beiden ueberein, war niemand
+# dazwischen. Alles danach laeuft gegen diese CA.
+step "CA des Update-Servers holen"
+CADATEI="${AUSWEIS}/ca.crt"
+curl -fsSk -m 30 "https://${HJ_UPDATE_HOST}/knoten/ca.crt" -o "$CADATEI" \
+    || fail "ca.crt liess sich nicht holen - ist ${HJ_UPDATE_HOST} erreichbar?"
+chmod 644 "$CADATEI"
+
+openssl x509 -in "$CADATEI" -noout >/dev/null 2>&1 \
+    || fail "Was da kam, ist kein Zertifikat. Zeigt der Name auf den richtigen Server?"
+
+FINGER="$(openssl x509 -in "$CADATEI" -noout -fingerprint -sha256 \
+    | cut -d= -f2- | tr -d ':')"
+info ""
+info "Fingerabdruck der CA:"
+info "    ${FINGER}"
+info ""
+info "Derselbe muss beim Aufsetzen des Update-Servers angezeigt worden sein."
+info "Er steht dort unter 'Jetzt notieren'."
+ja "Stimmt er ueberein?" j || fail "Abgebrochen - dann war jemand dazwischen oder der Name zeigt falsch."
+
+# Ab hier prueft jeder Aufruf gegen diese CA.
+PRUEF=(--cacert "$CADATEI")
 # Docker legt den Ausweis von sich aus vor, wenn er hier liegt - und zwar
 # unter genau diesen Namen. "client.crt" statt "client.cert" wird stillschweigend
 # ignoriert, der pull scheitert dann mit "unauthorized".
@@ -144,6 +183,10 @@ mkdir -p "$DOCKERAUSWEIS"
 cp "${AUSWEIS}/update.crt" "${DOCKERAUSWEIS}/client.cert"
 cp "${AUSWEIS}/update.key" "${DOCKERAUSWEIS}/client.key"
 chmod 600 "${DOCKERAUSWEIS}/client.key"
+# Und die CA - damit prueft Docker den Server. Ohne sie bricht der pull mit
+# "x509: certificate signed by unknown authority" ab, und das sieht nach
+# einem Problem mit dem Ausweis aus, obwohl es die andere Richtung ist.
+cp "$CADATEI" "${DOCKERAUSWEIS}/ca.crt"
 info "$DOCKERAUSWEIS"
 
 step "Tresor-Schluessel"
@@ -161,7 +204,7 @@ step "Zugang pruefen"
 mit_ausweis() {
     local ziel="$1" code
     code="$(curl -sS -m 30 -o /tmp/hj-antwort.$$ -w '%{http_code}' \
-        --cert "${AUSWEIS}/update.crt" --key "${AUSWEIS}/update.key" \
+        "${PRUEF[@]}" --cert "${AUSWEIS}/update.crt" --key "${AUSWEIS}/update.key" \
         "https://${HJ_UPDATE_HOST}${ziel}" 2>/dev/null || echo 000)"
 
     if [[ "$code" == "403" ]]; then
@@ -255,7 +298,7 @@ info "$(printf '%s (%s Werte)' "$UMGEBUNG" "$(grep -c '^[A-Z_]*=' "$UMGEBUNG")")
 
 step "Compose-Dateien holen"
 PAKET="$(mktemp)"
-curl -fsS -m 60 -u "knoten:${KNOTEN_PW}" \
+curl -fsS -m 60 "${PRUEF[@]}" -u "knoten:${KNOTEN_PW}" \
     "https://${HJ_UPDATE_HOST}/knoten/${PROFIL}.tar.gz" -o "$PAKET" \
     || fail "Paket ${PROFIL}.tar.gz liess sich nicht holen - Passwort falsch?"
 

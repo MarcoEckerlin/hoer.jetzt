@@ -5,8 +5,13 @@
 #   bash schluessel.sh erzeugen     einmalig, legt alles an
 #   bash schluessel.sh zeigen       Fingerabdruecke und Laufzeiten
 #   bash schluessel.sh erneuern     neuen Update-Ausweis, gleiche CA
+#   bash schluessel.sh server NAME  Serverzertifikat neu, wenn der Name wechselt
 #
-# Zwei Schluessel mit verschiedenen Aufgaben - sie loesen einander nicht ab:
+# Drei Dinge mit verschiedenen Aufgaben - sie loesen einander nicht ab:
+#
+#   Serverzertifikat Damit weist sich Caddy aus. Aus derselben CA, kein
+#                    Let's Encrypt: die Gegenstellen sind ausschliesslich
+#                    eigene Maschinen, und die tragen die CA ohnehin.
 #
 #   Update-Ausweis   Ein Client-Zertifikat. Der Knoten weist sich damit bei
 #                    Caddy aus, bevor er ueberhaupt an die Registry kommt.
@@ -42,7 +47,7 @@ BEFEHL="${1:-}"
 if [[ "$BEFEHL" == "zeigen" ]]; then
     [[ -d "$LAGER" ]] || fail "${LAGER} gibt es nicht - erst 'erzeugen'."
     step "Schluessel"
-    for name in ca update-ausweis tresor; do
+    for name in ca server update-ausweis tresor; do
         datei="${LAGER}/${name}.crt"
         [[ -f "$datei" ]] || { warn "$(printf '%-16s %s' "$name" "fehlt")"; continue; }
         bis="$(openssl x509 -in "$datei" -noout -enddate | cut -d= -f2-)"
@@ -54,6 +59,67 @@ if [[ "$BEFEHL" == "zeigen" ]]; then
     exit 0
 fi
 
+
+# ------------------------------------------------------------------ Server
+
+# Das Zertifikat, mit dem Caddy sich ausweist. Kommt aus derselben CA wie die
+# Knoten-Ausweise - kein Let's Encrypt.
+#
+# Warum das hier reicht: es gibt keinen Browser, der diesem Server vertrauen
+# muesste. Die Gegenstellen sind ausschliesslich eigene Maschinen, und die
+# tragen die CA ohnehin schon, weil sie sich selbst damit ausweisen. Eine
+# oeffentliche Zertifizierungsstelle wuerde hier nur einen Port 80 und eine
+# Abhaengigkeit von aussen hinzufuegen, ohne etwas zu beweisen, was die
+# eigene CA nicht schon beweist.
+#
+# Der Name muss stimmen: er landet als SAN im Zertifikat, und ohne
+# passenden SAN lehnt jeder moderne Client ab - der CN allein zaehlt seit
+# Jahren nicht mehr.
+serverzertifikat() {
+    local name="$1"
+    [[ -n "$name" ]] || fail "Fuer das Serverzertifikat fehlt der Name."
+
+    step "Serverzertifikat"
+    openssl req -new -newkey rsa:4096 -nodes \
+        -keyout "${LAGER}/server.key" -out "${LAGER}/server.csr" \
+        -subj "/CN=${name}" >/dev/null 2>&1 \
+        || fail "Antrag fuer das Serverzertifikat liess sich nicht stellen."
+
+    local erw
+    erw="$(mktemp)"
+    {
+        printf 'subjectAltName=DNS:%s' "$name"
+        # Die Selbstprobe auf diesem Host laeuft ueber 127.0.0.1. Ohne diese
+        # beiden Eintraege scheiterte sie am Namen, nicht an der Sache.
+        printf ',DNS:localhost,IP:127.0.0.1\n'
+        printf 'extendedKeyUsage=serverAuth\n'
+        printf 'keyUsage=digitalSignature,keyEncipherment\n'
+    } > "$erw"
+
+    openssl x509 -req -in "${LAGER}/server.csr" \
+        -CA "${LAGER}/ca.crt" -CAkey "${LAGER}/ca.key" -CAcreateserial \
+        -out "${LAGER}/server.crt" -days $((365 * JAHRE)) -sha256 \
+        -extfile "$erw" >/dev/null 2>&1 \
+        || { rm -f "$erw"; fail "Serverzertifikat liess sich nicht ausstellen."; }
+
+    rm -f "$erw" "${LAGER}/server.csr"
+    chmod 600 "${LAGER}/server.key"
+    chmod 644 "${LAGER}/server.crt"
+    info "server.crt / server.key fuer ${name} (4096 Bit)"
+
+    openssl verify -CAfile "${LAGER}/ca.crt" "${LAGER}/server.crt" >/dev/null 2>&1 \
+        || fail "Das Serverzertifikat prueft sich nicht gegen die eigene CA."
+    info "Gilt gegen die CA."
+}
+
+# Eigener Aufruf, damit sich der Name spaeter aendern laesst, ohne alles
+# andere neu zu erzeugen: bash schluessel.sh server update.system.hoer.jetzt
+if [[ "$BEFEHL" == "server" ]]; then
+    [[ -f "${LAGER}/ca.key" ]] || fail "Keine CA vorhanden - erst 'erzeugen'."
+    serverzertifikat "${2:-${HJ_UPDATE_NAME:-}}"
+    echo
+    exit 0
+fi
 [[ "$BEFEHL" == "erzeugen" || "$BEFEHL" == "erneuern" ]] || {
     sed -n '3,10p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     exit 2
@@ -94,6 +160,8 @@ if [[ "$BEFEHL" == "erzeugen" ]]; then
     step "Tresor-Schluessel"
     erzeuge_paar tresor "hoer.jetzt Tresor" $((365 * JAHRE))
     info "tresor.crt (verschluesselt) / tresor.key (macht auf)"
+
+    serverzertifikat "${2:-${HJ_UPDATE_NAME:-}}"
 fi
 
 # ------------------------------------------------------------------ Ausweis

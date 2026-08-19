@@ -41,8 +41,14 @@ Keinen Schlüssel, kein Zugangsdatum. Wird beim Aufsetzen einmal gebraucht und
 danach nirgends gespeichert.
 
 ```bash
-curl -fsSLu knoten https://update.system.hoer.jetzt/knoten/aufsetzen.sh -o a.sh && bash a.sh
+curl -fsSLku knoten https://update.system.hoer.jetzt:8443/knoten/aufsetzen.sh -o a.sh && bash a.sh
 ```
+
+Das `-k` ist nötig, nicht bequem: der Server weist sich mit der eigenen CA
+aus, und die kennt ein frischer Rechner noch nicht. Dieser **eine** Abruf
+läuft ungeprüft; das Skript holt danach die CA und zeigt ihren
+Fingerabdruck zum Abgleich mit dem, was `einrichten.sh` ausgegeben hat.
+Ab da ist jeder weitere Aufruf geprüft.
 
 Das `-u knoten` ohne Doppelpunkt ist Absicht: curl fragt das Passwort selbst
 ab, statt es in die Shell-Historie zu schreiben.
@@ -84,19 +90,60 @@ sicher, dass ein gültiger **Ausweis** `/knoten/` *nicht* öffnet und umgekehrt.
 ## Aufbau
 
 ```
-                    Caddy  (TLS, client_auth: verify_if_given)
-                      |
-                      |--- forward_auth ---> Updater :8080   Adresse freigeschaltet?
-                      |                      (nur im internen Docker-Netz)
-                      |
+   Knoten
+     |  TLS mit Client-Zertifikat, Port 8443, direkt
+     |  (nicht über Cloudflare, nicht über den NPM)
+     v
+   Caddy  (Serverzertifikat aus der eigenen CA, client_auth: verify_if_given)
+     |
+     |--- forward_auth ---> Updater :8080   Adresse freigeschaltet?
+     |                      (nur im internen Docker-Netz)
+     |
    /v2/*      ------> Forgejo-Registry      Ausweis + Freigabe
    /release/* ------> Volume "ausliefern"   Ausweis + Freigabe
    /tresor/*  ------> Volume "ausliefern"   Ausweis + Freigabe + Tresor-Schlüssel
    /melden    ------> Updater :8080         Ausweis + Freigabe
    /knoten/*  ------> Volume "ausliefern"   Passwort
 
-                             Updater :8081  Oberfläche, privates Netz
+                      Updater :8081         Oberfläche, privates Netz
 ```
+
+## Warum dieser Dienst an Cloudflare und am NPM vorbeigeht
+
+Weil **Client-Zertifikate keinen Reverse-Proxy überleben**. Cloudflare im
+Proxy-Modus terminiert TLS, der Nginx Proxy Manager terminiert TLS — in beiden
+Fällen kommt bei Caddy kein Zertifikat des Knotens mehr an, sondern eines der
+Zwischenstelle. Das ist keine Einstellung, das ist die Bauart von TLS.
+
+Daraus folgt der Rest:
+
+| | |
+|---|---|
+| Cloudflare | Der Name steht auf **DNS only** (graue Wolke), nicht auf Proxy. |
+| Port | Ein eigener, Vorgabe **8443**, im Router direkt auf diesen Host. |
+| Port 80 | Wird nicht angefasst — der gehört dem NPM. |
+| Zertifikat | Aus der **eigenen CA**, kein Let's Encrypt. |
+
+Kein Let's Encrypt heißt hier keinen Verlust: die Gegenstellen sind
+ausschließlich eigene Maschinen, und die tragen die CA ohnehin schon, weil sie
+sich selbst damit ausweisen. Eine öffentliche Stelle würde nur einen
+erreichbaren Port 80 und eine Abhängigkeit nach außen hinzufügen, ohne etwas zu
+beweisen, was die eigene CA nicht schon beweist.
+
+Die Kehrseite, damit sie dasteht: jeder Client braucht `ca.crt`. Das erledigen
+die Skripte — `knoten-aufsetzen.sh` legt sie nach `/etc/docker/certs.d/` und
+`auto-update.sh` prüft, dass sie da ist. Von Hand mit `curl` heißt es
+`--cacert`.
+
+`einrichten.sh` prüft beides ausdrücklich: eine Probe stellt sicher, dass der
+Server **mit** der CA angenommen und **ohne** sie abgelehnt wird.
+
+### Der Port steckt im Namen
+
+`HJ_UPDATE_HOST` ist `update.system.hoer.jetzt:8443` — mit Port. Das passt an
+allen Stellen zusammen: in der URL, im Registry-Namen und als Verzeichnis unter
+`/etc/docker/certs.d/`, wo Docker genau diese Schreibweise erwartet. Für
+Namensauflösung und `/etc/hosts` gibt es daneben `HJ_UPDATE_NAME` ohne Port.
 
 `verify_if_given` statt `require_and_verify`: `/knoten/` muss ohne Ausweis
 erreichbar sein — ein frischer Knoten hat ja noch keinen. Der Zwang steht
@@ -112,9 +159,6 @@ Verwaltung: `ssh -L 3000:127.0.0.1:3000`.
 `ausliefern` ist ein benanntes Docker-Volume, kein Pfad auf dem Host — die
 Bauschritte des CI-Runners laufen in eigenen Containern und kennen keine
 Hostpfade.
-
----
-
 ## Einrichten
 
 ```bash
@@ -126,6 +170,21 @@ startet Caddy — und prüft sich am Ende selbst. Die letzte Probe lädt ein
 Testabbild hoch und wieder herunter; sie fällt auf alles herein, was die
 anderen nicht sehen (falscher Dateiname in `certs.d`, fehlender
 `/etc/hosts`-Eintrag, ein Leserecht, das Forgejo doch verlangt).
+
+**Vorher, außerhalb der Maschine:**
+
+1. In Cloudflare den Eintrag für `update.system.hoer.jetzt` auf **DNS only**
+   stellen (graue Wolke) und auf die eigene Adresse zeigen lassen.
+   `einrichten.sh` erkennt die orange Wolke und warnt — Cloudflare reicht
+   Port 8443 im Proxy-Modus ohnehin nicht durch.
+2. Im Router **8443 → dieser Host:8443** weiterleiten.
+
+Port 80 und 443 bleiben unberührt; der NPM behält sie.
+
+Das Skript fragt nach Name, Port, Forgejo-Konto und der Adresse für die
+Updater-Oberfläche. Am Ende zeigt es **einmal** das Knoten-Passwort, das
+Updater-Passwort und den **Fingerabdruck der CA** — den braucht man beim
+Aufsetzen jedes Knotens zum Abgleich.
 
 Dann den Tresor befüllen:
 

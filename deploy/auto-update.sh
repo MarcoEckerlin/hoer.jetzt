@@ -93,7 +93,11 @@ if [[ -z "$HJ_UPDATE_HOST" ]]; then
        Dieser Host haengt noch am alten GitHub-Weg. Umstellen:
            bash <(curl -fsSLu knoten https://<update-server>/knoten/aufsetzen.sh)"
 fi
-for teil in update.crt update.key; do
+# ca.crt gehoert dazu: der Update-Server weist sich mit einem Zertifikat
+# aus der eigenen CA aus, nicht mit einem von Let's Encrypt. Ohne die CA
+# lehnt curl den Server ab - und die Meldung klaenge nach einem Problem
+# mit dem eigenen Ausweis, obwohl es die andere Richtung ist.
+for teil in update.crt update.key ca.crt; do
     [[ -f "${AUSWEIS}/${teil}" ]] || fehler "${AUSWEIS}/${teil} fehlt - ohne Ausweis kein Zugang."
 done
 
@@ -104,7 +108,7 @@ DOCKER="${ARBEIT}/main/deploy/docker"
 
 hole() {
     curl -fsS -m 30 \
-        --cert "${AUSWEIS}/update.crt" --key "${AUSWEIS}/update.key" \
+        --cacert "${AUSWEIS}/ca.crt" --cert "${AUSWEIS}/update.crt" --key "${AUSWEIS}/update.key" \
         "https://${HJ_UPDATE_HOST}$1"
 }
 
@@ -130,7 +134,7 @@ melden() {
     local ergebnis="$1" zustand="${2:-}" antwort
 
     antwort="$(curl -fsS -m 15 -X POST \
-        --cert "${AUSWEIS}/update.crt" --key "${AUSWEIS}/update.key" \
+        --cacert "${AUSWEIS}/ca.crt" --cert "${AUSWEIS}/update.crt" --key "${AUSWEIS}/update.key" \
         -H "Content-Type: application/json" \
         -d "$(printf '{"kennung":"%s","name":"%s","profil":"%s","version":"%s","vorher":"%s","zustand":"%s","ergebnis":"%s"}' \
             "$KENNUNG" "$KENNUNG" "$PROFIL" \
@@ -262,7 +266,7 @@ chmod 600 .env
 # das eingerichtet ist - fehlt es, scheitert sonst erst der pull, und die
 # Meldung lautet dann bloss "unauthorized".
 DOCKERAUSWEIS="/etc/docker/certs.d/${HJ_UPDATE_HOST}"
-for teil in client.cert client.key; do
+for teil in client.cert client.key ca.crt; do
     [[ -f "${DOCKERAUSWEIS}/${teil}" ]] \
         || fehler "${DOCKERAUSWEIS}/${teil} fehlt - Docker kann sich nicht ausweisen."
 done

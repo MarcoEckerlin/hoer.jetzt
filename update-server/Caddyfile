@@ -21,6 +21,26 @@
 #   /melden     Client-Zertifikat. Der Herzschlag der Knoten nach einem
 #               Update-Lauf. Geht an den Updater.
 #
+# ---------------------------------------------------------------------------
+# Warum dieser Dienst an Cloudflare und am Nginx Proxy Manager vorbeigeht
+#
+# Weil Client-Zertifikate keinen Reverse-Proxy ueberleben. Cloudflare im
+# Proxy-Modus terminiert TLS, NPM terminiert TLS - in beiden Faellen kommt
+# hier kein Zertifikat des Knotens mehr an, sondern eines der Zwischenstelle.
+# Das laesst sich nicht konfigurieren, das ist die Bauart von TLS.
+#
+# Deshalb:
+#   - Der Name steht in Cloudflare auf DNS only (graue Wolke).
+#   - Ein eigener Port wird im Router direkt hierher weitergeleitet.
+#   - Port 80 wird nicht angefasst; der gehoert dem NPM.
+#   - Das Zertifikat kommt aus der eigenen CA, nicht von Let's Encrypt.
+#     Damit wird Port 80 auch fuer die Ausstellung nicht gebraucht.
+#
+# HJ_UPDATE_HOST traegt den Port mit, also z.B.
+# "update.system.hoer.jetzt:8443". Das passt an allen Stellen zusammen:
+# in der URL, im Registry-Namen und als Verzeichnis unter
+# /etc/docker/certs.d/ - Docker erwartet dort genau diese Schreibweise.
+#
 # Warum "verify_if_given" und nicht "require_and_verify": /knoten/ muss ohne
 # Ausweis erreichbar sein - ein frischer Knoten hat ja noch keinen. Der Zwang
 # steht deshalb nicht am Anschluss, sondern an den Pfaden, die ihn brauchen.
@@ -38,13 +58,29 @@
 # ist es eine Zeile in der Datenbank und gilt sofort.
 
 {
-	email {$HJ_ACME_MAIL}
+	# Kein Let's Encrypt und keine automatische HTTPS-Verwaltung.
+	#
+	# Das Serverzertifikat kommt aus der eigenen CA (schluessel.sh). Das
+	# passt hier besser als eine oeffentliche Stelle: die Gegenstellen sind
+	# ausschliesslich eigene Maschinen, und die tragen die CA ohnehin schon,
+	# weil sie sich selbst damit ausweisen. Eine oeffentliche Stelle wuerde
+	# nur einen erreichbaren Port 80 und eine Abhaengigkeit nach aussen
+	# hinzufuegen, ohne etwas zu beweisen, was die eigene CA nicht schon
+	# beweist.
+	#
+	# "off" nimmt auch den Umleitungs-Server auf Port 80 mit - genau den
+	# Port, der auf diesem Host dem Nginx Proxy Manager gehoert. Ohne das
+	# scheitert der Start mit "address already in use".
+	auto_https off
 }
 
-{$HJ_UPDATE_HOST} {
+https://{$HJ_UPDATE_HOST} {
 	encode zstd gzip
 
-	tls {
+	# Erst das eigene Zertifikat, dann die Pruefung der Gegenseite. Beide
+	# Richtungen haengen an derselben CA - ein Knoten prueft den Server
+	# gegen ca.crt, der Server den Knoten ebenso.
+	tls /schluessel/server.crt /schluessel/server.key {
 		client_auth {
 			mode verify_if_given
 			trusted_ca_cert_file /schluessel/ca.crt

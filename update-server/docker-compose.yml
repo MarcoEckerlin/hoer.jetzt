@@ -16,20 +16,25 @@ services:
 
   # ------------------------------------------------------------------ Front
   #
-  # Caddy holt das Zertifikat selbst (ACME/Let's Encrypt) und bewacht die drei
-  # Bereiche mit je einem eigenen Passwort. Die Hashes kommen aus der .env,
-  # die Klartext-Passwoerter stehen nirgends auf diesem Host.
+  # Caddy weist sich mit dem Zertifikat aus der eigenen CA aus - kein Let's
+  # Encrypt, siehe Caddyfile. Es bewacht die vier Bereiche, die nach aussen
+  # gehen. Die Hashes kommen aus der .env, die Klartext-Passwoerter stehen
+  # nirgends auf diesem Host.
 
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
     ports:
-      # 80 wird fuer die ACME-Pruefung gebraucht und leitet sonst nur um.
-      - "80:80"
-      - "443:443"
+      # Kein Port 80: der gehoert auf diesem Host dem Nginx Proxy Manager.
+      # Das Zertifikat kommt aus der eigenen CA - es gibt keine Pruefung,
+      # die einen erreichbaren Port 80 braeuchte.
+      #
+      # Aussen- und Innenport sind absichtlich gleich. Caddy leitet den
+      # Site-Namen samt Port aus HJ_UPDATE_HOST ab; waeren sie verschieden,
+      # passte der Host-Kopf der Anfrage nicht mehr zum Site-Block.
+      - "${HJ_HTTPS_PORT:-8443}:${HJ_HTTPS_PORT:-8443}"
     environment:
       HJ_UPDATE_HOST: ${HJ_UPDATE_HOST:?Adresse fehlt - z.B. update.system.hoer.jetzt}
-      HJ_ACME_MAIL:   ${HJ_ACME_MAIL:?Mailadresse fuer Let's Encrypt fehlt}
       HJ_HASH_KNOTEN: ${HJ_HASH_KNOTEN:?Hash fehlt - einrichten.sh laufen lassen}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
@@ -37,6 +42,10 @@ services:
       # privaten Schluessel daneben gehen den Webserver nichts an, deshalb
       # ausdruecklich nur diese eine Datei.
       - ./schluessel/ca.crt:/schluessel/ca.crt:ro
+      # Das eigene Serverzertifikat. Der Schluessel dazu nur lesend und
+      # nur diese eine Datei - der Rest des Lagers geht Caddy nichts an.
+      - ./schluessel/server.crt:/schluessel/server.crt:ro
+      - ./schluessel/server.key:/schluessel/server.key:ro
       # Benanntes Volume, kein Bind-Mount: der CI-Runner startet die Bauschritte
       # in eigenen Containern, und die koennen ein Volume ueber seinen Namen
       # einhaengen. Einen Pfad des Hosts kennen sie nicht.
