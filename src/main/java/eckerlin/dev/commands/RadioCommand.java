@@ -62,8 +62,10 @@ public class RadioCommand implements SlashCommand {
             return;
         }
 
+        // Das AI-Radio hat bewusst eine negative ID (siehe RadioStationService),
+        // deshalb reicht "groesser null" als Pruefung nicht mehr.
         Integer radioId = resolveRadioId(event);
-        if (radioId == null || radioId < 1) {
+        if (radioId == null || (radioId < 1 && radioId != RadioStationService.SMART_RADIO_ID)) {
             CommandHelper.replyError(
                     event,
                     "Radio",

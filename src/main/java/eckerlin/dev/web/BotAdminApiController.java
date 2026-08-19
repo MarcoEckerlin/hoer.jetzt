@@ -9,13 +9,17 @@ import eckerlin.dev.security.GuildEntitlementService;
 import eckerlin.dev.security.GuildFeature;
 import eckerlin.dev.security.GuildPermissionService;
 import eckerlin.dev.services.DiscordBotService;
+import eckerlin.dev.services.GuildStatistikService;
 import eckerlin.dev.web.dto.ActionResponse;
+import eckerlin.dev.web.dto.AdminGuildStats;
 import eckerlin.dev.web.dto.AdminGuildView;
 import eckerlin.dev.web.dto.BotAdminOverview;
 import eckerlin.dev.web.dto.BotAdminRequest;
 import eckerlin.dev.web.dto.DashboardSession;
 import eckerlin.dev.web.dto.EntitlementRequest;
 import eckerlin.dev.web.dto.PermissionDescriptor;
+import eckerlin.dev.verbund.GuildSammler;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Member;
@@ -54,6 +58,8 @@ public class BotAdminApiController {
     private final GuildPermissionService guildPermissionService;
     private final AdminAuditService auditService;
     private final DiscordBotService discordBotService;
+    private final GuildSammler guildSammler;
+    private final GuildStatistikService guildStatistikService;
 
     public BotAdminApiController(
             AccessGuard accessGuard,
@@ -61,7 +67,9 @@ public class BotAdminApiController {
             GuildEntitlementService guildEntitlementService,
             GuildPermissionService guildPermissionService,
             AdminAuditService auditService,
-            DiscordBotService discordBotService
+            DiscordBotService discordBotService,
+            GuildSammler guildSammler,
+            GuildStatistikService guildStatistikService
     ) {
         this.accessGuard = accessGuard;
         this.botAdminService = botAdminService;
@@ -69,6 +77,8 @@ public class BotAdminApiController {
         this.guildPermissionService = guildPermissionService;
         this.auditService = auditService;
         this.discordBotService = discordBotService;
+        this.guildSammler = guildSammler;
+        this.guildStatistikService = guildStatistikService;
     }
 
     // ------------------------------------------------------------------
@@ -80,12 +90,21 @@ public class BotAdminApiController {
         DashboardSession session = requireSession(httpSession);
         BotAdminRole role = accessGuard.requireBotAdmin(session, BotAdminRole.SUPPORT);
 
-        List<PermissionDescriptor> assignable = List.of(
-                new PermissionDescriptor(BotAdminRole.ADMIN.name(), BotAdminRole.ADMIN.label(),
-                        "Darf alles verwalten, aber keine weiteren Admins ernennen."),
-                new PermissionDescriptor(BotAdminRole.SUPPORT.name(), BotAdminRole.SUPPORT.label(),
-                        "Darf Server und Protokolle einsehen, ändert aber nichts.")
-        );
+        // Owner steht nur einem Owner zur Wahl.
+        //
+        // Die Liste steuert allein die Anzeige - gespeichert wird ohnehin erst
+        // nach requireBotAdmin(OWNER) in saveAdmin. Sie wird trotzdem hier
+        // gefiltert, weil eine Stufe im Auswahlfeld, die beim Speichern
+        // abgelehnt wird, dem Support-Nutzer ein Recht vorspiegelt.
+        List<PermissionDescriptor> assignable = new ArrayList<>();
+        if (role.atLeast(BotAdminRole.OWNER)) {
+            assignable.add(new PermissionDescriptor(BotAdminRole.OWNER.name(), BotAdminRole.OWNER.label(),
+                    "Darf alles, auch weitere Owner und Admins verwalten. Nur an Personen, denen der Betrieb gehört."));
+        }
+        assignable.add(new PermissionDescriptor(BotAdminRole.ADMIN.name(), BotAdminRole.ADMIN.label(),
+                "Darf alles verwalten, aber keine weiteren Admins ernennen."));
+        assignable.add(new PermissionDescriptor(BotAdminRole.SUPPORT.name(), BotAdminRole.SUPPORT.label(),
+                "Darf Server und Protokolle einsehen, ändert aber nichts."));
 
         return new BotAdminOverview(
                 session.userId(),
@@ -142,8 +161,15 @@ public class BotAdminApiController {
     // Server
     // ------------------------------------------------------------------
 
+    /**
+     * Alle Server, auf denen der Bot ist.
+     *
+     * <p>Mit aufgeteilten Shards kennt diese Node nur ihren eigenen Teil -
+     * ohne Zusammenfuehrung sah man je nach Lastverteiler vier oder drei von
+     * sieben Servern, ohne dass etwas auf die fehlenden hingewiesen haette.</p>
+     */
     @GetMapping("/guilds")
-    public List<AdminGuildView> guilds(HttpSession httpSession) {
+    public List<AdminGuildView> guilds(HttpSession httpSession, HttpServletRequest anfrage) {
         DashboardSession session = requireSession(httpSession);
         accessGuard.requireBotAdmin(session, BotAdminRole.SUPPORT);
 
@@ -163,7 +189,30 @@ public class BotAdminApiController {
             ));
         }
         views.sort(Comparator.comparing(AdminGuildView::name, String.CASE_INSENSITIVE_ORDER));
-        return views;
+        return guildSammler.ergaenzenVerwaltung(views, anfrage);
+    }
+
+    /**
+     * Zahlen zu einem Server - erst beim Aufklappen der Zeile.
+     *
+     * <p>Absichtlich nicht Teil von {@code /guilds}: die Zahlen kosten je
+     * Server vier Abfragen ueber das Netz zur Datenbank. In der Liste haetten
+     * zwanzig Server also achtzig Abfragen gekostet, damit man eine davon
+     * ansieht.</p>
+     *
+     * <p>SUPPORT reicht: hier wird nur gelesen. Wer die Liste sehen darf, darf
+     * auch wissen, was auf den Servern los ist - das ist die Frage, wegen der
+     * man eine Support-Stufe ueberhaupt vergibt.</p>
+     */
+    @GetMapping("/guilds/{guildId}/stats")
+    public AdminGuildStats guildStats(@PathVariable String guildId, HttpSession httpSession) {
+        DashboardSession session = requireSession(httpSession);
+        accessGuard.requireBotAdmin(session, BotAdminRole.SUPPORT);
+
+        if (!guildId.matches("\\d{5,32}")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Ungültige Server-ID.");
+        }
+        return guildStatistikService.fuerServer(guildId);
     }
 
     @PostMapping("/guilds/{guildId}/entitlements")

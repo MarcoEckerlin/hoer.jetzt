@@ -1,6 +1,7 @@
 package eckerlin.dev.web;
 
 import eckerlin.dev.utils.Alert;
+import eckerlin.dev.services.AufraeumService;
 import eckerlin.dev.services.AppConfigService;
 import eckerlin.dev.services.GuildModuleSettingsService;
 import eckerlin.dev.services.AdminAccessService;
@@ -159,6 +160,22 @@ public class DashboardController {
     }
 
     /**
+     * Die kurze englische Adresse bleibt gueltig - sie steht in Lesezeichen und
+     * im Discord-Entwicklerportal. Sie zeigt den Text aber nicht mehr selbst,
+     * sondern fuehrt auf die deutsche: ein Text, eine Adresse.
+     */
+    @GetMapping("/tos")
+    public String tosWeiterleitung() {
+        return "redirect:/nutzungsbedingungen";
+    }
+
+    @GetMapping("/nutzungsbedingungen")
+    public String nutzungsbedingungen(Model model) {
+        addCommonAttributes(model);
+        return "tos";
+    }
+
+    /**
      * Der oeffentliche Kurzlink: hoer.jetzt/invite/&lt;name&gt;
      *
      * <p>Bewusst ohne jede Anmeldung - der Link soll in einer Signatur, auf
@@ -242,7 +259,50 @@ public class DashboardController {
         model.addAttribute("legalOwnerName", configService.getLegalOwnerName());
         model.addAttribute("legalEmail", configService.getLegalEmail());
         model.addAttribute("legalAddress", configService.getLegalAddress());
+        // Die Rechtstexte nennen die Adresse, unter der der Dienst laeuft -
+        // fest verdrahtet waere sie auf einer zweiten Instanz schlicht falsch.
+        model.addAttribute("webBaseUrl", configService.getWebBaseUrl());
         model.addAttribute("currentYear", Year.now().getValue());
+
+        /*
+         * Premium.
+         *
+         * Solange es kein kostenpflichtiges Angebot gibt, darf in den
+         * Nutzungsbedingungen auch keines stehen - ein Text, der ein Abo
+         * beschreibt, das man nicht abschliessen kann, ist irrefuehrend. Der
+         * Schalter haelt den gesamten Abschnitt zurueck und stellt zugleich
+         * die Aussage zum Betrieb um: ohne Premium "privat und unentgeltlich",
+         * mit Premium die gewerbliche Fassung.
+         *
+         * Umgebung statt Datenbankfeld, weil das genau einmal umgelegt wird -
+         * und zwar in demselben Moment, in dem ohnehin neu ausgerollt wird.
+         */
+        // Die Fristen kommen aus demselben Dienst, der auch loescht. So kann
+        // die Erklaerung nicht behaupten, was die Technik nicht tut.
+        model.addAttribute("fristProtokoll", tage(AufraeumService.frist("logs")));
+        model.addAttribute("fristTickets", tage(AufraeumService.frist("ticket_transcripts")));
+        model.addAttribute("fristTitel", tage(AufraeumService.frist("music_track_events")));
+        model.addAttribute("fristHoerer", tage(AufraeumService.frist("music_listener_events")));
+        model.addAttribute("fristAudit", tage(AufraeumService.frist("admin_audit_log")));
+
+        model.addAttribute("premiumAktiv", "true".equalsIgnoreCase(umgebung("HJ_PREMIUM_ENABLED", "false")));
+        model.addAttribute("premiumPreis", umgebung("HJ_PREMIUM_PREIS", ""));
+        model.addAttribute("premiumLeistung", umgebung("HJ_PREMIUM_LEISTUNG", ""));
+    }
+
+    /** Frist als Text. 0 heisst im Aufraeumdienst "nicht loeschen". */
+    private static String tage(int wert) {
+        if (wert <= 0) {
+            return "solange für den Zweck erforderlich";
+        }
+        return wert % 365 == 0 && wert >= 365
+                ? (wert / 365) + (wert == 365 ? " Jahr" : " Jahre")
+                : wert + " Tage";
+    }
+
+    private static String umgebung(String name, String vorgabe) {
+        String wert = System.getenv(name);
+        return wert == null || wert.isBlank() ? vorgabe : wert.trim();
     }
 
     private void writeCookieNotice(HttpServletResponse response, String value, Duration duration) {

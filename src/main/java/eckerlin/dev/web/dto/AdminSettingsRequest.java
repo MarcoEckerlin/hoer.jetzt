@@ -16,6 +16,7 @@ public record AdminSettingsRequest(
         String legalAddress,
         String webBaseUrl,
         String noGuildInviteUrl,
+        String supportUrl,
         String discordClientId,
         String discordClientSecret,
         String redirectUri,

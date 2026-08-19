@@ -11,6 +11,13 @@ import eckerlin.dev.listeners.VoiceChannelModuleListener;
 import eckerlin.dev.listeners.DiscordLoggingListener;
 import eckerlin.dev.utils.Alert;
 import eckerlin.dev.utils.Client;
+import eckerlin.dev.utils.Config;
+import eckerlin.dev.utils.DB;
+
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.sharding.ShardManager;
 import net.dv8tion.jda.api.entities.Guild;
@@ -97,6 +104,7 @@ public class DiscordBotService {
         botPresenceService.attachShards(shards);
         Alert.send("INFO", "DISCORD", shards.getShardsRunning() + " Shard(s) verbunden, "
                 + shards.getGuilds().size() + " Server.");
+        warneVorDoppeltemShard();
         shards.getGuilds().forEach(guild -> {
             ticketModuleService.syncPublishedPanels(guild);
             communityModuleService.syncReactionRoleMessage(guild);
@@ -104,6 +112,59 @@ public class DiscordBotService {
         });
         Alert.send("SUCCESS", "DISCORD", "Discord Bot ist online.");
         return shards;
+    }
+
+    /**
+     * Warnt, wenn mehrere Nodes denselben Shard fahren.
+     *
+     * <p>Discord erlaubt je Shard-Nummer eine Verbindung. Ohne
+     * {@code HJ_SHARDS_GESAMT} fragt JDA Discord nach der empfohlenen Zahl -
+     * bei wenigen Servern ist das eine, und jede Node nimmt dann Shard 0. Das
+     * faellt nicht auf: der Bot ist online, Befehle funktionieren, nur
+     * antworten zwei Prozesse auf dasselbe Ereignis. Einer gewinnt die
+     * Interaktion, der andere laeuft ins Leere - und bei der Wiedergabe wollen
+     * beide in denselben Sprachkanal.</p>
+     *
+     * <p>Bewusst nur eine Warnung und kein Abbruch: welche Node welche Shards
+     * faehrt, entscheidet der Verbund, und ein Start, der daran scheitert,
+     * waere schlimmer als der Doppelbetrieb. Sichtbar muss es aber sein - das
+     * war es bisher an keiner Stelle.</p>
+     */
+    private void warneVorDoppeltemShard() {
+        // Nur wenn ueberhaupt keine Aufteilung vorgegeben ist. Wer sie gesetzt
+        // hat, weiss was er tut, und ueberlappende Bereiche pruefen wir hier
+        // nicht nach - das ist Sache des Verbunds.
+        if (System.getenv("HJ_SHARDS_GESAMT") != null && !System.getenv("HJ_SHARDS_GESAMT").isBlank()) {
+            return;
+        }
+        if (!DB.isAvailable()) {
+            return;
+        }
+
+        // Die angemeldeten Knoten sind der beste vorhandene Hinweis darauf,
+        // dass diese Installation aus mehr als einer Maschine besteht.
+        String sql = """
+                SELECT count(DISTINCT node_name) FROM deployment_lavalink_nodes
+                WHERE bot_id = ? AND herkunft <> 'manuell'
+                  AND zuletzt_gesehen > now() - interval '10 minutes'
+                """;
+
+        try (Connection verbindung = DB.connection();
+             PreparedStatement anweisung = verbindung.prepareStatement(sql)) {
+            anweisung.setInt(1, Config.config.optInt("bot_id", 1));
+            try (ResultSet ergebnis = anweisung.executeQuery()) {
+                if (ergebnis.next() && ergebnis.getInt(1) > 1) {
+                    Alert.send("WARN", "DISCORD",
+                            "Mehrere Nodes, aber keine Shard-Aufteilung: diese Instanz faehrt Shard 0, "
+                            + "die anderen ebenfalls. Discord liefert jedes Ereignis dann an alle - "
+                            + "Befehle werden mehrfach verarbeitet. HJ_SHARDS_GESAMT und "
+                            + "HJ_SHARD_VON/HJ_SHARD_BIS je Node setzen, oder Discord nur auf einer "
+                            + "Node starten.");
+                }
+            }
+        } catch (SQLException ignoriert) {
+            // Eine Warnung, die selbst zum Fehler wird, hilft niemandem.
+        }
     }
 
     public Optional<ShardManager> getShardsOptional() {

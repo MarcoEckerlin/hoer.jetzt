@@ -1,10 +1,13 @@
 <!DOCTYPE html>
-<html lang="de" xmlns:th="http://www.thymeleaf.org" data-theme="dark">
+<html lang="de" xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title th:text="|Bot-Verwaltung — ${botBrand.displayName}|">Bot-Verwaltung</title>
     <link rel="stylesheet" href="/panel.css">
+
+    <!-- Ohne defer und vor dem Rendern: sonst blitzt die helle Fassung auf. -->
+
     <script src="/theme.js" th:src="@{/theme.js(v=${assetVersion})}"></script>
 </head>
 <body>
@@ -19,6 +22,14 @@
             <span th:unless="${botBrand.avatarUrl}">BV</span>
         </button>
         <div class="rail-sep"></div>
+        <!--
+          Zurueck in den Betriebsbereich. Seit /admin dorthin fuehrt, ist diese
+          Seite nur noch ueber "Weitere Einstellungen" erreichbar - ohne diesen
+          Weg zurueck waere sie eine Sackgasse.
+        -->
+        <a class="rail-item" href="/dashboard#/betrieb/verbund" title="Zum Betrieb" style="text-decoration:none">
+            <svg viewBox="0 0 24 24" width="22" height="22"><use href="#i-deploy"/></svg>
+        </a>
         <a class="rail-item" href="/dashboard" title="Zum Serverpanel" style="text-decoration:none">
             <svg viewBox="0 0 24 24" width="22" height="22"><use href="#i-server"/></svg>
         </a>
@@ -86,9 +97,6 @@
                 <b th:text="${user.username}">Nutzer</b>
                 <span id="ownRole">Bot-Verwaltung</span>
             </div>
-            <button class="icon-btn" id="themeBtn" title="Design wechseln">
-                <svg viewBox="0 0 24 24"><use href="#i-sun"/></svg>
-            </button>
         </div>
     </div>
 
@@ -127,12 +135,4 @@
 
 <script src="/panel-upload.js"></script>
 <script src="/admin-panel.js"></script>
-<div class="theme-switcher-floating">
-                <div class="theme-switcher" role="group" aria-label="Farbschema">
-                    <button class="theme-switch-option" type="button" data-theme-option="system" aria-pressed="true">System</button>
-                    <button class="theme-switch-option" type="button" data-theme-option="dark" aria-pressed="false">Dunkel</button>
-                    <button class="theme-switch-option" type="button" data-theme-option="light" aria-pressed="false">Hell</button>
-                </div>
-</div>
-</body>
 </html>

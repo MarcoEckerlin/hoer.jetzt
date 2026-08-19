@@ -5,8 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title th:text="${'Impressum | ' + botBrand.displayName}">Impressum</title>
     <link rel="stylesheet" href="/public.css" th:href="@{/public.css(v=${assetVersion})}">
-    <!-- Muss vor dem Rendern laufen, sonst blitzt beim Laden kurz das falsche Farbschema auf. -->
+
+    <!-- Ohne defer und vor dem Rendern: sonst blitzt die helle Fassung auf. -->
+
     <script src="/theme.js" th:src="@{/theme.js(v=${assetVersion})}"></script>
+    <!-- Muss vor dem Rendern laufen, sonst blitzt beim Laden kurz das falsche Farbschema auf. -->
 </head>
 <body class="dashboard-body">
 <main class="landing-shell legal-layout">
@@ -39,12 +42,13 @@
         <footer class="portal-footer">
             <a class="ghost-button" href="/">Zur Startseite</a>
             <div class="theme-switcher" role="group" aria-label="Farbschema">
-                <button class="theme-switch-option" type="button" data-theme-option="system" aria-pressed="true">System</button>
-                <button class="theme-switch-option" type="button" data-theme-option="dark" aria-pressed="false">Dunkel</button>
-                <button class="theme-switch-option" type="button" data-theme-option="light" aria-pressed="false">Hell</button>
+                <button class="theme-switch-option" type="button" data-theme-option="system">System</button>
+                <button class="theme-switch-option" type="button" data-theme-option="hell">Hell</button>
+                <button class="theme-switch-option" type="button" data-theme-option="dunkel">Dunkel</button>
             </div>
             <div class="footer-links">
                 <a href="/datenschutz">Datenschutz</a>
+                <a href="/nutzungsbedingungen">Nutzungsbedingungen</a>
                 <a href="/stats">Stats</a>
             </div>
         </footer>

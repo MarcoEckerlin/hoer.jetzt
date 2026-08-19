@@ -343,9 +343,11 @@ public class AudioService {
         return voiceInterceptor;
     }
 
-    public List<RadioStation> getStations() {
-        return radioStationService.findAllForConfiguredBot();
-    }
+    // Hier stand ein getStations() ohne Serverbezug, das das AI-Radio
+    // bedingungslos mitlieferte. Niemand rief es auf - aber der naechste
+    // Aufrufer haette die Freigabe umgangen, ohne es zu merken, denn der
+    // Signatur sah man das nicht an. Wer eine Senderliste braucht, nimmt
+    // getStations(guildId): dort entscheidet die Freigabe des Servers.
 
     /** Name, unter dem sich ein Knoten anmeldet. Er ist der Schluessel fuer Stufe und Session. */
     private static String knotenName(LavalinkNodeSettings node) {
@@ -864,11 +866,53 @@ public class AudioService {
     public List<RadioStation> getStations(String guildId) {
         boolean aiRadio = guildId != null
                 && entitlementService.isEnabled(guildId, GuildFeature.AI_RADIO);
-        return radioStationService.findAllForConfiguredBot(aiRadio);
+        return radioStationService.findAll(guildId, aiRadio);
     }
 
     public CompletableFuture<String> queueTrack(Guild guild, AudioChannel channel, String query) {
         return queueTrackInternal(guild, channel, query, true);
+    }
+
+    /**
+     * Sucht, ohne abzuspielen - die Vorschau in der Weboberflaeche.
+     *
+     * <p>Bisher gab es nur "Suchbegriff rein, erster Treffer laeuft". Bei einem
+     * eindeutigen Titel geht das gut; bei "Wonderwall" landet man beim Cover
+     * eines Zufallskanals und merkt es erst, wenn es spielt. Hier kommt die
+     * Trefferliste zurueck, und der Nutzer waehlt.</p>
+     *
+     * <p>Es laeuft ueber denselben {@code loadMusicItem} wie das Abspielen -
+     * mitsamt SoundCloud-Ausweichweg. Eine zweite Suchlogik waere eine zweite
+     * Wahrheit: die Vorschau zeigte dann Treffer, die das Abspielen nicht
+     * findet, oder umgekehrt.</p>
+     *
+     * @param grenze wie viele Treffer hoechstens zurueckkommen
+     */
+    public CompletableFuture<List<TrackView>> sucheVorschau(Guild guild, String query, int grenze) {
+        if (guild == null || query == null || query.isBlank()) {
+            return CompletableFuture.completedFuture(List.of());
+        }
+
+        return loadMusicItem(getLink(guild), query.trim())
+                .thenApply(ergebnis -> treffer(ergebnis).stream()
+                        .limit(Math.max(1, grenze))
+                        .map(TrackView::from)
+                        .toList())
+                .exceptionally(fehler -> List.of());
+    }
+
+    /** Die Titel eines Ladeergebnisses, egal in welcher Form sie kamen. */
+    private List<Track> treffer(LavalinkLoadResult ergebnis) {
+        if (ergebnis instanceof TrackLoaded geladen) {
+            return List.of(geladen.getTrack());
+        }
+        if (ergebnis instanceof SearchResult suche) {
+            return suche.getTracks();
+        }
+        if (ergebnis instanceof PlaylistLoaded liste) {
+            return liste.getTracks();
+        }
+        return List.of();
     }
 
     private CompletableFuture<String> queueTrackInternal(Guild guild, AudioChannel channel, String query, boolean disableSmartRadio) {
@@ -920,7 +964,7 @@ public class AudioService {
             return startSmartRadio(guild, channel, false);
         }
 
-        Optional<RadioStation> stationOptional = radioStationService.findByIdForConfiguredBot(radioId);
+        Optional<RadioStation> stationOptional = radioStationService.findById(radioId, guild.getId());
         if (stationOptional.isEmpty()) {
             return CompletableFuture.completedFuture("Kein Radiosender mit der ID `" + radioId + "` gefunden.");
         }
@@ -2038,8 +2082,125 @@ public class AudioService {
         String reason = event.getException() == null || event.getException().getMessage() == null
                 ? "Unbekannter Quellenfehler"
                 : event.getException().getMessage();
-        Alert.send("WARN", "AUDIO", "Track-Fehler in Guild " + event.getGuildId() + ": " + reason);
+        // Der Knotenname gehoert dazu.
+        //
+        // Ohne ihn stand in jeder Meldung nur "Track-Fehler in Guild X". Dass
+        // saemtliche Fehler von genau einem Knoten kamen - dessen Cipher-Dienst
+        // nicht aufloesbar war -, liess sich daraus nicht erkennen; es sah nach
+        // einem YouTube-Problem aller Knoten aus.
+        String knoten = event.getNode() == null ? "?" : event.getNode().getName();
+        Alert.send("WARN", "AUDIO",
+                "Track-Fehler in Guild " + event.getGuildId() + " auf Knoten " + knoten + ": " + reason);
+
+        // Der haeufigste Fall zuerst: YouTube laesst den Titel nicht laufen.
+        // Dann lohnt sich SoundCloud, bevor der Titel uebersprungen wird.
+        if (istYoutubeSperre(reason, event.getTrack()) && weicheAufSoundCloudAus(guild, state, event.getTrack())) {
+            return;
+        }
+
         advanceToNextTrackAfterFailure(guild, state, "Quelle nicht abspielbar");
+    }
+
+    /**
+     * Erkennt YouTubes Bot-Abwehr.
+     *
+     * <p>Sie kommt <em>nicht</em> beim Laden, sondern erst beim Abspielen: die
+     * Suche liefert Treffer, der Titel wird in die Warteschlange gelegt, der
+     * Bot betritt den Kanal, setzt den Kanalstatus, antwortet im Chat - und
+     * dann meldet Lavalink {@code AllClientsFailedException: This video
+     * requires login}. Fuer den Hoerer sieht das aus, als tue der Bot alles
+     * richtig und bleibe nur stumm.</p>
+     *
+     * <p>Der Ausweichweg in {@code loadMusicItem} greift hier nicht: der lief
+     * schon durch und war erfolgreich. Deshalb dieselbe Entscheidung noch
+     * einmal an der Stelle, an der es tatsaechlich scheitert.</p>
+     */
+    private boolean istYoutubeSperre(String meldung, Track track) {
+        if (track == null || track.getInfo() == null) {
+            return false;
+        }
+        String quelle = track.getInfo().getSourceName() == null
+                ? "" : track.getInfo().getSourceName().toLowerCase(java.util.Locale.ROOT);
+        if (!quelle.contains("youtube")) {
+            return false;
+        }
+
+        String text = meldung == null ? "" : meldung.toLowerCase(java.util.Locale.ROOT);
+        return text.contains("requires login")
+                || text.contains("all clients failed")
+                || text.contains("sign in")
+                || text.contains("not a bot")
+                || text.contains("playability")
+                // Der generische Abbruch mitten im Lied. Lavalink nennt keinen
+                // Grund, gemessen steckte dahinter aber regelmaessig derselbe
+                // YouTube-Weg. Bei einem YouTube-Titel ist SoundCloud die
+                // bessere Antwort als Stille - schlimmstenfalls scheitert auch
+                // das, und wir landen wieder beim Ueberspringen.
+                || text.contains("something broke when playing")
+                // Der Entschluesselungsdienst des Knotens ist nicht erreichbar.
+                // Kein YouTube-Problem, sondern ein kaputter Knoten - fuer den
+                // Hoerer aber dasselbe, und SoundCloud laeuft trotzdem.
+                || text.contains("unknownhostexception")
+                || text.contains("name or service not known");
+    }
+
+    /**
+     * Denselben Titel ueber SoundCloud holen und sofort abspielen.
+     *
+     * <p>Gesucht wird nach "Interpret Titel", nicht nach der YouTube-Adresse -
+     * die kennt SoundCloud naturgemaess nicht. Das ist ein Naeherungstreffer;
+     * bei einem Live-Mitschnitt oder einem Remix kann etwas anderes kommen als
+     * gemeint. Immer noch besser als Stille, und die Meldung im Chat sagt, was
+     * passiert ist.</p>
+     *
+     * <p>Der Ausweichweg greift genau einmal je Titel: das Ergebnis kommt von
+     * SoundCloud und kann nicht erneut an YouTube scheitern - stolpert es
+     * trotzdem, laeuft der normale Weg (ueberspringen), keine Schleife.</p>
+     */
+    private boolean weicheAufSoundCloudAus(Guild guild, GuildAudioState state, Track gescheitert) {
+        String titel = gescheitert.getInfo().getTitle() == null ? "" : gescheitert.getInfo().getTitle();
+        String interpret = gescheitert.getInfo().getAuthor() == null ? "" : gescheitert.getInfo().getAuthor();
+        String suche = (interpret + " " + titel).trim();
+        if (suche.isBlank()) {
+            return false;
+        }
+
+        Alert.send("INFO", "AUDIO",
+                "YouTube verweigert \"" + safeTitle(titel) + "\" (Anmeldung verlangt) - weiche auf SoundCloud aus.");
+
+        getLink(guild).loadItem("scsearch:" + suche)
+                .toFuture()
+                .orTimeout(FALLBACK_LOAD_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                .thenAccept(ergebnis -> {
+                    Track ersatz = treffer(ergebnis).stream().findFirst().orElse(null);
+                    if (ersatz == null) {
+                        advanceToNextTrackAfterFailure(guild, state, "Quelle nicht abspielbar");
+                        return;
+                    }
+
+                    state.setCurrentTrack(ersatz);
+                    cancelScheduledDisconnect(guild.getIdLong());
+                    playTrack(guild, ersatz, 0L, true)
+                            .thenAccept(ignoriert -> {
+                                updateVoiceChannelStatus(guild, ersatz);
+                                discordLoggingService.logMusicEvent(
+                                        guild,
+                                        "Quelle gewechselt",
+                                        "YouTube gab **" + safeTitle(titel) + "** nicht her. Läuft jetzt über "
+                                                + "SoundCloud: **" + safeTitle(ersatz.getInfo().getTitle()) + "**."
+                                );
+                            })
+                            .exceptionally(fehler -> {
+                                advanceToNextTrackAfterFailure(guild, state, "Quelle nicht abspielbar");
+                                return null;
+                            });
+                })
+                .exceptionally(fehler -> {
+                    advanceToNextTrackAfterFailure(guild, state, "Quelle nicht abspielbar");
+                    return null;
+                });
+
+        return true;
     }
 
     /**

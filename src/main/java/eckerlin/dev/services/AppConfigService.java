@@ -196,6 +196,21 @@ public class AppConfigService {
         return "http://localhost:" + getWebPort();
     }
 
+    /**
+     * Adresse des Support-Servers - eine Einladung, kein Panel-Pfad.
+     *
+     * <p>Leer ist ein gueltiger Zustand und heisst "es gibt keinen": die
+     * Oberflaeche laesst den Knopf dann weg, und der Befehl /support sagt es.
+     * Ein Vorgabewert waere hier falsch - er zeigte auf einen Server, den es
+     * vielleicht gar nicht gibt.</p>
+     */
+    public String getSupportUrl() {
+        return firstNonBlank(
+                loadSettings().map(StoredSettings::supportUrl).orElse(""),
+                web().optString("support_url", "")
+        ).trim();
+    }
+
     public String getNoGuildInviteUrl() {
         String configured = firstNonBlank(
                 loadSettings().map(StoredSettings::noGuildInviteUrl).orElse(""),

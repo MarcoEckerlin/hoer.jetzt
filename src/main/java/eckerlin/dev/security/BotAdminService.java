@@ -114,7 +114,21 @@ public class BotAdminService {
     /**
      * Legt einen Admin an oder aendert dessen Stufe.
      *
-     * @throws IllegalArgumentException wenn versucht wird, {@link BotAdminRole#OWNER} zu vergeben
+     * <p>OWNER darf hier vergeben werden - wer den Aufruf zulaesst, entscheidet
+     * der Controller. Frueher wies diese Methode die Stufe rundweg zurueck, mit
+     * der Begruendung, sie komme aus der Discord-Anwendung. Das stimmt fuer den
+     * <em>ersten</em> Owner, nicht fuer jeden weiteren: Discord kennt genau
+     * einen Anwendungsinhaber, ein Betrieb aber durchaus zwei Verantwortliche.
+     * Der einzige verbleibende Weg war {@code HJ_BOT_ADMIN_IDS} - also SSH auf
+     * beide Knoten und ein Neustart, um eine Person einzutragen.</p>
+     *
+     * <p>Die beiden Schutzregeln bleiben und tragen die Sicherheit allein:
+     * der Discord-Anwendungsinhaber laesst sich nicht herabstufen, und niemand
+     * kann sich die eigene Owner-Stufe nehmen. Damit ist ein Aussperren durch
+     * einen Fehlgriff weiterhin ausgeschlossen.</p>
+     *
+     * @throws IllegalArgumentException bei ungueltiger Kennung, fehlender Stufe,
+     *         Herabstufung des Anwendungsinhabers oder Selbst-Herabstufung
      */
     public void save(String userId, BotAdminRole role, String displayName, String actorUserId) throws SQLException {
         String normalized = userId == null ? "" : userId.trim();
@@ -124,13 +138,19 @@ public class BotAdminService {
         if (role == null) {
             throw new IllegalArgumentException("Es wurde keine Stufe angegeben.");
         }
-        if (role == BotAdminRole.OWNER) {
-            throw new IllegalArgumentException("Die Stufe Owner wird automatisch aus der Discord-Anwendung übernommen und kann nicht vergeben werden.");
-        }
 
         BotAdmin existing = load().get(normalized);
-        if (existing != null && existing.applicationOwner()) {
+        if (existing != null && existing.applicationOwner() && role != BotAdminRole.OWNER) {
             throw new IllegalArgumentException("Der Botinhaber kann nicht herabgestuft werden.");
+        }
+
+        // Sich selbst die Owner-Stufe nehmen ist kein sinnvoller Vorgang, wohl
+        // aber ein moeglicher Fehlgriff - und danach kommt man an die
+        // Verwaltung nicht mehr heran. Ein zweiter Owner kann es weiterhin.
+        boolean selbst = actorUserId != null && actorUserId.trim().equals(normalized);
+        if (selbst && existing != null && existing.role() == BotAdminRole.OWNER && role != BotAdminRole.OWNER) {
+            throw new IllegalArgumentException("Die eigene Owner-Stufe kann nicht abgegeben werden. "
+                    + "Ein anderer Owner kann das tun.");
         }
 
         String sql = """

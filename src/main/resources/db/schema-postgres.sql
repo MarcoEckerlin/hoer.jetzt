@@ -85,6 +85,7 @@ CREATE TABLE IF NOT EXISTS settings (
     llm_max_tokens        int,
     llm_history_turns     int,
     llm_system_message    text,
+    support_url           text,
     created_at            timestamp DEFAULT current_timestamp,
     updated_at            timestamp DEFAULT current_timestamp
 );
@@ -135,6 +136,47 @@ CREATE TABLE IF NOT EXISTS guild_playback_state (
 
 CREATE INDEX IF NOT EXISTS idx_playback_recent
     ON guild_playback_state (bot_id, updated_at);
+
+-- Webradio-Sender.
+--
+-- Die Tabelle fehlte im PostgreSQL-Schema komplett - sie stammte noch aus der
+-- MariaDB-Zeit und wurde beim Umzug nicht mitgeschrieben. Der Fehler war
+-- unsichtbar, weil RadioStationService jede SQLException schluckt und
+-- stattdessen eine Liste mit nur dem AI-Radio zurueckgibt. Aus "die Tabelle
+-- gibt es nicht" wurde so "es gibt keine Sender".
+--
+-- guild_id trennt zwei Faelle in einer Tabelle:
+--   NULL  = globaler Sender, von uns gepflegt, auf jedem Server sichtbar
+--   gesetzt = eigener Sender dieses Servers, nur dort sichtbar
+-- Zwei Tabellen waeren sauberer zu lesen, aber jede Abfrage muesste sie wieder
+-- zusammenfuehren - und die Wiedergabe schlaegt einen Sender ueber seine ID
+-- nach, ohne zu wissen, aus welcher Ecke er kommt.
+CREATE TABLE IF NOT EXISTS radio (
+    id         bigint       NOT NULL DEFAULT nextval('hj_id_seq'),
+    guild_id   varchar(32),
+    name       varchar(160) NOT NULL,
+    url        text         NOT NULL,
+    logo_url   text,
+    sortierung int          NOT NULL DEFAULT 0,
+    angelegt_von varchar(32),
+    angelegt_am timestamp   NOT NULL DEFAULT current_timestamp,
+    PRIMARY KEY (id)
+);
+
+-- Bestehende Installationen aus der MariaDB-Zeit haben die Tabelle schon, aber
+-- ohne diese Spalten.
+-- Adresse des Support-Servers. Muss nachgezogen werden, weil die Tabelle bei
+-- bestehenden Installationen bereits steht und CREATE TABLE IF NOT EXISTS
+-- dort nichts mehr aendert.
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS support_url text;
+
+ALTER TABLE radio ADD COLUMN IF NOT EXISTS guild_id varchar(32);
+ALTER TABLE radio ADD COLUMN IF NOT EXISTS logo_url text;
+ALTER TABLE radio ADD COLUMN IF NOT EXISTS sortierung int NOT NULL DEFAULT 0;
+ALTER TABLE radio ADD COLUMN IF NOT EXISTS angelegt_von varchar(32);
+ALTER TABLE radio ADD COLUMN IF NOT EXISTS angelegt_am timestamp NOT NULL DEFAULT current_timestamp;
+
+CREATE INDEX IF NOT EXISTS idx_radio_guild ON radio (guild_id, sortierung);
 
 -- ---------------------------------------------------------------------------
 -- Module je Server
@@ -437,6 +479,23 @@ CREATE TABLE IF NOT EXISTS cluster_nodes (
 CREATE INDEX IF NOT EXISTS idx_cluster_nodes_meldung
     ON cluster_nodes (letzte_meldung);
 
+-- Soll und Ist getrennt.
+--
+-- shards_von/bis/gesamt sind die *Zuteilung* des Controllers: was diese Node
+-- fahren soll. Die Spalten hier sind das *Ist*: was der Prozess gerade wirklich
+-- faehrt, gemeldet von ihm selbst.
+--
+-- Die Trennung ist nicht Kosmetik. Beide in dieselben Spalten zu schreiben
+-- ergibt eine Schaukel: der Controller traegt die neue Zuteilung ein, die Node
+-- meldet Sekunden spaeter ihren unveraenderten Ist-Stand darueber, der Agent
+-- sieht die Zuteilung nie - und der Controller vergibt sie beim naechsten Lauf
+-- erneut. Die Aufteilung waere nie angekommen.
+--
+-- Wer einen Server sucht, fragt nach dem Ist: dort liegt er tatsaechlich.
+ALTER TABLE cluster_nodes ADD COLUMN IF NOT EXISTS ist_von int;
+ALTER TABLE cluster_nodes ADD COLUMN IF NOT EXISTS ist_bis int;
+ALTER TABLE cluster_nodes ADD COLUMN IF NOT EXISTS ist_gesamt int;
+
 -- Was der Verbund als Ganzes gerade fahren soll. Eine Zeile, id = 1.
 CREATE TABLE IF NOT EXISTS cluster_ziel (
     id              int         NOT NULL DEFAULT 1,
@@ -445,4 +504,24 @@ CREATE TABLE IF NOT EXISTS cluster_ziel (
     gesetzt_von     varchar(64),
     gesetzt_am      timestamp   DEFAULT current_timestamp,
     PRIMARY KEY (id)
+);
+
+-- ---------------------------------------------------------------------------
+-- Schalter des Betriebs
+-- ---------------------------------------------------------------------------
+--
+-- Kleine Werte, die zur Laufzeit umgelegt werden koennen und nicht in die
+-- Instanzkonfiguration gehoeren - allen voran das Autoscaling. Als Umgebung
+-- waeren sie nur mit Neustart aenderbar, und ein Neustart ist genau das, was
+-- man in dem Moment nicht will, in dem das Autoscaling gerade Server anlegt.
+--
+-- Bewusst eine eigene kleine Tabelle statt weiterer Spalten in settings: dort
+-- haengt an jeder Spalte die ganze Kette aus DTOs und Formularen.
+CREATE TABLE IF NOT EXISTS betrieb_schalter (
+    bot_id      int          NOT NULL,
+    schluessel  varchar(64)  NOT NULL,
+    wert        text,
+    geaendert_von varchar(32),
+    geaendert_am timestamp   NOT NULL DEFAULT current_timestamp,
+    PRIMARY KEY (bot_id, schluessel)
 );

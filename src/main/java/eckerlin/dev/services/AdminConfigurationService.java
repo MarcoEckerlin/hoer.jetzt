@@ -84,6 +84,7 @@ public class AdminConfigurationService {
                 configService.getLegalAddress(),
                 configService.getWebBaseUrl(),
                 configService.getNoGuildInviteUrl(),
+                configService.getSupportUrl(),
                 configService.getDiscordClientId(),
                 configService.getDiscordClientSecret(),
                 configService.getDiscordRedirectUri(),
@@ -155,7 +156,9 @@ public class AdminConfigurationService {
                 request.llmTemperature() != null ? request.llmTemperature() : (alt == null ? null : alt.llmTemperature()),
                 request.llmMaxTokens() != null ? request.llmMaxTokens() : (alt == null ? null : alt.llmMaxTokens()),
                 request.llmHistoryTurns() != null ? request.llmHistoryTurns() : (alt == null ? null : alt.llmHistoryTurns()),
-                uebernehmen(request.llmSystemMessage(), alt == null ? null : alt.llmSystemMessage())
+                uebernehmen(request.llmSystemMessage(), alt == null ? null : alt.llmSystemMessage()),
+                // Muss die letzte Angabe bleiben - siehe Kommentar in StoredSettings.
+                uebernehmen(request.supportUrl(), alt == null ? null : alt.supportUrl())
         );
 
         // null heisst "nicht geschickt" und damit "unveraendert". Eine leere

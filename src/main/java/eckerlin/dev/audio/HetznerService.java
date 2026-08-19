@@ -6,6 +6,8 @@ import org.json.JSONObject;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -126,11 +128,15 @@ public class HetznerService {
         // Ein privates Netz ist der Grund, warum der Lavalink-Port nicht im
         // offenen Netz haengen muss. Fehlt es, laeuft alles trotzdem - dann
         // aber mit dem Passwort als einzigem Schutz.
-        JSONArray netze = liste(umgebung("HJ_AUTOSCALE_NETWORK", ""));
+        // Netze und Firewalls nimmt Hetzner nur als Zahl - anders als bei den
+        // SSH-Schluesseln, wo auch der Name geht. Wer "intern" eintrug, bekam
+        // deshalb bisher einen Server ganz ohne privates Netz, und der Grund
+        // stand nur in einer Antwort, die niemand gelesen hat.
+        JSONArray netze = kennungen("networks", umgebung("HJ_AUTOSCALE_NETWORK", ""));
         if (!netze.isEmpty()) {
             anfrage.put("networks", netze);
         }
-        JSONArray firewalls = liste(umgebung("HJ_AUTOSCALE_FIREWALL", ""));
+        JSONArray firewalls = kennungen("firewalls", umgebung("HJ_AUTOSCALE_FIREWALL", ""));
         if (!firewalls.isEmpty()) {
             JSONArray gebaut = new JSONArray();
             for (int i = 0; i < firewalls.length(); i++) {
@@ -146,13 +152,105 @@ public class HetznerService {
 
         Server erzeugt = lesen(antwort.getJSONObject("server"));
         Alert.send("INFO", "AUDIO", "Hetzner-Server %s (%d) angelegt.".formatted(erzeugt.name(), erzeugt.id()));
+        amLastverteiler(erzeugt.id(), true);
         return Optional.of(erzeugt);
+    }
+
+    /**
+     * Haengt einen Server an den Lastverteiler oder nimmt ihn wieder ab.
+     *
+     * <h2>Was das bringt - und was nicht</h2>
+     *
+     * <p>Der Lastverteiler verteilt <b>Web-Verkehr</b> (443 nach 8080). Ein
+     * Knoten, der nur Lavalink faehrt, hat auf 8080 nichts. Hetzner prueft das
+     * und schickt ihm folgerichtig keinen Verkehr - der Eintrag schadet also
+     * nicht, nuetzt aber auch nichts: der Knoten steht dauerhaft als
+     * "unhealthy" in der Uebersicht.</p>
+     *
+     * <p>Sinn ergibt er erst, wenn ein Autoscale-Knoten auch core und web
+     * mitbringt. Bis dahin ist das hier Vorarbeit - und der Grund, warum es
+     * ueber {@code HJ_AUTOSCALE_LOADBALANCER} abschaltbar bleibt.</p>
+     *
+     * <p>Ueber die private Adresse: der Verteiler haengt selbst im Netz, und
+     * Verkehr, der es nicht verlaesst, kostet nichts und ist nicht mitlesbar.</p>
+     */
+    private void amLastverteiler(long serverId, boolean anhaengen) {
+        String bezeichnung = umgebung("HJ_AUTOSCALE_LOADBALANCER", "");
+        if (bezeichnung.isBlank()) {
+            return;
+        }
+        JSONArray verteiler = kennungen("load_balancers", bezeichnung);
+        if (verteiler.isEmpty()) {
+            Alert.send("WARN", "AUDIO", "Lastverteiler \"" + bezeichnung + "\" nicht gefunden.");
+            return;
+        }
+
+        long id = verteiler.getLong(0);
+        String aktion = anhaengen ? "add_target" : "remove_target";
+        JSONObject koerper = new JSONObject()
+                .put("type", "server")
+                .put("server", new JSONObject().put("id", serverId))
+                .put("use_private_ip", true);
+
+        JSONObject antwort = rufe("POST", "/load_balancers/" + id + "/actions/" + aktion, koerper);
+        Alert.send(antwort != null ? "INFO" : "WARN", "AUDIO",
+                "Server %d %s Lastverteiler %s: %s".formatted(
+                        serverId,
+                        anhaengen ? "an" : "von",
+                        bezeichnung,
+                        antwort != null ? "erledigt" : "fehlgeschlagen"));
+    }
+
+    /**
+     * Loest Namen in Hetzner-Kennungen auf.
+     *
+     * <p>Zahlen bleiben Zahlen, alles andere wird als Name nachgeschlagen -
+     * ohne Zwischenspeicher: das passiert nur beim Anlegen eines Servers, und
+     * ein Zwischenspeicher waere genau dann veraltet, wenn jemand im
+     * Hetzner-Fenster etwas umbenennt.</p>
+     *
+     * @param art Ressource in der API, etwa {@code networks} oder {@code firewalls}
+     */
+    private JSONArray kennungen(String art, String wert) {
+        JSONArray ergebnis = new JSONArray();
+        if (wert == null || wert.isBlank()) {
+            return ergebnis;
+        }
+
+        for (String teil : wert.split("[,;\\s]+")) {
+            String sauber = teil.trim();
+            if (sauber.isEmpty()) {
+                continue;
+            }
+            try {
+                ergebnis.put(Long.parseLong(sauber));
+                continue;
+            } catch (NumberFormatException keineZahl) {
+                // Dann eben ueber den Namen.
+            }
+
+            JSONObject antwort = rufe("GET", "/" + art + "?name="
+                    + URLEncoder.encode(sauber, StandardCharsets.UTF_8), null);
+            JSONArray treffer = antwort == null ? null : antwort.optJSONArray(art);
+            if (treffer == null || treffer.isEmpty()) {
+                Alert.send("WARN", "AUDIO",
+                        "In Hetzner gibt es unter " + art + " nichts mit dem Namen \"" + sauber + "\".");
+                continue;
+            }
+            ergebnis.put(treffer.getJSONObject(0).getLong("id"));
+        }
+        return ergebnis;
     }
 
     public boolean loeschen(long id) {
         if (!eingeschaltet()) {
             return false;
         }
+        // Erst abhaengen, dann loeschen. Hetzner raeumt das Ziel beim Loeschen
+        // zwar selbst weg, aber in der Zwischenzeit steht dort ein Server, den
+        // es nicht mehr gibt - und schlaegt der DELETE fehl, bleibt sonst ein
+        // toter Eintrag stehen, der nur noch Alarme erzeugt.
+        amLastverteiler(id, false);
         JSONObject antwort = rufe("DELETE", "/servers/" + id, null);
         boolean geklappt = antwort != null;
         Alert.send(geklappt ? "INFO" : "WARN", "AUDIO",

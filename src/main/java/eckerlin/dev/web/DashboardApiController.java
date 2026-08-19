@@ -3,6 +3,7 @@ package eckerlin.dev.web;
 import eckerlin.dev.audio.AudioService;
 import eckerlin.dev.audio.PlayerState;
 import eckerlin.dev.audio.RadioStation;
+import eckerlin.dev.audio.TrackView;
 import eckerlin.dev.security.GuildEntitlementService;
 import eckerlin.dev.security.AccessGuard;
 import eckerlin.dev.security.GuildFeature;
@@ -14,10 +15,12 @@ import eckerlin.dev.services.DashboardCommandCatalogService;
 import eckerlin.dev.services.DashboardAccessService;
 import eckerlin.dev.services.DiscordLoggingService;
 import eckerlin.dev.services.GuildModuleSettingsService;
+import eckerlin.dev.services.GuildStatistikService;
 import eckerlin.dev.services.InviteTrackerService;
 import eckerlin.dev.services.RadioStationService;
 import eckerlin.dev.services.TicketModuleService;
 import eckerlin.dev.services.TicketTranscriptService;
+import eckerlin.dev.web.dto.AdminGuildStats;
 import eckerlin.dev.web.dto.ActionResponse;
 import eckerlin.dev.web.dto.CategoryChannelView;
 import eckerlin.dev.web.dto.DashboardGuildView;
@@ -36,6 +39,7 @@ import eckerlin.dev.web.dto.PlaybackRequest;
 import eckerlin.dev.web.dto.QueueMoveRequest;
 import eckerlin.dev.web.dto.QueueRemoveRequest;
 import eckerlin.dev.web.dto.RadioRequest;
+import eckerlin.dev.web.dto.RadioSenderRequest;
 import eckerlin.dev.embeds.EmbedVorlageMapper;
 import eckerlin.dev.web.dto.EmbedVorlageDto;
 import eckerlin.dev.web.dto.InviteLinkRequest;
@@ -53,6 +57,8 @@ import eckerlin.dev.web.dto.VerifySettingsRequest;
 import eckerlin.dev.web.dto.VoiceChannelView;
 import eckerlin.dev.web.dto.VolumeRequest;
 import eckerlin.dev.web.dto.WelcomeSettingsRequest;
+import eckerlin.dev.verbund.GuildSammler;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Role;
@@ -64,6 +70,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -74,6 +81,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.nio.charset.StandardCharsets;
+import java.sql.SQLException;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -97,6 +105,7 @@ public class DashboardApiController {
     private final DashboardCommandCatalogService commandCatalogService;
     private final GuildModuleSettingsService settingsService;
     private final InviteTrackerService inviteTrackerService;
+    private final GuildStatistikService guildStatistikService;
     private final DiscordLoggingService discordLoggingService;
     private final RadioStationService radioStationService;
     private final TicketModuleService ticketModuleService;
@@ -104,6 +113,7 @@ public class DashboardApiController {
     private final AppConfigService configService;
     private final AdminAccessService adminAccessService;
     private final AccessGuard accessGuard;
+    private final GuildSammler guildSammler;
     private final CommunityModuleService communityModuleService;
     private final GuildEntitlementService entitlementService;
 
@@ -113,6 +123,7 @@ public class DashboardApiController {
             DashboardCommandCatalogService commandCatalogService,
             GuildModuleSettingsService settingsService,
             InviteTrackerService inviteTrackerService,
+            GuildStatistikService guildStatistikService,
             DiscordLoggingService discordLoggingService,
             RadioStationService radioStationService,
             TicketModuleService ticketModuleService,
@@ -121,13 +132,15 @@ public class DashboardApiController {
             AdminAccessService adminAccessService,
             CommunityModuleService communityModuleService,
             GuildEntitlementService entitlementService,
-            AccessGuard accessGuard
+            AccessGuard accessGuard,
+            GuildSammler guildSammler
     ) {
         this.audioService = audioService;
         this.dashboardAccessService = dashboardAccessService;
         this.commandCatalogService = commandCatalogService;
         this.settingsService = settingsService;
         this.inviteTrackerService = inviteTrackerService;
+        this.guildStatistikService = guildStatistikService;
         this.discordLoggingService = discordLoggingService;
         this.radioStationService = radioStationService;
         this.ticketModuleService = ticketModuleService;
@@ -137,11 +150,21 @@ public class DashboardApiController {
         this.communityModuleService = communityModuleService;
         this.entitlementService = entitlementService;
         this.accessGuard = accessGuard;
+        this.guildSammler = guildSammler;
     }
 
+    /**
+     * Die Server, die der Angemeldete verwalten darf.
+     *
+     * <p>Mit aufgeteilten Shards kennt diese Node nur ihren eigenen Teil -
+     * deshalb fragt {@link GuildSammler} die uebrigen Nodes und legt die
+     * Listen zusammen. Im Einzelbetrieb tut er nichts.</p>
+     */
     @GetMapping("/guilds")
-    public List<DashboardGuildView> guilds(HttpSession session) {
-        return dashboardAccessService.getManageableGuilds(requireDashboardSession(session));
+    public List<DashboardGuildView> guilds(HttpSession session, HttpServletRequest anfrage) {
+        return guildSammler.ergaenzen(
+                dashboardAccessService.getManageableGuilds(requireDashboardSession(session)),
+                anfrage);
     }
 
     @GetMapping("/guilds/{guildId}/config")
@@ -187,12 +210,71 @@ public class DashboardApiController {
     public List<RadioStation> stations(HttpSession session, @RequestParam(required = false) String guildId) {
         DashboardSession dashboardSession = requireDashboardSession(session);
         if (guildId == null || guildId.isBlank()) {
-            return radioStationService.findAllForConfiguredBot(false);
+            return radioStationService.findAll(null, false);
         }
 
         Guild guild = dashboardAccessService.requireGuild(dashboardSession, guildId);
-        return radioStationService.findAllForConfiguredBot(
+        return radioStationService.findAll(guild.getId(),
                 entitlementService.isEnabled(guild.getId(), GuildFeature.AI_RADIO));
+    }
+
+    // ------------------------------------------------------------------
+    // Eigene Sender eines Servers
+    //
+    // Getrennt von /radio/stations: dort steht, was gehoert werden darf
+    // (global + eigene + AI-Radio), hier nur, was dieser Server selbst
+    // gepflegt hat und deshalb auch aendern darf. Eine Liste fuer beides
+    // waere eine Liste, in der die Haelfte der Zeilen keinen Loeschknopf hat.
+    // ------------------------------------------------------------------
+
+    @GetMapping("/guilds/{guildId}/radio")
+    public List<RadioStation> eigeneSender(@PathVariable String guildId, HttpSession session) throws SQLException {
+        DashboardSession dashboardSession = requireDashboardSession(session);
+        Guild guild = dashboardAccessService.requireGuild(dashboardSession, guildId);
+        return radioStationService.findEigene(guild.getId());
+    }
+
+    @PostMapping("/guilds/{guildId}/radio")
+    public ActionResponse senderSpeichern(
+            @PathVariable String guildId,
+            @RequestBody RadioSenderRequest anfrage,
+            HttpSession session
+    ) throws SQLException {
+        DashboardSession dashboardSession = requireDashboardSession(session);
+        Guild guild = dashboardAccessService.requireGuild(dashboardSession, guildId);
+
+        try {
+            radioStationService.speichern(
+                    anfrage.id(),
+                    guild.getId(),
+                    anfrage.name(),
+                    anfrage.url(),
+                    anfrage.logoUrl(),
+                    dashboardSession.userId());
+        } catch (IllegalArgumentException fehler) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, fehler.getMessage());
+        }
+
+        return new ActionResponse(true, anfrage.id() == null
+                ? "Der Sender wurde angelegt."
+                : "Der Sender wurde gespeichert.");
+    }
+
+    @DeleteMapping("/guilds/{guildId}/radio/{id}")
+    public ActionResponse senderLoeschen(
+            @PathVariable String guildId,
+            @PathVariable int id,
+            HttpSession session
+    ) throws SQLException {
+        DashboardSession dashboardSession = requireDashboardSession(session);
+        Guild guild = dashboardAccessService.requireGuild(dashboardSession, guildId);
+
+        try {
+            radioStationService.loeschen(id, guild.getId());
+        } catch (IllegalArgumentException fehler) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, fehler.getMessage());
+        }
+        return new ActionResponse(true, "Der Sender wurde entfernt.");
     }
 
     @GetMapping("/guilds/{guildId}/voice-channels")
@@ -207,6 +289,20 @@ public class DashboardApiController {
                         Math.max(8, channel.getBitrate() / 1000)
                 ))
                 .toList();
+    }
+
+    /**
+     * Zahlen zu diesem Server - fuer den Serverbetreiber.
+     *
+     * <p>Dieselben Werte wie im Betrieb, nur ueber die Dashboard-Rechte statt
+     * ueber die Bot-Verwaltung. Wer sein Panel oeffnen darf, darf auch wissen,
+     * was auf seinem Server los war; die Zahlen betreffen ausschliesslich ihn
+     * und enthalten keine offenen Discord-Identitaeten.</p>
+     */
+    @GetMapping("/guilds/{guildId}/stats")
+    public AdminGuildStats guildStats(@PathVariable String guildId, HttpSession session) {
+        Guild guild = dashboardAccessService.requireGuild(requireDashboardSession(session), guildId);
+        return guildStatistikService.fuerServer(guild.getId());
     }
 
     @GetMapping("/guilds/{guildId}/player")
@@ -262,6 +358,33 @@ public class DashboardApiController {
                         PLAYER_ACTION_TIMEOUT_SECONDS,
                         TimeUnit.SECONDS
                 );
+    }
+
+    /**
+     * Trefferliste zu einem Suchbegriff - ohne etwas abzuspielen.
+     *
+     * <p>Bewusst {@code POST}: der Suchbegriff gehoert in den Rumpf und nicht
+     * in die Adresszeile. In der Adresse landete er im Zugriffsprotokoll des
+     * Reverse-Proxy und im Verlauf des Browsers.</p>
+     *
+     * <p>Kein Sprachkanal noetig - gesucht wird ueber den Knoten des Servers,
+     * nicht ueber den Spieler. Man kann also stoebern, bevor man beitritt.</p>
+     */
+    @PostMapping("/guilds/{guildId}/player/search")
+    public CompletableFuture<List<TrackView>> search(
+            @PathVariable String guildId,
+            @RequestBody PlaybackRequest request,
+            HttpSession session
+    ) {
+        DashboardSession dashboardSession = requireDashboardSession(session);
+        Guild guild = dashboardAccessService.requireGuild(dashboardSession, guildId);
+
+        if (request.query() == null || request.query().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Bitte einen Suchbegriff oder eine URL angeben.");
+        }
+
+        return audioService.sucheVorschau(guild, request.query(), 12)
+                .completeOnTimeout(List.of(), PLAYER_ACTION_TIMEOUT_SECONDS, TimeUnit.SECONDS);
     }
 
     @PostMapping("/guilds/{guildId}/player/radio")
@@ -770,8 +893,20 @@ public class DashboardApiController {
 
         List<GuildModuleSettingsService.TicketPanel> panels = new ArrayList<>();
         for (TicketPanelRequest panelRequest : request.panels() == null ? List.<TicketPanelRequest>of() : request.panels()) {
-            if (panelRequest == null || panelRequest.publishChannelId() == null || panelRequest.publishChannelId().isBlank()) {
+            if (panelRequest == null) {
                 continue;
+            }
+
+            // Eine Tafel ohne Kanal wurde hier frueher mit "continue"
+            // uebersprungen. Der Aufruf meldete danach Erfolg, gespeichert war
+            // aber nichts - wer eine Tafel anlegte und den Kanal vergass,
+            // bekam "Gespeichert" und eine leere Liste zurueck und konnte den
+            // Fehler nicht finden. Jetzt sagt der Server, was fehlt.
+            if (panelRequest.publishChannelId() == null || panelRequest.publishChannelId().isBlank()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Für die Tafel \"" + (panelRequest.title() == null || panelRequest.title().isBlank()
+                                ? "ohne Überschrift" : panelRequest.title())
+                        + "\" fehlt der Kanal. Ohne ihn kann der Bot die Nachricht nirgends veröffentlichen.");
             }
 
             requireTextChannelIfPresent(guild, panelRequest.publishChannelId());
@@ -802,7 +937,8 @@ public class DashboardApiController {
             }
 
             if (enabled && options.isEmpty()) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Jedes Ticket-Panel braucht mindestens eine Dropdown-Option.");
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Jede Tafel braucht mindestens ein Anliegen - sonst gibt es keinen Knopf zum Drücken.");
             }
 
             GuildModuleSettingsService.TicketPanel panel = new GuildModuleSettingsService.TicketPanel();

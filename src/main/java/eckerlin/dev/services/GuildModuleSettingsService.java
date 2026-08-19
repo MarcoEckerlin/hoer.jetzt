@@ -695,6 +695,22 @@ public class GuildModuleSettingsService {
         persistQuietly(guildId, guildState);
     }
 
+    /**
+     * Vergibt die naechste Ticketnummer und merkt sie sich.
+     *
+     * <p>Eigene Methode, weil {@link #getTicketState} eine Kopie liefert - wer
+     * dort hochzaehlt, zaehlt ins Leere. {@code synchronized} macht Lesen und
+     * Schreiben zu einem Schritt: zwei gleichzeitig geoeffnete Tickets
+     * bekaemen sonst dieselbe Nummer, und die steht im Kanalnamen.</p>
+     */
+    public synchronized int naechsteTicketNummer(String guildId) {
+        GuildState guildState = getOrCreateGuildState(guildId);
+        int nummer = guildState.getTickets().getTicketZaehler() + 1;
+        guildState.getTickets().setTicketZaehler(nummer);
+        persistQuietly(guildId, guildState);
+        return nummer;
+    }
+
     public synchronized void updateActiveTicket(String guildId, ActiveTicket activeTicket) {
         if (activeTicket == null || activeTicket.getChannelId().isBlank()) {
             return;
@@ -2503,6 +2519,15 @@ public class GuildModuleSettingsService {
         private String transcriptChannelId = "";
         private List<TicketPanel> panels = new ArrayList<>();
         private Map<String, ActiveTicket> activeTickets = new LinkedHashMap<>();
+        /**
+         * Fortlaufende Nummer aller je geoeffneten Tickets dieses Servers.
+         *
+         * <p>Zaehlt weiter, auch wenn Tickets geschlossen werden - sonst
+         * bekaemen zwei Kanaele nacheinander dieselbe Nummer, und genau die
+         * steht im Kanalnamen. Alte Datensaetze kennen das Feld nicht und
+         * beginnen deshalb bei 0.</p>
+         */
+        private int ticketZaehler;
 
         public TicketSystemState copy() {
             TicketSystemState copy = new TicketSystemState();
@@ -2512,7 +2537,16 @@ public class GuildModuleSettingsService {
             Map<String, ActiveTicket> activeCopies = new LinkedHashMap<>();
             activeTickets.forEach((channelId, ticket) -> activeCopies.put(channelId, ticket.copy()));
             copy.setActiveTickets(activeCopies);
+            copy.setTicketZaehler(ticketZaehler);
             return copy;
+        }
+
+        public int getTicketZaehler() {
+            return ticketZaehler;
+        }
+
+        public void setTicketZaehler(int ticketZaehler) {
+            this.ticketZaehler = ticketZaehler;
         }
 
         public boolean isEnabled() {
@@ -2852,6 +2886,8 @@ public class GuildModuleSettingsService {
         private boolean paused;
         private String controlMessageId = "";
         private String createdAt = Instant.now().toString();
+        /** Die Nummer aus {@link TicketSystemState#getTicketZaehler()} bei der Eroeffnung. */
+        private int nummer;
 
         public ActiveTicket copy() {
             ActiveTicket copy = new ActiveTicket();
@@ -2866,6 +2902,7 @@ public class GuildModuleSettingsService {
             copy.setPaused(paused);
             copy.setControlMessageId(controlMessageId);
             copy.setCreatedAt(createdAt);
+            copy.setNummer(nummer);
             return copy;
         }
 
@@ -2943,6 +2980,14 @@ public class GuildModuleSettingsService {
 
         public String getControlMessageId() {
             return controlMessageId;
+        }
+
+        public int getNummer() {
+            return nummer;
+        }
+
+        public void setNummer(int nummer) {
+            this.nummer = nummer;
         }
 
         public void setControlMessageId(String controlMessageId) {

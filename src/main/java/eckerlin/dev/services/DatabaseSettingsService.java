@@ -59,7 +59,9 @@ public class DatabaseSettingsService {
                        llm_temperature,
                        llm_max_tokens,
                        llm_history_turns,
-                       llm_system_message
+                       llm_system_message,
+                    support_url,
+                       support_url
                 FROM settings
                 WHERE id = ?
                 LIMIT 1
@@ -103,7 +105,8 @@ public class DatabaseSettingsService {
                         decimal(resultSet, "llm_temperature"),
                         integer(resultSet, "llm_max_tokens"),
                         integer(resultSet, "llm_history_turns"),
-                        text(resultSet, "llm_system_message")
+                        text(resultSet, "llm_system_message"),
+                        text(resultSet, "support_url")
                 ));
             }
         } catch (SQLException exception) {
@@ -385,6 +388,7 @@ public class DatabaseSettingsService {
                     llm_max_tokens = ?,
                     llm_history_turns = ?,
                     llm_system_message = ?,
+                    support_url = ?,
                     -- MariaDB pflegte das ueber ON UPDATE current_timestamp.
                     -- Das gibt es in PostgreSQL nicht, also hier von Hand -
                     -- sonst steht in updated_at fuer immer das Anlegedatum.
@@ -430,8 +434,9 @@ public class DatabaseSettingsService {
                     llm_max_tokens,
                     llm_history_turns,
                     llm_system_message,
+                    support_url,
                     id
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """;
 
         try (PreparedStatement statement = connection.prepareStatement(insertSql)) {
@@ -627,7 +632,12 @@ public class DatabaseSettingsService {
             statement.setInt(27, settings.llmHistoryTurns());
         }
         statement.setString(28, blankToEmpty(settings.llmSystemMessage()));
-        statement.setInt(29, botId);
+        statement.setString(29, blankToEmpty(settings.supportUrl()));
+        // Die Kennung steht immer als LETZTER Parameter - im UPDATE als
+        // "WHERE id = ?", im INSERT als letzte Spalte. Wer hier eine Spalte
+        // ergaenzt, muss diese Zahl mitziehen; sonst schreibt er entweder in
+        // die falsche Spalte oder laesst den letzten Parameter ungesetzt.
+        statement.setInt(30, botId);
     }
 
     private String text(ResultSet resultSet, String column) throws SQLException {

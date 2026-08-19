@@ -5,168 +5,426 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title th:text="${'Datenschutz | ' + botBrand.displayName}">Datenschutz</title>
     <link rel="stylesheet" href="/public.css" th:href="@{/public.css(v=${assetVersion})}">
-    <!-- Muss vor dem Rendern laufen, sonst blitzt beim Laden kurz das falsche Farbschema auf. -->
+
+    <!-- Ohne defer und vor dem Rendern: sonst blitzt die helle Fassung auf. -->
+
     <script src="/theme.js" th:src="@{/theme.js(v=${assetVersion})}"></script>
+    <!-- Muss vor dem Rendern laufen, sonst blitzt beim Laden kurz das falsche Farbschema auf. -->
 </head>
 <body class="dashboard-body">
 <main class="landing-shell legal-layout">
     <section class="hero-card legal-card">
         <p class="eyebrow">Datenschutz</p>
-        <h1 th:text="${'Datenschutzhinweise für ' + botBrand.displayName}">Datenschutzhinweise</h1>
+        <h1 th:text="${'Datenschutzerklärung für ' + botBrand.displayName}">Datenschutzerklärung</h1>
         <p class="hero-copy">
-            Diese private Weboberfläche verarbeitet personenbezogene Daten nur, soweit das für den Discord-Login,
-            die Nutzung des Dashboards, die Verwaltung des Bots, die Bereitstellung hochgeladener Bilder und die
-            pseudonymisierte Hörstatistik technisch oder organisatorisch erforderlich ist.
+            Diese Erklärung beschreibt, welche personenbezogenen Daten bei der Nutzung des Discord-Bots
+            <span th:text="${botBrand.displayName}">des Bots</span> und des Web-Dashboards verarbeitet
+            werden, zu welchem Zweck, auf welcher Rechtsgrundlage und wie lange.
         </p>
 
         <div class="copy-list">
             <div>
-                <strong>1. Verantwortliche Stelle</strong>
+                <strong>Verantwortlicher</strong>
                 <p>
-                    <span th:text="${legalOwnerName != null and !#strings.isEmpty(legalOwnerName) ? legalOwnerName : 'Name noch nicht hinterlegt'}">Name</span><br>
-                    <span th:if="${legalAddress != null and !#strings.isEmpty(legalAddress)}" th:text="${legalAddress}">Adresse</span>
-                    <span th:if="${legalAddress == null or #strings.isEmpty(legalAddress)}">Postanschrift noch nicht hinterlegt</span><br>
-                    <span th:text="${legalEmail != null and !#strings.isEmpty(legalEmail) ? legalEmail : 'Kontaktadresse noch nicht hinterlegt'}">kontakt@example.com</span>
+                    <span th:text="${legalOwnerName != null and !#strings.isEmpty(legalOwnerName) ? legalOwnerName : ''}">Name</span><br>
+                    <span th:text="${legalAddress != null and !#strings.isEmpty(legalAddress) ? legalAddress : ''}">Anschrift</span><br>
+                    <span th:text="${legalEmail != null and !#strings.isEmpty(legalEmail) ? legalEmail : ''}">kontakt@example.com</span>
+                </p>
+                <p>
+                    Ein Datenschutzbeauftragter ist nicht benannt. Die Voraussetzungen des Art. 37 DSGVO
+                    bzw. § 38 BDSG liegen nach derzeitiger Einschätzung nicht vor: es findet keine
+                    umfangreiche regelmäßige Überwachung statt, und die Kerntätigkeit besteht nicht in
+                    der Verarbeitung besonderer Datenkategorien.
                 </p>
             </div>
+
             <div>
-                <strong>2. Aufruf der Website</strong>
+                <strong>Rolle gegenüber Discord und den Server-Betreibern</strong>
                 <p>
-                    Beim Aufruf der Website werden technisch notwendige Verbindungsdaten verarbeitet, damit Seiteninhalte ausgeliefert,
-                    Fehler erkannt und Angriffe abgewehrt werden können. Dazu können insbesondere IP-Adresse, Datum und Uhrzeit des
-                    Zugriffs, aufgerufene Adresse, Browser-Informationen und technische Header gehören.
+                    Discord wird von der Discord Netherlands B.V. bzw. Discord Inc. betrieben. Diese sind
+                    eigenständige Verantwortliche; für die Verarbeitung innerhalb von Discord gilt deren
+                    <a href="https://discord.com/privacy" target="_blank" rel="noopener">Datenschutzerklärung</a>.
+                    Dieser Dienst gehört nicht zu Discord.
                 </p>
                 <p>
-                    Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DSGVO. Das berechtigte Interesse liegt im sicheren und stabilen Betrieb der Website.
+                    Soweit ein Server-Betreiber ueber den Bot eigene Verarbeitungen veranlasst -
+                    etwa Ticket-Verlaeufe oder Protokolleintraege in seinem Server -, geschieht das in
+                    seinem Auftrag und nach seiner Weisung. Ein Vertrag zur Auftragsverarbeitung nach
+                    Art. 28 DSGVO wird auf Anfrage ueber die oben genannte Adresse geschlossen.
                 </p>
             </div>
+
             <div>
-                <strong>3. Discord-Login und Dashboard</strong>
+                <strong>Aufruf der Website</strong>
                 <p>
-                    Wenn du dich über Discord anmeldest, werden die für die Authentifizierung und Rechteprüfung benötigten Daten verarbeitet.
-                    Dazu gehören insbesondere Discord-ID, Benutzername, Avatar-URL, Discord-Zugriffstoken sowie die Information,
-                    welche Server du verwalten darfst.
+                    Beim Aufruf werden Verbindungsdaten verarbeitet: IP-Adresse, Zeitpunkt, aufgerufene
+                    Adresse, HTTP-Status, übertragene Datenmenge, Referrer und User-Agent. Sie entstehen im
+                    Zugriffsprotokoll des Webservers und sind für die Auslieferung, die Fehlersuche und die
+                    Abwehr von Angriffen erforderlich.
                 </p>
                 <p>
-                    Diese Verarbeitung erfolgt, um dir den geschützten Zugriff auf das Dashboard zu ermöglichen und um sicherzustellen,
-                    dass nur berechtigte Personen Server- und Bot-Einstellungen ändern können. Rechtsgrundlage ist Art. 6 Abs. 1 lit. b DSGVO,
-                    soweit die Verarbeitung zur Bereitstellung der von dir angeforderten Dashboard-Funktion erforderlich ist,
-                    sowie ergänzend Art. 6 Abs. 1 lit. f DSGVO.
+                    <em>Rechtsgrundlage:</em> Art. 6 Abs. 1 lit. f DSGVO — berechtigtes Interesse am
+                    sicheren und störungsfreien Betrieb.<br>
+                    <em>Speicherdauer:</em> Die Protokolle rollieren automatisch: je Dienst hoechstens
+                    drei Dateien zu 10 MB. Aeltere Eintraege werden dabei ueberschrieben; in der Praxis
+                    liegen damit wenige Tage vor. Bei einer Neuerstellung des Containers entfallen sie
+                    vollstaendig.<br>
+                    <em>Empfänger:</em> Hetzner Online GmbH als Hoster.
                 </p>
             </div>
+
             <div>
-                <strong>4. Server-, Bot- und Moduldaten</strong>
+                <strong>Anmeldung über Discord (OAuth 2.0)</strong>
                 <p>
-                    Im Dashboard gespeicherte Konfigurationen, zum Beispiel Modulstatus, Channel-Zuordnungen, Ticket-Panel-Daten,
-                    Verify-Einstellungen, Welcome-Texte, Reaction-Roles, Audio-/Radio-Konfigurationen oder administrative Bot-Einstellungen,
-                    werden in der zentralen Datenbank gespeichert.
+                    Für das Dashboard erfolgt die Anmeldung über Discord. Dabei werden von Discord
+                    abgerufen und in der Sitzung gespeichert:
+                </p>
+                <ul>
+                    <li>Discord-Benutzer-ID,</li>
+                    <li>Benutzername und Anzeigename,</li>
+                    <li>Adresse des Profilbilds (Avatar),</li>
+                    <li>Liste der Server, auf denen eine Berechtigung besteht, samt Berechtigungsflags,</li>
+                </ul>
+                <p>
+                    <em>Zweck:</em> Anmeldung, Zuordnung der verwaltbaren Server, Rechteprüfung.<br>
+                    <em>Rechtsgrundlage:</em> Art. 6 Abs. 1 lit. b DSGVO — Durchführung des
+                    Nutzungsverhältnisses; die Anmeldung erfolgt auf ausdrückliche Anforderung.<br>
+                    <em>Speicherort:</em> Sitzungstabelle der Datenbank, gespiegelt auf alle Server des
+                    Verbunds.<br>
+                    <em>Speicherdauer:</em> 30 Tage seit der letzten Nutzung; danach wird die Sitzung
+                    automatisch entfernt. Eine Abmeldung löscht sie sofort.
                 </p>
                 <p>
-                    Rechtsgrundlage ist Art. 6 Abs. 1 lit. b DSGVO für die von dir ausgelöste Konfiguration sowie Art. 6 Abs. 1 lit. f DSGVO
-                    für den sicheren und nachvollziehbaren Betrieb des Bots.
+                    Der von Discord ausgestellte Zugriffstoken wird ausschliesslich waehrend des
+                    Anmeldevorgangs verwendet und danach verworfen. Er wird nicht gespeichert.
                 </p>
             </div>
+
             <div>
-                <strong>5. Pseudonymisierte Hörstatistik und öffentliche Stats-Seite</strong>
+                <strong>Cookies</strong>
+                <p>Es werden ausschließlich technisch notwendige Cookies gesetzt:</p>
+                <ul>
+                    <li>
+                        <span class="mono">discordbot_session</span> — Sitzungskennung für die Anmeldung.
+                        Laufzeit 30 Tage, <span class="mono">HttpOnly</span>,
+                        <span class="mono">SameSite=Lax</span>.
+                    </li>
+                    <li>
+                        <span class="mono">discordbot_cookie_notice</span> — speichert die Entscheidung
+                        über den Cookie-Hinweis, damit dieser nicht erneut erscheint.
+                    </li>
+                </ul>
                 <p>
-                    Für Musik-, Radio- und AI-Radio-Wiedergaben werden Hörvorgänge pseudonymisiert ausgewertet. Dabei werden insbesondere
-                    Titel, Künstler, Quelle, Wiedergabeart, Hördauer, Zeitpunkte, Serverbezug und eine intern gehashte Hörer-Kennung verarbeitet.
-                    Offene Discord-IDs, Nutzernamen oder Avatare werden auf der öffentlichen Stats-Seite nicht veröffentlicht.
-                </p>
-                <p>
-                    Die öffentliche Seite unter <code>/stats</code> zeigt ausschließlich aggregierte Werte wie Live-Hörer, Hördauer,
-                    eindeutige pseudonymisierte Hörer, Top-Titel, Top-Quellen und Tagesübersichten. Die interne Hash-Kennung dient nur dazu,
-                    wiederkehrende Hörer statistisch zählen zu können, ohne öffentliche Personenbezüge anzuzeigen.
-                </p>
-                <p>
-                    Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DSGVO. Das berechtigte Interesse liegt in der technischen Betriebsanalyse,
-                    einer nachvollziehbaren Musiknutzungs-Statistik und der Bereitstellung einer öffentlichen Gesamtübersicht,
-                    ohne offene Identitätsdaten zu veröffentlichen.
+                    Cookies zu Analyse-, Reichweiten- oder Werbezwecken werden nicht gesetzt. Es sind keine
+                    Zählpixel, keine externen Schriftarten und keine Einbindungen von Drittanbietern auf den
+                    Seiten enthalten. Da ausschließlich unbedingt erforderliche Cookies eingesetzt werden,
+                    ist eine Einwilligung nach § 25 Abs. 2 Nr. 2 TDDDG nicht erforderlich.<br>
+                    <em>Rechtsgrundlage:</em> Art. 6 Abs. 1 lit. f DSGVO.
                 </p>
             </div>
+
             <div>
-                <strong>6. Hochgeladene Bilder</strong>
+                <strong>Verarbeitung im Rahmen der Bot-Funktionen</strong>
                 <p>
-                    Wenn du Bilddateien über das Dashboard oder den Admin-Bereich hochlädst, werden die Bilddaten in Base64-kodierter Form
-                    in der zentralen Datenbank gespeichert. Zusätzlich werden technische Angaben wie Dateiname, Dateityp, Dateigröße,
-                    Upload-Zeitpunkt und die hochladende Discord-ID verarbeitet.
+                    Die folgende Übersicht nennt alle Daten, die der Dienst dauerhaft speichert. Alle
+                    Angaben beziehen sich auf die Datenbank des Anbieters, nicht auf Discord selbst.
+                </p>
+
+                <div class="datentabelle-huelle">
+                    <table class="datentabelle">
+                        <thead>
+                        <tr>
+                            <th>Daten</th>
+                            <th>Zweck</th>
+                            <th>Rechtsgrundlage</th>
+                            <th>Dauer</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr>
+                            <td>Server-ID, Kanal- und Rollen-IDs, Modul-Einstellungen als Text</td>
+                            <td>Speichern der Server-Konfiguration (Module, Rechte, Vorlagen)</td>
+                            <td>Art. 6 Abs. 1 lit. b und lit. f DSGVO</td>
+                            <td>bis zur Änderung oder Löschung durch den Server</td>
+                        </tr>
+                        <tr>
+                            <td>Discord-Benutzer-ID und Anzeigename von Bot-Administratoren, vergebene Stufe, Zeitpunkt</td>
+                            <td>Zugang zum Verwaltungsbereich</td>
+                            <td>Art. 6 Abs. 1 lit. f DSGVO — kontrollierter Zugriff</td>
+                            <td>bis zum Entzug der Berechtigung</td>
+                        </tr>
+                        <tr>
+                            <td>Geheimnis für den zweiten Faktor (TOTP), sofern eingerichtet</td>
+                            <td>Absicherung kostenauslösender Verwaltungsvorgänge</td>
+                            <td>Art. 6 Abs. 1 lit. f DSGVO — Schutz vor Missbrauch</td>
+                            <td>bis zur Neueinrichtung oder Löschung des Zugangs</td>
+                        </tr>
+                        <tr>
+                            <td>Protokoll der Verwaltungsvorgänge: Benutzer-ID, Name, Aktion, Ziel, Zeitpunkt</td>
+                            <td>Nachvollziehbarkeit von Änderungen im Verwaltungsbereich</td>
+                            <td>Art. 6 Abs. 1 lit. f DSGVO — Missbrauchserkennung</td>
+                            <td th:text="${fristAudit}">365 Tage</td>
+                        </tr>
+                        <tr>
+                            <td>Ticket-Verläufe: Server- und Kanal-ID, Benutzer-ID und Anzeigename des Erstellers, Betreff, vollständiger Gesprächstext</td>
+                            <td>Nachlesbarkeit geschlossener Tickets für das Server-Team</td>
+                            <td>Art. 6 Abs. 1 lit. f DSGVO — Interesse des Server-Betreibers</td>
+                            <td th:text="${fristTickets}">365 Tage</td>
+                        </tr>
+                        <tr>
+                            <td>Abgespielte Titel: Server-ID, Titel, Interpret, Adresse, Quelle, Dauer, Zeitpunkt</td>
+                            <td>Verlauf und öffentliche Statistik</td>
+                            <td>Art. 6 Abs. 1 lit. f DSGVO</td>
+                            <td th:text="${fristTitel}">365 Tage</td>
+                        </tr>
+                        <tr>
+                            <td>Hörvorgänge: <strong>pseudonymer Hörer-Schlüssel</strong>, Server-ID, Titel, Hördauer, Zeitraum</td>
+                            <td>Statistik über Hörerzahlen und beliebte Titel</td>
+                            <td>Art. 6 Abs. 1 lit. f DSGVO</td>
+                            <td th:text="${fristHoerer}">365 Tage</td>
+                        </tr>
+                        <tr>
+                            <td>Wiedergabezustand: Server-ID, Sprachkanal-ID, laufender Titel, Warteschlange</td>
+                            <td>Fortsetzen der Wiedergabe nach einem Neustart</td>
+                            <td>Art. 6 Abs. 1 lit. b DSGVO</td>
+                            <td>wird bei Beendigung der Wiedergabe gelöscht</td>
+                        </tr>
+                        <tr>
+                            <td>Radiosender: Name, Stream-Adresse, Logo-Adresse, Server-ID, Benutzer-ID des Erstellers</td>
+                            <td>Eigene Sender eines Servers bereitstellen</td>
+                            <td>Art. 6 Abs. 1 lit. b DSGVO</td>
+                            <td>bis zur Löschung durch den Server</td>
+                        </tr>
+                        <tr>
+                            <td>Hochgeladene Bilder: Benutzer-ID des Hochladenden, Dateiname, Typ, Größe, Bilddaten</td>
+                            <td>Bilder in Willkommensnachrichten und Vorlagen</td>
+                            <td>Art. 6 Abs. 1 lit. b DSGVO</td>
+                            <td>bis zur Löschung durch den Server</td>
+                        </tr>
+                        <tr>
+                            <td>Freigaben je Server: Server-ID, Funktion, Grenzwert, Benutzer-ID des Erteilenden</td>
+                            <td>Verwaltung rechenintensiver Funktionen</td>
+                            <td>Art. 6 Abs. 1 lit. f DSGVO</td>
+                            <td>bis zum Entzug</td>
+                        </tr>
+                        <tr>
+                            <td>Betriebsmeldungen des Systems (kann Server-IDs enthalten)</td>
+                            <td>Fehlersuche und Betriebsüberwachung</td>
+                            <td>Art. 6 Abs. 1 lit. f DSGVO</td>
+                            <td th:text="${fristProtokoll}">90 Tage</td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div>
+                <strong>Pseudonyme Hörstatistik</strong>
+                <p>
+                    Für die Statistik wird die Discord-Benutzer-ID nicht im Klartext gespeichert, sondern
+                    als SHA-256-Prüfwert über einen gleichbleibenden geheimen Zusatz und die ID.
                 </p>
                 <p>
-                    Die Bilder werden verwendet, um Branding, Welcome-Karten, Verify-Nachrichten, Ticket-Panels oder andere Bot-
-                    und Webmodule darzustellen. Dafür werden die Bilder über eine Medien-URL bereitgestellt. Wenn du ein hochgeladenes Bild
-                    in einem Discord-Embed oder auf einer öffentlichen Webseite nutzt, ist dieses Bild unter der jeweiligen Medien-URL abrufbar.
-                </p>
-                <p>
-                    Bitte lade ausschließlich Bilder hoch, für die du die erforderlichen Nutzungsrechte besitzt. Enthält ein Bild erkennbare Personen,
-                    musst du zusätzlich sicherstellen, dass die Veröffentlichung datenschutz- und persönlichkeitsrechtlich zulässig ist.
-                    Rechtsgrundlage für die technische Speicherung und Auslieferung ist Art. 6 Abs. 1 lit. b DSGVO beziehungsweise
-                    Art. 6 Abs. 1 lit. f DSGVO; für die rechtliche Zulässigkeit des von dir hochgeladenen Inhalts bleibst du als hochladende Person verantwortlich.
+                    Dieses Verfahren ist eine <strong>Pseudonymisierung</strong> im Sinne des Art. 4 Nr. 5
+                    DSGVO, <strong>keine Anonymisierung</strong>: Wer den geheimen Zusatz kennt, kann den
+                    Wert für eine bekannte Benutzer-ID nachrechnen und die Einträge wieder zuordnen. Die
+                    Daten bleiben deshalb personenbezogen, und die Betroffenenrechte im Abschnitt „Ihre Rechte“ gelten
+                    für sie uneingeschränkt. Für eine Löschung oder Auskunft wird die Discord-Benutzer-ID
+                    benötigt, um den zugehörigen Wert zu bilden.
                 </p>
             </div>
+
             <div>
-                <strong>7. Cookies und Session</strong>
+                <strong>Ticket-Verläufe</strong>
                 <p>
-                    Die Website verwendet nur technisch notwendige Cookies. Dazu gehören insbesondere ein Session-Cookie für den geschützten
-                    Login-Bereich sowie ein Cookie, das die Auswahl im Cookie-Hinweis speichert. Diese Cookies sind erforderlich,
-                    damit die Anmeldung erhalten bleibt, geschützte Bereiche funktionieren und die Website nicht bei jedem Aufruf
-                    erneut dieselbe Entscheidung abfragt.
+                    Wird ein Ticket geschlossen, kann der Gesprächsverlauf als Text gespeichert werden.
+                    Dieser Text enthält, was die Beteiligten geschrieben haben — also möglicherweise auch
+                    Namen, Kontaktdaten, Beschwerden oder andere persönliche Angaben, die niemand vorab
+                    prüft. In besonderen Fällen können darunter auch besondere Kategorien
+                    personenbezogener Daten nach Art. 9 DSGVO sein, etwa Gesundheitsangaben.
                 </p>
                 <p>
-                    Rechtsgrundlage für das Speichern und Auslesen technisch notwendiger Informationen ist § 25 Abs. 2 Nr. 2 TDDDG.
-                    Die anschließende Verarbeitung personenbezogener Daten erfolgt auf Grundlage von Art. 6 Abs. 1 lit. f DSGVO.
-                </p>
-            </div>
-            <div>
-                <strong>8. Empfänger und eingesetzte Dienste</strong>
-                <p>
-                    Empfänger der Daten können technische Dienstleister sein, die für Hosting, Datenbankbetrieb, Reverse Proxy,
-                    Netzwerkbetrieb oder Serverinfrastruktur eingesetzt werden. Bei Nutzung des Discord-Logins oder bei der Verwendung
-                    von Discord als Plattform werden Daten außerdem gegenüber Discord offengelegt beziehungsweise übermittelt.
-                    Discord verarbeitet diese Daten eigenverantwortlich.
-                </p>
-                <p>
-                    Sofern Discord oder andere angebundene Dienste Daten in Drittländern verarbeiten, kann dabei auch eine Übermittlung
-                    in Staaten außerhalb der Europäischen Union stattfinden. Auf die Verarbeitung durch diese externen Dienste besteht
-                    nur insoweit Einfluss, wie es die technische Integration zulässt.
+                    <em>Zugriff:</em> das Team des jeweiligen Servers im Rahmen der dort vergebenen Rechte
+                    sowie der Anbieter im Rahmen des technischen Betriebs.<br>
+                    <em>Empfehlung an Nutzende:</em> in Tickets nur die Angaben machen, die für das
+                    Anliegen nötig sind.
                 </p>
             </div>
+
             <div>
-                <strong>9. Speicherdauer</strong>
+                <strong>KI-gestützte Funktionen</strong>
                 <p>
-                    Session-Daten werden grundsätzlich bis zum Logout oder bis zum Ablauf der Session gespeichert. Konfigurationsdaten bleiben gespeichert,
-                    solange sie für den Betrieb des Bots oder der verwalteten Server benötigt werden. Hochgeladene Bilder bleiben gespeichert,
-                    solange sie in Konfigurationen verwendet werden oder bis sie im Rahmen einer technischen Bereinigung entfernt werden.
-                    Ticket-Transcripts, Logs, Hörstatistiken und Modulzustände bleiben gespeichert, solange sie betrieblich erforderlich sind
-                    oder bis sie gelöscht werden.
+                    Ist der KI-Chat für einen Server freigeschaltet und wird der Bot dort angesprochen,
+                    werden der Nachrichtentext und ein begrenzter Teil des vorangegangenen
+                    Gesprächsverlaufs an das konfigurierte Sprachmodell übergeben.
+                </p>
+                <p>
+                    <em>Derzeitiger Stand:</em> Konfiguriert ist ein selbst betriebenes Modell über eine
+                    Adresse im lokalen Netz des Servers. Ein externer KI-Anbieter ist nicht hinterlegt, und
+                    es ist kein Zugriffsschlüssel gesetzt. Nach derzeitigem Stand verlassen für diese
+                    Funktion keine Daten die eigene Infrastruktur.
+                </p>
+                <p>
+                    Wird spaeter ein externer Anbieter eingesetzt, werden Anbieter, uebermittelte Daten,
+                    Rechtsgrundlage und eine moegliche Uebermittlung in ein Drittland hier ergaenzt,
+                    bevor die Funktion in dieser Form genutzt wird. Ueber Speicherung, Loeschung oder
+                    eine Verwendung zu Trainingszwecken bei einem solchen Anbieter wird hier keine
+                    Aussage getroffen, solange dazu keine vertragliche Zusage vorliegt.
                 </p>
             </div>
-            <div>
-                <strong>10. Deine Rechte</strong>
+
+            <div th:if="${premiumAktiv}">
+                <strong>Premium-Abonnement</strong>
                 <p>
-                    Du hast im Rahmen der gesetzlichen Voraussetzungen das Recht auf Auskunft nach Art. 15 DSGVO, Berichtigung nach Art. 16 DSGVO,
-                    Löschung nach Art. 17 DSGVO, Einschränkung der Verarbeitung nach Art. 18 DSGVO, Datenübertragbarkeit nach Art. 20 DSGVO
-                    sowie Widerspruch nach Art. 21 DSGVO. Außerdem hast du das Recht, dich bei einer Datenschutz-Aufsichtsbehörde zu beschweren.
+                    Kauf und Zahlung laufen vollständig über Discord. Der Anbieter erhält
+                    <strong>keine Zahlungsdaten</strong> — weder Kartennummern, Kontoverbindungen noch
+                    Rechnungsanschriften. Übermittelt wird von Discord lediglich, dass für einen
+                    bestimmten Server eine Berechtigung besteht und wie lange.
+                </p>
+                <p>
+                    <em>Gespeichert wird:</em> Server-ID, die Angabe „Premium aktiv“ und der Zeitpunkt der
+                    Änderung — dieselben Felder wie bei jeder anderen Freigabe.<br>
+                    <em>Zweck:</em> Zuordnung des Servers zur gebuchten Wiedergabestufe.<br>
+                    <em>Rechtsgrundlage:</em> Art. 6 Abs. 1 lit. b DSGVO — Erbringung der gebuchten Leistung.<br>
+                    <em>Speicherdauer:</em> bis zum Ende der Berechtigung.
+                </p>
+                <p>
+                    Für die Zahlungsabwicklung ist Discord eigenständig verantwortlich. Es gilt die
+                    <a href="https://discord.com/privacy" target="_blank" rel="noopener">Datenschutzerklärung von Discord</a>.
+                </p>
+                <p>
+                    Soweit beim Anbieter Abrechnungsunterlagen anfallen, gelten dafuer die handels- und
+                    steuerrechtlichen Aufbewahrungsfristen (§ 147 AO, § 257 HGB) von sechs bis zehn
+                    Jahren. Sie gehen einem Loeschverlangen insoweit vor.
                 </p>
             </div>
+
             <div>
-                <strong>11. Keine automatisierte Entscheidungsfindung</strong>
-                <p>Eine automatisierte Entscheidungsfindung oder ein Profiling im Sinne von Art. 22 DSGVO findet im Rahmen dieser Website nicht statt.</p>
+                <strong>Empfänger und externe Dienste</strong>
+                <p>Tatsächlich eingesetzt werden:</p>
+                <ul>
+                    <li>
+                        <strong>Hetzner Online GmbH</strong> (Gunzenhausen, Deutschland) — Server und
+                        Lastverteiler. Standort der eingesetzten Server: Helsinki, Finnland (EU). Es
+                        werden alle in den Abschnitten „Aufruf der Website“ und „Verarbeitung im Rahmen der Bot-Funktionen“ genannten Daten auf dieser Infrastruktur
+                        verarbeitet. Auftragsverarbeitung nach Art. 28 DSGVO.
+                    </li>
+                    <li>
+                        <strong>Discord</strong> — für den Betrieb zwingend: Der Bot ist über Discord
+                        verbunden, und die Anmeldung läuft über Discord. Übermittelt werden die für den
+                        Betrieb nötigen Anfragen; empfangen werden Profil- und Serverdaten.
+                        Eigenständiger Verantwortlicher, Übermittlung in die USA möglich.
+                    </li>
+                    <li>
+                        <strong>YouTube / Google</strong> — beim Abruf von Titeln über YouTube. Übermittelt
+                        wird die Suchanfrage bzw. die Adresse des Titels sowie die IP-Adresse des Servers,
+                        nicht die der Nutzenden. Für den Abruf ist ein Google-Konto des Betreibers
+                        hinterlegt; die Anfragen erfolgen unter diesem Konto. Übermittlung in die USA.
+                    </li>
+                    <li>
+                        <strong>SoundCloud</strong> — Ausweichquelle, wenn YouTube einen Titel nicht
+                        ausliefert. Übermittelt wird die Suchanfrage sowie die IP-Adresse des Servers.
+                    </li>
+                    <li>
+                        <strong>Betreiber der eingetragenen Webradio-Streams</strong> — beim Abspielen
+                        eines Radiosenders wird dessen Adresse vom Server abgerufen. Welche Anbieter das
+                        sind, bestimmt der jeweilige Server durch seine Sendereinträge.
+                    </li>
+                </ul>
+                <p>
+                    Nicht eingesetzt werden: Werbenetzwerke, Analysedienste, externe Schriftarten,
+                    Zahlungsdienstleister und soziale Netzwerke.
+                </p>
+                <p>
+                    Zur Signaturberechnung für YouTube läuft ein zusätzlicher Dienst auf derselben
+                    Infrastruktur; dabei verlassen keine Daten den eigenen Server. Die Verwaltung der
+                    Server erfolgt über die Programmierschnittstelle von Hetzner; personenbezogene Daten
+                    der Nutzenden werden dabei nicht übermittelt.
+                </p>
             </div>
+
             <div>
-                <strong>12. Kontakt für Datenschutzanfragen</strong>
-                <p>Bei Fragen zu dieser Datenschutzerklärung, zu gespeicherten Daten oder zu Löschungsanfragen kannst du dich an die oben genannte Kontaktadresse wenden.</p>
+                <strong>Ihre Rechte</strong>
+                <p>Sie haben nach der DSGVO folgende Rechte:</p>
+                <ul>
+                    <li>Auskunft über die zu Ihnen verarbeiteten Daten (Art. 15),</li>
+                    <li>Berichtigung unrichtiger Daten (Art. 16),</li>
+                    <li>Löschung (Art. 17),</li>
+                    <li>Einschränkung der Verarbeitung (Art. 18),</li>
+                    <li>Datenübertragbarkeit (Art. 20),</li>
+                    <li>
+                        <strong>Widerspruch</strong> gegen Verarbeitungen, die auf ein berechtigtes
+                        Interesse gestützt sind (Art. 21) — das betrifft insbesondere die Statistik und
+                        die Protokolle,
+                    </li>
+                    <li>Widerruf einer erteilten Einwilligung mit Wirkung für die Zukunft (Art. 7 Abs. 3),</li>
+                    <li>
+                        Beschwerde bei einer Aufsichtsbehörde (Art. 77). Zuständig ist die Behörde Ihres
+                        Aufenthaltsorts oder die des Verantwortlichen. Fuer den Sitz des Verantwortlichen ist das der Landesbeauftragte fuer den
+                        Datenschutz und die Informationsfreiheit Baden-Wuerttemberg.
+                    </li>
+                </ul>
+                <p>
+                    Zur Ausübung genügt eine Nachricht an die unter im Abschnitt „Verantwortlicher“ genannte Adresse. Für die
+                    Zuordnung wird die Discord-Benutzer-ID benötigt; ohne sie lassen sich pseudonyme
+                    Einträge nicht auffinden.
+                </p>
+            </div>
+
+            <div>
+                <strong>Löschung beim Entfernen des Bots</strong>
+                <p>
+                    Wird der Bot von einem Server entfernt, werden die zu diesem Server gespeicherten
+                    Daten technisch nicht mehr verwendet. Eine automatische Löschung findet derzeit
+                    <strong>nicht</strong> statt; sie erfolgt auf Anfrage über die Adresse im Abschnitt „Verantwortlicher“.
+                </p>
+                <p>
+                    Unabhaengig davon greifen die oben genannten Fristen: Ticket-Verlaeufe, Statistiken
+                    und Protokolleintraege werden nach Ablauf automatisch entfernt, auch wenn niemand
+                    eine Loeschung verlangt.
+                </p>
+            </div>
+
+            <div>
+                <strong>Sicherheit</strong>
+                <p>
+                    Die Verbindung zur Website ist mit TLS verschlüsselt. Die Datenbank ist nicht aus dem
+                    offenen Netz erreichbar; der Zugriff zwischen den Servern läuft über ein privates Netz
+                    und ist durch eine Firewall beschränkt. Der Zugang zum Verwaltungsbereich ist auf
+                    ausdrücklich eingetragene Konten begrenzt; kostenauslösende Vorgänge können zusätzlich
+                    durch einen zweiten Faktor abgesichert werden.
+                </p>
+                <p>
+                    Weitergehende Maßnahmen, Zertifizierungen oder geprüfte Verfahren werden hier nicht
+                    behauptet, weil sie nicht vorliegen.
+                </p>
+            </div>
+
+            <div>
+                <strong>Änderungen dieser Erklärung</strong>
+                <p>
+                    Diese Erklärung wird angepasst, wenn sich die Verarbeitung ändert — insbesondere bei
+                    neuen Funktionen oder neuen Empfängern. Maßgeblich ist die jeweils hier abrufbare
+                    Fassung.
+                </p>
             </div>
         </div>
+
+        <p class="hero-copy">
+            Fassung vom <span th:text="${currentYear}">2026</span>.
+            Diese Erklärung wurde ohne anwaltliche Prüfung erstellt und ersetzt keine Rechtsberatung.
+        </p>
 
         <footer class="portal-footer">
             <a class="ghost-button" href="/">Zur Startseite</a>
             <div class="theme-switcher" role="group" aria-label="Farbschema">
-                <button class="theme-switch-option" type="button" data-theme-option="system" aria-pressed="true">System</button>
-                <button class="theme-switch-option" type="button" data-theme-option="dark" aria-pressed="false">Dunkel</button>
-                <button class="theme-switch-option" type="button" data-theme-option="light" aria-pressed="false">Hell</button>
+                <button class="theme-switch-option" type="button" data-theme-option="system">System</button>
+                <button class="theme-switch-option" type="button" data-theme-option="hell">Hell</button>
+                <button class="theme-switch-option" type="button" data-theme-option="dunkel">Dunkel</button>
             </div>
             <div class="footer-links">
                 <a href="/impressum">Impressum</a>
+                <a href="/nutzungsbedingungen">Nutzungsbedingungen</a>
                 <a href="/stats">Stats</a>
             </div>
         </footer>

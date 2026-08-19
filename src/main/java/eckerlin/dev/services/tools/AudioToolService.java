@@ -145,7 +145,7 @@ public class AudioToolService {
 
         try {
             return switch (toolName) {
-                case "list_radio_stations" -> listStations();
+                case "list_radio_stations" -> listStations(context);
                 case "list_servers" -> listServers();
                 case "play_music" -> playMusic(args, context);
                 case "play_radio" -> playRadio(args, context);
@@ -187,7 +187,7 @@ public class AudioToolService {
             return ToolResult.error("Es wurde kein Sender angegeben.");
         }
 
-        Optional<RadioStation> match = findStation(station);
+        Optional<RadioStation> match = findStation(station, context);
         if (match.isEmpty()) {
             return ToolResult.error("Kein Sender gefunden, der zu \"" + station
                     + "\" passt. Mit list_radio_stations lassen sich die verfuegbaren Sender abrufen.");
@@ -243,8 +243,8 @@ public class AudioToolService {
         return ToolResult.ok(text.toString());
     }
 
-    private ToolResult listStations() {
-        List<RadioStation> stations = audioService.getStations();
+    private ToolResult listStations(ToolContext context) {
+        List<RadioStation> stations = audioService.getStations(guildIdVon(context));
         if (stations.isEmpty()) {
             return ToolResult.error("Es sind keine Radiosender hinterlegt.");
         }
@@ -377,8 +377,13 @@ public class AudioToolService {
         return memberChannel != null && memberChannel.getId().equals(botChannel.getId());
     }
 
-    private Optional<RadioStation> findStation(String reference) {
-        List<RadioStation> stations = audioService.getStations();
+    /** Die Server-ID aus dem Werkzeugkontext - {@code null}, wenn der Aufruf keinen Server hat. */
+    private String guildIdVon(ToolContext context) {
+        return context == null || context.guild() == null ? null : context.guild().getId();
+    }
+
+    private Optional<RadioStation> findStation(String reference, ToolContext context) {
+        List<RadioStation> stations = audioService.getStations(guildIdVon(context));
         String normalized = reference.trim().toLowerCase(Locale.ROOT);
 
         try {

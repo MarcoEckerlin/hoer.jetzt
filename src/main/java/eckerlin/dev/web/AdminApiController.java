@@ -3,6 +3,7 @@ package eckerlin.dev.web;
 import eckerlin.dev.audio.AudioService;
 import eckerlin.dev.audio.AutoScaleService;
 import eckerlin.dev.audio.ErreichbarkeitService;
+import eckerlin.dev.audio.HetznerService;
 import eckerlin.dev.audio.KnotenAgentService;
 import eckerlin.dev.audio.KnotenRegistrierungService;
 import eckerlin.dev.security.ZweiFaktorService;
@@ -12,7 +13,10 @@ import eckerlin.dev.services.AdminAccessService;
 import eckerlin.dev.services.AdminConfigurationService;
 import eckerlin.dev.services.BotPresenceService;
 import eckerlin.dev.services.BotPresentationService;
+import eckerlin.dev.services.RadioStationService;
 import eckerlin.dev.services.VmControlService;
+import eckerlin.dev.audio.RadioStation;
+import eckerlin.dev.web.dto.RadioSenderRequest;
 import eckerlin.dev.web.dto.ActionResponse;
 import eckerlin.dev.web.dto.AdminConfigurationView;
 import eckerlin.dev.web.dto.BotRuntimeView;
@@ -20,11 +24,13 @@ import eckerlin.dev.web.dto.AdminSettingsRequest;
 import eckerlin.dev.web.dto.DashboardSession;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -47,6 +53,8 @@ public class AdminApiController {
     private final ErreichbarkeitService erreichbarkeitService;
     private final ZweiFaktorService zweiFaktorService;
     private final KnotenRegistrierungService knotenRegistrierungService;
+    private final RadioStationService radioStationService;
+    private final HetznerService hetznerService;
 
     public AdminApiController(
             AdminAccessService adminAccessService,
@@ -59,8 +67,12 @@ public class AdminApiController {
             AutoScaleService autoScaleService,
             ErreichbarkeitService erreichbarkeitService,
             ZweiFaktorService zweiFaktorService,
-            KnotenRegistrierungService knotenRegistrierungService
+            KnotenRegistrierungService knotenRegistrierungService,
+            RadioStationService radioStationService,
+            HetznerService hetznerService
     ) {
+        this.radioStationService = radioStationService;
+        this.hetznerService = hetznerService;
         this.knotenAgentService = knotenAgentService;
         this.autoScaleService = autoScaleService;
         this.erreichbarkeitService = erreichbarkeitService;
@@ -78,6 +90,52 @@ public class AdminApiController {
     public AdminConfigurationView config(HttpSession session) {
         adminAccessService.requireAdmin(requireSession(session));
         return adminConfigurationService.buildView();
+    }
+
+    // ------------------------------------------------------------------
+    // Globale Radiosender
+    //
+    // Die Gegenstuecke fuer die eigenen Sender eines Servers liegen im
+    // DashboardApiController. Hier fehlt die guild_id ueberall - und genau
+    // das ist der Unterschied: ein globaler Sender steht auf jedem Server,
+    // deshalb darf ihn auch nur der Betreiber anlegen.
+    // ------------------------------------------------------------------
+
+    @GetMapping("/radio")
+    public List<RadioStation> globaleSender(HttpSession session) throws SQLException {
+        adminAccessService.requireAdmin(requireSession(session));
+        return radioStationService.findGlobale();
+    }
+
+    @PostMapping("/radio")
+    public ActionResponse globalenSenderSpeichern(
+            @RequestBody RadioSenderRequest anfrage,
+            HttpSession session
+    ) throws SQLException {
+        DashboardSession sitzung = requireSession(session);
+        adminAccessService.requireWriteAdmin(sitzung);
+
+        try {
+            radioStationService.speichern(anfrage.id(), null, anfrage.name(), anfrage.url(),
+                    anfrage.logoUrl(), sitzung.userId());
+        } catch (IllegalArgumentException fehler) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, fehler.getMessage());
+        }
+
+        return new ActionResponse(true, anfrage.id() == null
+                ? "Der Sender wurde angelegt und steht ab sofort auf allen Servern."
+                : "Der Sender wurde gespeichert.");
+    }
+
+    @DeleteMapping("/radio/{id}")
+    public ActionResponse globalenSenderLoeschen(@PathVariable int id, HttpSession session) throws SQLException {
+        adminAccessService.requireWriteAdmin(requireSession(session));
+        try {
+            radioStationService.loeschen(id, null);
+        } catch (IllegalArgumentException fehler) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, fehler.getMessage());
+        }
+        return new ActionResponse(true, "Der Sender wurde entfernt.");
     }
 
     @GetMapping("/runtime")
@@ -273,6 +331,144 @@ public class AdminApiController {
     // ------------------------------------------------------------------
 
     /** Zustand des Autoscalings samt Schwellen - fuer die Kopfzeile der Knotenansicht. */
+    /**
+     * Autoscaling ein- oder ausschalten.
+     *
+     * <p>Schreibende Stufe: der Schalter entscheidet darueber, ob von selbst
+     * Server angelegt werden, die Geld kosten. Kein zweiter Faktor - anders als
+     * beim Anlegen von Hand ist das Abschalten die harmlose Richtung, und wer
+     * es einschaltet, loest damit noch keine Bestellung aus.</p>
+     */
+    @PostMapping("/audio/autoscale")
+    public ActionResponse autoscaleSchalten(@RequestBody Map<String, Object> anfrage, HttpSession session)
+            throws SQLException {
+        DashboardSession sitzung = requireSession(session);
+        adminAccessService.requireWriteAdmin(sitzung);
+
+        boolean an = Boolean.parseBoolean(String.valueOf(anfrage.get("enabled")));
+        autoScaleService.schalten(an, sitzung.userId());
+        return new ActionResponse(true, an
+                ? "Autoscaling ist an - Knoten kommen bei Bedarf von selbst dazu."
+                : "Autoscaling ist aus. Vorhandene Knoten bleiben, es kommen keine neuen dazu.");
+    }
+
+    /**
+     * Entfernt einen Knoten aus der Tabelle - auf Wunsch samt Server.
+     *
+     * <p>Gedacht fuer den Fall, der in der Praxis am haeufigsten vorkommt: die
+     * Erstinstallation ist gescheitert, der Eintrag zeigt auf eine Maschine,
+     * auf der nichts laeuft, und das Autoscaling zaehlt sie trotzdem mit.</p>
+     *
+     * @param server {@code true} loescht zusaetzlich den Hetzner-Server. Ohne
+     *               das bleibt eine Maschine stehen, die weiter Geld kostet -
+     *               deshalb ist es eine bewusste Angabe und keine Vorgabe.
+     */
+    @DeleteMapping("/audio/nodes/{name}")
+    public ActionResponse knotenEntfernen(
+            @PathVariable("name") String name,
+            @RequestParam(required = false, defaultValue = "false") boolean server,
+            HttpSession session
+    ) throws SQLException {
+        DashboardSession sitzung = requireSession(session);
+        adminAccessService.requireWriteAdmin(sitzung);
+
+        java.util.Optional<Long> hetznerId;
+        try {
+            hetznerId = knotenRegistrierungService.entfernen(name);
+        } catch (IllegalArgumentException fehler) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, fehler.getMessage());
+        }
+
+        String zusatz = "";
+        if (server && hetznerId.isPresent()) {
+            zusatz = hetznerService.loeschen(hetznerId.get())
+                    ? " Der Hetzner-Server wurde ebenfalls geloescht."
+                    : " Der Hetzner-Server liess sich nicht loeschen - bitte in der Hetzner-Konsole nachsehen.";
+        } else if (server) {
+            zusatz = " Ein Hetzner-Server war diesem Knoten nicht zugeordnet.";
+        } else if (hetznerId.isPresent()) {
+            zusatz = " Achtung: der Hetzner-Server laeuft weiter und kostet weiter.";
+        }
+
+        audioService.knotenNeuEinlesen();
+        return new ActionResponse(true, "Knoten " + name + " entfernt." + zusatz);
+    }
+
+    /**
+     * Der Befehl, mit dem ein beliebiger Server zum Audio-Knoten wird.
+     *
+     * <p>Bis hierhin ging das nur ueber Hetzner. Ein Knoten muss aber nirgends
+     * bestimmtes stehen - er braucht Docker, eine erreichbare Adresse und die
+     * beiden Geheimnisse. Genau die setzt dieser Befehl ein, damit niemand sie
+     * von Hand zusammensuchen muss.</p>
+     *
+     * <p>Der Befehl enthaelt Geheimnisse und geht deshalb nur an einen
+     * angemeldeten Admin mit Schreibrecht - nicht in ein oeffentliches
+     * Handbuch.</p>
+     */
+    @GetMapping("/audio/nodes/befehl")
+    public Map<String, String> knotenBefehl(
+            @RequestParam(required = false, defaultValue = "free") String stufe,
+            HttpSession session
+    ) {
+        adminAccessService.requireWriteAdmin(requireSession(session));
+
+        String nodeToken = System.getenv("HJ_NODE_TOKEN");
+        String agentToken = System.getenv("HJ_AGENT_TOKEN");
+        String lavalinkPasswort = System.getenv("HJ_LAVALINK_PASSWORD");
+        String coreUrl = adminConfigurationService.buildView().webBaseUrl();
+
+        boolean vollstaendig = nodeToken != null && !nodeToken.isBlank()
+                && agentToken != null && !agentToken.isBlank();
+
+        /*
+         * Die Variablennamen sind die von install.sh - nicht die des Agenten.
+         *
+         * Beides sind eigene Skripte mit eigenen Namen, und der erste Anlauf
+         * hier benutzte die des Agenten (HJ_NODE_TIER, HJ_NODE_ADDRESS).
+         * install.sh kannte sie nicht, fragte alles noch einmal ab und erzeugte
+         * ein eigenes Lavalink-Passwort: der Knoten trug am Ende andere Werte,
+         * als der Bot erwartete, und meldete sich nicht an.
+         */
+        String befehl = """
+                # Auf dem neuen Server als root ausfuehren.
+                # Voraussetzung: Debian oder Ubuntu. Docker wird mitinstalliert.
+
+                export HJ_CORE_URL='%s'
+                export HJ_NODE_TOKEN='%s'
+                export HJ_AGENT_TOKEN='%s'
+                export HJ_LAVALINK_PASSWORD='%s'
+                export LAVALINK_TIER='%s'
+
+                apt-get update && apt-get install -y git curl python3
+                command -v docker >/dev/null || curl -fsSL https://get.docker.com | sh
+
+                # Vorhandenes Verzeichnis auffrischen statt daran zu scheitern -
+                # ein zweiter Anlauf ist der Normalfall, nicht die Ausnahme.
+                if [ -d /opt/hoerjetzt-node/.git ]; then
+                  git -C /opt/hoerjetzt-node fetch origin lavalink
+                  git -C /opt/hoerjetzt-node reset --hard origin/lavalink
+                else
+                  rm -rf /opt/hoerjetzt-node
+                  git clone -b lavalink https://github.com/MarcoEckerlin/hoer.jetzt.git /opt/hoerjetzt-node
+                fi
+                cd /opt/hoerjetzt-node && bash install.sh
+                """.formatted(
+                coreUrl == null ? "" : coreUrl,
+                nodeToken == null ? "" : nodeToken,
+                agentToken == null ? "" : agentToken,
+                lavalinkPasswort == null ? "" : lavalinkPasswort,
+                "premium".equalsIgnoreCase(stufe) ? "premium" : "free");
+
+        return Map.of(
+                "befehl", befehl,
+                "vollstaendig", Boolean.toString(vollstaendig),
+                "hinweis", vollstaendig
+                        ? "Der Knoten meldet sich nach der Installation von selbst an."
+                        : "HJ_NODE_TOKEN oder HJ_AGENT_TOKEN fehlen in der .env - ohne sie kann sich "
+                          + "der Knoten nicht anmelden.");
+    }
+
     @GetMapping("/audio/autoscale")
     public AutoScaleService.Lage autoscale(HttpSession session) {
         adminAccessService.requireAdmin(requireSession(session));

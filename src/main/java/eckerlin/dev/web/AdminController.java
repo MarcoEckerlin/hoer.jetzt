@@ -26,8 +26,32 @@ public class AdminController {
         this.botPresentationService = botPresentationService;
     }
 
+    /**
+     * <code>/admin</code> ist die Adresse, die alle im Kopf haben. Sie fuehrt
+     * jetzt in den Betriebsbereich der Weboberflaeche - dort liegen Verbund,
+     * Knoten, Deployments und die Bot-Verwaltung beieinander.
+     *
+     * <p>Ein Redirect und keine zweite Startseite: sonst gaebe es zwei Orte, an
+     * denen dieselbe Sache steht, und Lesezeichen zeigen auf den falschen.</p>
+     */
     @GetMapping({"/admin", "/admin/"})
-    public String admin(Model model, HttpSession session) {
+    public String admin(HttpSession session) {
+        DashboardSession user = getSession(session);
+        if (user == null) {
+            return "redirect:/";
+        }
+        adminAccessService.requireAdmin(user);
+        return "redirect:/dashboard#/betrieb/verbund";
+    }
+
+    /**
+     * Die alte Verwaltungsoberflaeche. Sie kann weiterhin Dinge, die im
+     * Betriebsbereich (noch) fehlen: Marke, Wartungsmodus, Bot-Zugangsdaten,
+     * Discord-Login, KI-Anbieter, Freigaben je Server und das Protokoll.
+     * Solange das so ist, bleibt sie erreichbar - nur nicht mehr als Einstieg.
+     */
+    @GetMapping({"/admin/klassisch", "/admin/klassisch/"})
+    public String klassisch(Model model, HttpSession session) {
         DashboardSession user = getSession(session);
         if (user == null) {
             return "redirect:/";

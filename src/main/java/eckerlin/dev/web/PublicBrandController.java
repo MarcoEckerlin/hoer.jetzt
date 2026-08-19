@@ -41,14 +41,39 @@ public class PublicBrandController {
 
     @GetMapping("/api/public/brand")
     public BrandView brand() {
+        // Der Bereitstellungsschluessel ist kein Markenname.
+        //
+        // getCurrentDeploymentDisplayName() faellt auf den Schluessel zurueck,
+        // wenn kein Anzeigename hinterlegt ist. Fuer die Verwaltung ist das
+        // richtig - dort will man wissen, welche Bereitstellung man vor sich
+        // hat. Oeffentlich ist es falsch: so stand "local" als Name der Seite
+        // und "LOCAL" in der Player-Karte, fuer jeden Besucher sichtbar.
+        //
+        // Also nur uebernehmen, wenn wirklich ein Name gesetzt ist. Sonst
+        // zaehlt der Discord-Name des Bots und danach der Rueckfall unten.
+        String schluessel = configService.getCurrentDeploymentKey();
         String name = configService.getCurrentDeploymentDisplayName();
-        String bild = null;
+        if (name != null && name.equals(schluessel)) {
+            name = "";
+        }
+        // Zuerst das im Adminbereich hinterlegte Markenbild.
+        //
+        // Das wurde hier nie gelesen: die Methode fragte ausschliesslich JDA
+        // nach dem Bot-Avatar. Wer unter Instanz ein Bild hochlud, sah es
+        // nirgends - der Wert landete zwar in der Datenbank, aber nur die alte
+        // Thymeleaf-Startseite las ihn ueber BotPresentationService. Die
+        // React-Oberflaeche holt ihre Marke von hier.
+        String bild = sauber(configService.getBrandImageUrl());
 
         JDA verbindung = jda.getIfAvailable();
         if (verbindung != null) {
             try {
                 SelfUser selbst = verbindung.getSelfUser();
-                bild = selbst.getEffectiveAvatarUrl();
+                // Nur einspringen, wenn nichts hinterlegt ist - eine bewusste
+                // Wahl im Adminbereich schlaegt den Discord-Avatar.
+                if (bild.isBlank()) {
+                    bild = selbst.getEffectiveAvatarUrl();
+                }
                 if (name == null || name.isBlank()) {
                     name = selbst.getName();
                 }
@@ -58,9 +83,26 @@ public class PublicBrandController {
             }
         }
 
-        return new BrandView(name == null || name.isBlank() ? "hoer.jetzt" : name, bild);
+        // Der Einladungslink gehoert hierher und nicht hinter die Anmeldung:
+        // wer den Bot hinzufuegen will, hat auf dieser Seite noch kein Konto
+        // bei uns. Es ist ausserdem nichts Vertrauliches - derselbe Link steht
+        // in jeder Antwort des Bots an einen Server, auf dem er fehlt.
+        //
+        // Ist keiner hinterlegt, baut AppConfigService ihn aus der Client-ID.
+        // Geht auch das nicht, kommt ein leerer String zurueck, und die
+        // Startseite laesst den Knopf weg - ein Knopf, der ins Leere fuehrt,
+        // ist schlimmer als keiner.
+        return new BrandView(
+                name == null || name.isBlank() ? "hoer.jetzt" : name,
+                bild == null || bild.isBlank() ? null : bild,
+                configService.getNoGuildInviteUrl(),
+                configService.getSupportUrl());
     }
 
-    public record BrandView(String displayName, String avatarUrl) {
+    private static String sauber(String wert) {
+        return wert == null ? "" : wert.trim();
+    }
+
+    public record BrandView(String displayName, String avatarUrl, String inviteUrl, String supportUrl) {
     }
 }

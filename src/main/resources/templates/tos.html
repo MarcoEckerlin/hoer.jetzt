@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="de" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="${'Nutzungsbedingungen | ' + botBrand.displayName}">Nutzungsbedingungen</title>
+    <link rel="stylesheet" href="/public.css" th:href="@{/public.css(v=${assetVersion})}">
+
+    <!-- Ohne defer und vor dem Rendern: sonst blitzt die helle Fassung auf. -->
+
+    <script src="/theme.js" th:src="@{/theme.js(v=${assetVersion})}"></script>
+    <!-- Muss vor dem Rendern laufen, sonst blitzt beim Laden kurz das falsche Farbschema auf. -->
+</head>
+<body class="dashboard-body">
+<main class="landing-shell legal-layout">
+    <section class="hero-card legal-card">
+        <p class="eyebrow">Nutzungsbedingungen</p>
+        <h1 th:text="${'Nutzungsbedingungen für ' + botBrand.displayName}">Nutzungsbedingungen</h1>
+        <p class="hero-copy">
+            Diese Bedingungen regeln die Nutzung des Discord-Bots
+            <span th:text="${botBrand.displayName}">des Bots</span>, des Web-Dashboards unter
+            <span class="mono" th:text="${webBaseUrl != null and !#strings.isEmpty(webBaseUrl) ? webBaseUrl : 'dieser Adresse'}">hoer.jetzt</span>
+            und der öffentlichen Statistikseite.
+        </p>
+
+        <div class="copy-list">
+            <div>
+                <strong>Anbieter</strong>
+                <p>
+                    <span th:text="${legalOwnerName != null and !#strings.isEmpty(legalOwnerName) ? legalOwnerName : ''}">Name</span><br>
+                    <span th:text="${legalAddress != null and !#strings.isEmpty(legalAddress) ? legalAddress : ''}">Anschrift</span><br>
+                    <span th:text="${legalEmail != null and !#strings.isEmpty(legalEmail) ? legalEmail : ''}">kontakt@example.com</span>
+                </p>
+                <p>
+                    Der Grundumfang des Dienstes wird unentgeltlich bereitgestellt.<span th:if="${premiumAktiv}">
+                    Daneben besteht ein kostenpflichtiges Premium-Angebot (Abschnitt „Premium“).</span>
+                    Zur Datenverarbeitung siehe die <a href="/datenschutz">Datenschutzerklärung</a>,
+                    zur Anbieterkennzeichnung das <a href="/impressum">Impressum</a>.
+                </p>
+            </div>
+
+            <div>
+                <strong>Geltungsbereich</strong>
+                <p>Diese Bedingungen gelten für:</p>
+                <ul>
+                    <li>den Discord-Bot <span th:text="${botBrand.displayName}">den Bot</span> einschließlich seiner Slash-Befehle,</li>
+                    <li>das Web-Dashboard einschließlich des Betriebsbereichs für Administratoren,</li>
+                    <li>die öffentlich abrufbare Statistikseite.</li>
+                </ul>
+                <p>
+                    Sie gelten <strong>nicht</strong> für Discord selbst und nicht für die Server, auf denen
+                    der Bot eingesetzt wird. Für Regeln, Inhalte und Moderation eines Discord-Servers ist
+                    allein dessen Betreiber verantwortlich.
+                </p>
+            </div>
+
+            <div>
+                <strong>Einbeziehung dieser Bedingungen</strong>
+                <p>
+                    Diese Bedingungen werden Vertragsbestandteil, wenn sie vor der Nutzung zumutbar
+                    zugänglich gemacht wurden und ihrer Geltung zugestimmt wurde (§ 305 Abs. 2 BGB). Dafür
+                    gilt Folgendes:
+                </p>
+                <ul>
+                    <li>
+                        <strong>Web-Dashboard:</strong> Bei der Anmeldung über Discord wird auf diese
+                        Bedingungen und die Datenschutzerklärung hingewiesen und zugestimmt.
+                    </li>
+                    <li>
+                        <strong>Bot auf einem Server:</strong> Wer den Bot auf einen Discord-Server einlädt,
+                        stimmt diesen Bedingungen für diesen Server zu und sichert zu, dazu berechtigt zu sein.
+                    </li>
+                    <li>
+                        <strong>Einzelne Mitglieder eines Servers:</strong> Sie schließen mit dem Anbieter
+                        keinen gesonderten Vertrag, wenn sie lediglich Befehle des Bots benutzen. Für sie
+                        gelten die Nutzungsregeln im Abschnitt „Nutzungsregeln“ als Rahmen der Leistung; die
+                        Datenverarbeitung richtet sich nach der Datenschutzerklärung.
+                    </li>
+                </ul>
+                <p>
+                    Der Hinweis auf diese Bedingungen und die Datenschutzerklaerung steht unmittelbar
+                    am Anmeldeknopf, nicht nur im Fussbereich - damit sind sie vor der Nutzung
+                    zumutbar zugaenglich.
+                </p>
+            </div>
+
+            <div>
+                <strong>Nutzungsregeln</strong>
+                <p>Bei der Nutzung ist untersagt:</p>
+                <ul>
+                    <li>die Verbreitung rechtswidriger Inhalte oder die Nutzung zu rechtswidrigen Zwecken,</li>
+                    <li>Belästigung, Bedrohung, Diskriminierung oder Bloßstellen anderer Personen,</li>
+                    <li>Spam sowie das massenhafte oder automatisierte Auslösen von Befehlen,</li>
+                    <li>das Umgehen von Beschränkungen, Kontingenten oder Rechteprüfungen,</li>
+                    <li>das Ausnutzen von Fehlern, um Funktionen zu erlangen, die nicht vorgesehen sind,</li>
+                    <li>Überlastungsversuche, Eindringversuche und sonstige technische Angriffe,</li>
+                    <li>der Versuch, auf fremde Server, Konten, Verwaltungsbereiche oder Daten zuzugreifen,</li>
+                    <li>der Missbrauch von Discord-Funktionen über den Bot, etwa Massen-Erwähnungen,
+                        Umgehung von Sperren oder das Erschleichen von Rollen.</li>
+                </ul>
+            </div>
+
+            <div>
+                <strong>Verhältnis zu Discord</strong>
+                <p>
+                    <span th:text="${botBrand.displayName}">Dieser Dienst</span> ist ein eigenständiges
+                    Angebot des unter „Anbieter“ genannten Anbieters. Er steht in keiner Verbindung zu
+                    Discord Inc. und wird von Discord weder betrieben, unterstützt, geprüft noch
+                    gesponsert. „Discord“ ist eine Marke von Discord Inc.
+                </p>
+                <p>
+                    Die Nutzung von Discord richtet sich ausschließlich nach den dortigen Bedingungen.
+                    Diese Bedingungen ersetzen sie nicht, ändern sie nicht und schränken sie nicht ein.
+                    Bei Widersprüchen gelten für die Discord-Plattform deren Regeln vorrangig:
+                </p>
+                <ul>
+                    <li><a href="https://discord.com/terms" target="_blank" rel="noopener">Discord Terms of Service</a></li>
+                    <li><a href="https://discord.com/guidelines" target="_blank" rel="noopener">Discord Community Guidelines</a></li>
+                    <li><a href="https://discord.com/privacy" target="_blank" rel="noopener">Discord Privacy Policy</a></li>
+                </ul>
+                <p>
+                    Voraussetzung ist ein Discord-Konto und die Einhaltung des von Discord vorgegebenen
+                    Mindestalters. Der Anbieter kann nicht überprüfen, ob diese Voraussetzungen im
+                    Einzelfall vorliegen.
+                </p>
+            </div>
+
+            <div>
+                <strong>Musik- und Audiofunktionen</strong>
+                <p>
+                    Der Bot verbindet sich auf Anforderung mit einem Discord-Sprachkanal und gibt dort
+                    Audioinhalte wieder. Die Inhalte stammen von externen Quellen — abhängig von der
+                    Eingabe insbesondere YouTube, SoundCloud oder eine als Webradio eingetragene
+                    Stream-Adresse. Der Anbieter stellt diese Inhalte weder bereit noch speichert er sie;
+                    sie werden zum Zeitpunkt der Wiedergabe abgerufen und durchgereicht.
+                </p>
+                <p>
+                    Welche Inhalte wiedergegeben werden, bestimmen ausschließlich die Nutzenden durch ihre
+                    Eingabe. Wer eine Wiedergabe auslöst oder einen Radiosender einträgt, ist dafür
+                    verantwortlich, dass dies zulässig ist. Der Anbieter nimmt keine Prüfung der
+                    urheberrechtlichen Zulässigkeit vor und kann sie nicht leisten.
+                </p>
+                <p>
+                    Für die Nutzung der externen Quellen gelten deren jeweilige Bedingungen. Werden
+                    Inhalte durch die Quelle gesperrt oder nicht mehr ausgeliefert, besteht kein Anspruch
+                    auf Wiedergabe.
+                </p>
+            </div>
+
+            <div th:if="${premiumAktiv}">
+                <strong>Premium</strong>
+
+                <p><em>7.1 Leistungsumfang</em></p>
+                <p>
+                    Premium ist ein kostenpflichtiges Zusatzangebot für einen einzelnen Discord-Server.
+                    Freigeschaltet wird damit
+                    <span th:if="${premiumLeistung != null and !#strings.isEmpty(premiumLeistung)}"
+                          th:text="${premiumLeistung}">der Leistungsumfang</span>
+                    <span th:if="${premiumLeistung == null or #strings.isEmpty(premiumLeistung)}">der im Bestellvorgang bei Discord beschriebene Leistungsumfang</span>.
+                </p>
+                <p>
+                    <strong>Der bisherige Funktionsumfang bleibt unentgeltlich.</strong> Premium fügt
+                    Leistungen hinzu; es nimmt der kostenlosen Nutzung nichts weg. Ein Server ohne
+                    Premium behält Zugang zu allen Funktionen, die er vorher hatte.
+                </p>
+
+                <p><em>7.2 Preis, Abrechnungszeitraum und Steuern</em></p>
+                <p>
+                    <span th:if="${premiumPreis != null and !#strings.isEmpty(premiumPreis)}"
+                          th:text="${premiumPreis}">Preis und Abrechnungszeitraum</span>
+                    <span th:if="${premiumPreis == null or #strings.isEmpty(premiumPreis)}">Preis und Abrechnungszeitraum werden im Bestellvorgang bei Discord angezeigt.</span>
+                </p>
+                <p>
+                    Maßgeblich ist stets der Preis, der im Bestellvorgang bei Discord unmittelbar vor der
+                    Bestätigung angezeigt wird. Gegenüber Verbrauchern sind das Gesamtpreise
+                    einschließlich der Umsatzsteuer; ob und in welcher Höhe Umsatzsteuer anfällt, richtet
+                    sich nach dem Aufenthaltsland und wird von Discord im Bestellvorgang ausgewiesen. Das
+                    Abonnement verlängert sich jeweils um den gebuchten Zeitraum, bis es gekündigt wird.
+                </p>
+
+                <p><em>7.3 Abwicklung über Discord</em></p>
+                <p>
+                    Der Kauf und die gesamte Zahlungsabwicklung erfolgen über Discord. Discord tritt dabei
+                    als Verkäufer und Zahlungsabwickler auf; der Zahlungsvertrag kommt zwischen der
+                    kaufenden Person und Discord zustande, nicht mit dem Anbieter. Der Anbieter erhält
+                    keine Zahlungsdaten — weder Kartennummern noch Kontoverbindungen —, sondern von
+                    Discord lediglich die Information, dass für einen bestimmten Server eine
+                    Berechtigung besteht.
+                </p>
+                <p>
+                    Für den Kauf gelten daher zusätzlich die Bedingungen von Discord, insbesondere die
+                    dortigen Regelungen zu Zahlung, Verlängerung und Erstattung. Diese Bedingungen
+                    ersetzen sie nicht. <span th:text="${botBrand.displayName}">Der Dienst</span> gehört
+                    nicht zu Discord und wird von Discord nicht betrieben (Abschnitt „Verhältnis zu Discord“).
+                </p>
+
+                <p><em>7.4 Aktivierung und Deaktivierung</em></p>
+                <p>
+                    Der Premium-Status wird für den ausgewählten Server aktiviert, sobald Discord die
+                    Berechtigung an den Bot übermittelt hat. Das geschieht in der Regel innerhalb weniger
+                    Minuten nach dem Kauf. Endet die Berechtigung — durch Kündigung, Ablauf oder
+                    Rückabwicklung durch Discord — wird der Premium-Status entzogen und der Server wieder
+                    wie ein Server ohne Premium behandelt.
+                </p>
+
+                <p><em>7.5 Kündigung und Ablauf</em></p>
+                <p>
+                    Gekündigt wird über die Abonnementverwaltung von Discord. Die Kündigung wirkt zum
+                    Ende des bereits bezahlten Abrechnungszeitraums; bis dahin bleibt Premium
+                    vollständig nutzbar. Eine anteilige Erstattung für den laufenden Zeitraum erfolgt
+                    nicht, soweit nicht zwingende gesetzliche Rechte etwas anderes vorsehen.
+                </p>
+                <p>
+                    Nach Ablauf entfallen die Premium-Leistungen. Einstellungen des Servers bleiben
+                    erhalten und leben bei einer erneuten Buchung wieder auf. Inhalte, die
+                    ausschließlich mit Premium erstellt werden konnten, bleiben abrufbar, soweit dem
+                    keine technischen Gründe entgegenstehen.
+                </p>
+
+                <p><em>7.6 Widerrufsrecht</em></p>
+                <p>
+                    Verbrauchern steht bei Fernabsatzverträgen grundsätzlich ein Widerrufsrecht von
+                    14 Tagen zu. Bei digitalen Dienstleistungen erlischt es vorzeitig, wenn der
+                    Ausführung vor Ablauf der Frist ausdrücklich zugestimmt und dabei bestätigt wurde,
+                    dass damit das Widerrufsrecht verloren geht (§ 356 Abs. 5 BGB). Da der Kauf über
+                    Discord läuft, richtet sich die Belehrung und die Erklärung nach dem dortigen
+                    Bestellvorgang.
+                </p>
+                <p>
+                    Soweit die Belehrung und die Zustimmung nach § 356 Abs. 5 BGB im Bestellvorgang von
+                    Discord eingeholt werden, richtet sich das Erloeschen danach. Andernfalls bleibt das
+                    gesetzliche Widerrufsrecht von 14 Tagen unberuehrt; der Widerruf ist dann formlos an
+                    die im Abschnitt „Anbieter“ genannte Adresse zu richten.
+                </p>
+
+                <p><em>7.7 Erstattungen</em></p>
+                <p>
+                    Über Erstattungen entscheidet Discord nach seinen Regelungen; der Anbieter kann
+                    Zahlungen weder einziehen noch zurückerstatten. Erstattungsanfragen sind deshalb an
+                    Discord zu richten. Gesetzliche Ansprüche gegen den Anbieter — etwa wegen
+                    dauerhafter Nichterbringung der Leistung — bleiben davon unberührt und können über
+                    die Kontaktadresse im Abschnitt „Anbieter“ geltend gemacht werden.
+                </p>
+
+                <p><em>7.8 Änderungen der Premium-Leistungen</em></p>
+                <p>
+                    Der Leistungsumfang kann angepasst werden, wenn dafür ein sachlicher Grund besteht,
+                    etwa geänderte technische Rahmenbedingungen oder Kosten. Über Änderungen, die den
+                    Leistungsumfang nicht nur unerheblich verringern, oder über Preiserhöhungen wird
+                    mindestens 30 Tage vor Wirksamwerden informiert. In diesem Fall kann das Abonnement
+                    bis zum Wirksamwerden gekündigt werden; die Änderung gilt sonst ab dem nächsten
+                    Abrechnungszeitraum.
+                </p>
+
+                <p><em>7.9 Sperrung trotz Premium</em></p>
+                <p>
+                    Auch ein Server mit Premium kann nach dem Abschnitt „Sperrung und Beendigung“ gesperrt werden. Da eine Sperrung
+                    hier eine bezahlte Leistung betrifft, gilt zusätzlich:
+                </p>
+                <ul>
+                    <li>
+                        Vor einer Sperrung wird — außer bei Gefahr im Verzug oder schwerwiegenden
+                        Verstößen — zunächst hingewiesen und Gelegenheit zur Abhilfe gegeben.
+                    </li>
+                    <li>
+                        Wird die Sperrung aufgehoben, lebt Premium für die verbleibende Laufzeit wieder auf.
+                    </li>
+                    <li>
+                        Bei einer dauerhaften Sperrung, die der Anbieter zu vertreten hat, besteht ein
+                        Anspruch auf Rückabwicklung für den nicht genutzten Zeitraum. Da der Anbieter
+                        selbst nicht erstatten kann, wird die Erstattung bei Discord veranlasst
+                        beziehungsweise dabei unterstützt.
+                    </li>
+                    <li>
+                        Wird ein Server wegen eigener Verstöße gesperrt, besteht kein Anspruch auf
+                        Erstattung für den laufenden Zeitraum.
+                    </li>
+                </ul>
+                <p>
+                    Sperrt Discord ein Konto oder einen Server, hat der Anbieter darauf keinen Einfluss.
+                    Ansprüche daraus richten sich gegen Discord.
+                </p>
+            </div>
+
+            <div>
+                <strong>KI-gestützte Funktionen</strong>
+                <p>
+                    Der Bot enthält einen KI-Chat sowie eine KI-gestützte Titelauswahl („AI-Radio“). Beide
+                    sind je Server gesondert freizuschalten und stehen nicht automatisch zur Verfügung.
+                </p>
+                <p>
+                    Ist der KI-Chat freigeschaltet, werden die an den Bot gerichtete Nachricht sowie ein
+                    begrenzter Teil des vorangegangenen Gesprächsverlaufs an das konfigurierte Sprachmodell
+                    übergeben. Welches Modell und welcher Anbieter das ist, legt der Betreiber fest; der
+                    jeweils aktuelle Stand steht in der <a href="/datenschutz">Datenschutzerklärung</a>.
+                </p>
+                <p>
+                    Antworten eines Sprachmodells können sachlich falsch, unvollständig oder unpassend
+                    sein. Sie stellen keine Beratung dar und sind keine Aussage des Anbieters. Eine
+                    inhaltliche Richtigkeit wird nicht zugesichert.
+                </p>
+            </div>
+
+            <div>
+                <strong>Sperrung und Beendigung</strong>
+                <p>
+                    Der Anbieter kann einzelne Funktionen, einzelne Nutzende oder einen ganzen Server
+                    sperren, wenn dafür ein sachlicher Grund vorliegt. Sachliche Gründe sind insbesondere:
+                </p>
+                <ul>
+                    <li>ein Verstoß gegen die Nutzungsregeln,</li>
+                    <li>eine Gefährdung des Betriebs oder der Sicherheit, etwa durch Überlast oder Angriffe,</li>
+                    <li>eine begründete Beanstandung durch Dritte wegen rechtswidriger Inhalte,</li>
+                    <li>eine Anordnung einer Behörde oder eines Gerichts.</li>
+                </ul>
+                <p>
+                    Die Maßnahme wird auf das erforderliche Maß beschränkt: Vorrang hat der Hinweis vor
+                    der Sperre einer Funktion, und die Sperre einer Funktion vor der Sperre des gesamten
+                    Servers. Soweit möglich und zumutbar wird vorher informiert und Gelegenheit zur
+                    Abhilfe gegeben; bei schwerwiegenden Verstößen oder Gefahr im Verzug kann sofort
+                    gesperrt werden. Auf Nachfrage wird der Grund mitgeteilt.
+                </p>
+                <p>
+                    Die Nutzung kann jederzeit ohne Frist beendet werden, indem der Bot vom Server
+                    entfernt wird. Der Anbieter kann den Dienst ganz oder teilweise einstellen; das wird,
+                    soweit möglich, mit angemessenem Vorlauf angekündigt.
+                </p>
+            </div>
+
+            <div>
+                <strong>Verfügbarkeit</strong>
+                <p>
+                    Der Dienst wird unentgeltlich bereitgestellt. Ein Anspruch auf eine bestimmte
+                    Verfügbarkeit, auf einen bestimmten Funktionsumfang oder auf den Erhalt einzelner
+                    Funktionen besteht nicht. Wartungsarbeiten, Störungen, Änderungen bei Discord oder
+                    bei den Quellen der Audioinhalte können zu Unterbrechungen führen.
+                </p>
+            </div>
+
+            <div>
+                <strong>Haftung</strong>
+                <p>
+                    Der Anbieter haftet unbeschränkt bei Vorsatz und grober Fahrlässigkeit sowie für
+                    Schäden aus der Verletzung des Lebens, des Körpers oder der Gesundheit und nach dem
+                    Produkthaftungsgesetz.
+                </p>
+                <p>
+                    Bei einfacher Fahrlässigkeit haftet der Anbieter nur für die Verletzung wesentlicher
+                    Vertragspflichten — also solcher Pflichten, deren Erfüllung die ordnungsgemäße
+                    Nutzung überhaupt erst ermöglicht und auf deren Einhaltung regelmäßig vertraut werden
+                    darf. In diesem Fall ist die Haftung auf den vertragstypischen und vorhersehbaren
+                    Schaden begrenzt. Im Übrigen ist die Haftung für einfache Fahrlässigkeit
+                    ausgeschlossen.
+                </p>
+                <p>
+                    Da der Dienst unentgeltlich bereitgestellt wird, bleibt § 599 BGB unberührt.
+                </p>
+                <p>
+                    Für Inhalte, die über den Bot aus externen Quellen wiedergegeben werden, sowie für
+                    verlinkte fremde Seiten ist der Anbieter nicht verantwortlich, solange er von einer
+                    Rechtsverletzung keine Kenntnis hat. Nach einem konkreten Hinweis werden betroffene
+                    Inhalte unverzüglich entfernt oder gesperrt.
+                </p>
+            </div>
+
+            <div>
+                <strong>Änderungen dieser Bedingungen</strong>
+                <p>
+                    Diese Bedingungen können geändert werden, wenn dafür ein sachlicher Grund besteht —
+                    etwa geänderte Funktionen, geänderte Vorgaben von Discord oder eine geänderte
+                    Rechtslage. Über wesentliche Änderungen wird mindestens 30 Tage vor ihrem Wirksamwerden
+                    an geeigneter Stelle informiert, insbesondere auf dieser Seite und im Dashboard.
+                </p>
+                <p>
+                    Wer mit einer Änderung nicht einverstanden ist, kann die Nutzung bis zum Wirksamwerden
+                    beenden, indem er den Bot entfernt. Eine Zustimmung durch bloßes Schweigen wird nicht
+                    unterstellt.
+                </p>
+            </div>
+
+            <div>
+                <strong>Anwendbares Recht und Gerichtsstand</strong>
+                <p>
+                    Es gilt das Recht der Bundesrepublik Deutschland. Gegenüber Verbrauchern gilt dies nur,
+                    soweit dadurch der Schutz zwingender Vorschriften des Staates ihres gewöhnlichen
+                    Aufenthalts nicht entzogen wird (Art. 6 Rom-I-VO).
+                </p>
+                <p>
+                    Ein besonderer Gerichtsstand wird nicht vereinbart; es gelten die gesetzlichen
+                    Regelungen. Verbraucher können den Anbieter stets an ihrem allgemeinen Gerichtsstand
+                    verklagen.
+                </p>
+                <p>
+                    Der Anbieter ist weder bereit noch verpflichtet, an Streitbeilegungsverfahren vor
+                    einer Verbraucherschlichtungsstelle teilzunehmen (§ 36 VSBG).
+                </p>
+            </div>
+
+            <div>
+                <strong>Schlussbestimmungen</strong>
+                <p>
+                    Sollte eine Bestimmung unwirksam sein oder werden, bleibt die Wirksamkeit der übrigen
+                    Bestimmungen unberührt. An die Stelle der unwirksamen Bestimmung tritt die gesetzliche
+                    Regelung.
+                </p>
+            </div>
+        </div>
+
+        <p class="hero-copy">
+            Fassung vom <span th:text="${currentYear}">2026</span>.
+            Diese Bedingungen wurden ohne anwaltliche Prüfung erstellt und ersetzen keine Rechtsberatung.
+        </p>
+
+        <footer class="portal-footer">
+            <a class="ghost-button" href="/">Zur Startseite</a>
+            <div class="theme-switcher" role="group" aria-label="Farbschema">
+                <button class="theme-switch-option" type="button" data-theme-option="system">System</button>
+                <button class="theme-switch-option" type="button" data-theme-option="hell">Hell</button>
+                <button class="theme-switch-option" type="button" data-theme-option="dunkel">Dunkel</button>
+            </div>
+            <div class="footer-links">
+                <a href="/impressum">Impressum</a>
+                <a href="/datenschutz">Datenschutz</a>
+                <a href="/stats">Stats</a>
+            </div>
+        </footer>
+    </section>
+</main>
+<div id="cookieNotice" class="cookie-notice" hidden>
+    <div class="cookie-notice-copy">
+        <strong>Cookie-Hinweis</strong>
+        <p>Diese Seite nutzt nur technisch notwendige Session-Cookies für Login, Sicherheit und den geschützten Dashboard-Zugriff.</p>
+    </div>
+    <div class="cookie-notice-actions">
+        <a id="cookieNoticeAccept" class="primary-button small-button" href="/cookies/accept">Akzeptieren</a>
+        <a id="cookieNoticeReject" class="ghost-button small-button" href="/cookies/reject">Ablehnen</a>
+    </div>
+</div>
+<script src="/cookie-hint.js" th:src="@{/cookie-hint.js(v=${assetVersion})}"></script>
+</body>
+</html>

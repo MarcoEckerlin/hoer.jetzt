@@ -353,6 +353,26 @@ public class DB {
         }
     }
 
+    /**
+     * Wie die Maschine heisst, auf der dieser Prozess laeuft.
+     *
+     * <p>Im Container ist der Rechnername die Container-Kennung und aendert
+     * sich bei jedem Neustart - deshalb zuerst {@code HJ_NODE_NAME}, das
+     * Compose setzt.</p>
+     */
+    private static String maschinenname() {
+        String ausUmgebung = System.getenv("HJ_NODE_NAME");
+        if (ausUmgebung != null && !ausUmgebung.isBlank()) {
+            return ausUmgebung.trim();
+        }
+        try {
+            String rechner = java.net.InetAddress.getLocalHost().getHostName();
+            return rechner == null || rechner.isBlank() ? "unbenannt" : rechner.split("\\.")[0];
+        } catch (Exception nichtErmittelbar) {
+            return "unbenannt";
+        }
+    }
+
     private static void seedDeploymentIfMissing(Connection connection) throws SQLException {
         JSONObject root = Config.config;
         JSONObject deployment = root.optJSONObject("deployment") == null ? new JSONObject() : root.optJSONObject("deployment");
@@ -378,7 +398,12 @@ public class DB {
                 """)) {
             statement.setInt(1, botId);
             statement.setString(2, deploymentKey.isBlank() ? "local" : deploymentKey);
-            statement.setString(3, deployment.optString("display_name", "Lokale Instanz"));
+            // Kein erfundener Name: wenn keiner gepflegt ist, heisst die Instanz wie
+            // die Maschine, auf der sie laeuft. "Lokale Instanz" stand auf jeder
+            // Node gleich und sagte damit genau nichts - im Verbund war nicht zu
+            // erkennen, welche gemeint war.
+            String anzeige = deployment.optString("display_name", "").trim();
+            statement.setString(3, anzeige.isEmpty() ? maschinenname() : anzeige);
             statement.setInt(4, web.optInt("port", 8080));
             statement.setString(5, web.optString("base_url", ""));
             statement.setString(6, web.optString("redirect_uri", ""));
@@ -390,6 +415,22 @@ public class DB {
         }
     }
 
+    /**
+     * Legt beim allerersten Start einen Audio-Knoten aus der Konfiguration an.
+     *
+     * <p>Gemeint ist der Fall "frische Einzelinstallation": ohne Knoten gaebe
+     * es keine Musik, und der Grund waere aus der Meldung nicht zu erraten.</p>
+     *
+     * <p>Die Bedingung fragt bewusst nur nach {@code bot_id} und nicht mehr
+     * zusaetzlich nach dem Deployment-Schluessel. Der Unterschied ist im
+     * Verbund entscheidend: die Knoten melden sich selbst an, und die Adresse
+     * aus der Konfiguration ist der Docker-interne Name
+     * {@code http://lavalink-free-1:2333}. In einer geteilten Datenbank ist das
+     * eine Adresse, die auf <em>jeder</em> Node auf deren eigenes Lavalink
+     * zeigt - zwei Maschinen, ein Name, und der Lastverteiler haelt sie fuer
+     * einen dritten Knoten. Mit dem Schluessel in der Bedingung kam dieser
+     * Eintrag bei jedem Start zurueck, auch wenn man ihn geloescht hatte.</p>
+     */
     private static void seedLavalinkNodeIfMissing(Connection connection) throws SQLException {
         JSONObject root = Config.config;
         JSONObject deployment = root.optJSONObject("deployment") == null ? new JSONObject() : root.optJSONObject("deployment");
@@ -412,7 +453,7 @@ public class DB {
                 )
                 SELECT ?,?,?,?,?,?,?,?,?,?
                 WHERE NOT EXISTS (
-                    SELECT 1 FROM deployment_lavalink_nodes WHERE bot_id = ? AND deployment_key = ?
+                    SELECT 1 FROM deployment_lavalink_nodes WHERE bot_id = ?
                 )
                 """)) {
             statement.setInt(1, botId);
@@ -426,7 +467,6 @@ public class DB {
             statement.setBoolean(9, true);
             statement.setInt(10, 0);
             statement.setInt(11, botId);
-            statement.setString(12, deploymentKey.isBlank() ? "local" : deploymentKey);
             statement.executeUpdate();
         }
     }

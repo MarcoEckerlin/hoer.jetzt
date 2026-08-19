@@ -3,6 +3,9 @@ package eckerlin.dev.audio;
 import eckerlin.dev.utils.Alert;
 import eckerlin.dev.utils.Config;
 import eckerlin.dev.utils.DB;
+import eckerlin.dev.services.SchalterService;
+import eckerlin.dev.verbund.EigeneNode;
+import eckerlin.dev.verbund.KnotenVerzeichnis;
 import eckerlin.dev.web.dto.AudioNodeUsageView;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -73,9 +76,56 @@ public class AutoScaleService {
     private volatile Instant sperreBis = Instant.EPOCH;
     private volatile String letzteMeldung = "noch nichts entschieden";
 
-    public AutoScaleService(AudioService audioService, HetznerService hetznerService) {
+    private final KnotenVerzeichnis knotenVerzeichnis;
+    private final EigeneNode eigeneNode;
+    private final SchalterService schalterService;
+
+    public AutoScaleService(AudioService audioService, HetznerService hetznerService,
+                            KnotenVerzeichnis knotenVerzeichnis, EigeneNode eigeneNode,
+                            SchalterService schalterService) {
         this.audioService = audioService;
         this.hetznerService = hetznerService;
+        this.knotenVerzeichnis = knotenVerzeichnis;
+        this.eigeneNode = eigeneNode;
+        this.schalterService = schalterService;
+    }
+
+    /**
+     * Darf diese Node Server anlegen und abbauen?
+     *
+     * <h2>Warum das noetig ist</h2>
+     *
+     * <p>Das Autoscaling laeuft in jedem core-Prozess. Bei einer Node ist das
+     * richtig. Bei zweien sehen beide dieselbe Last, kommen zum selben Schluss
+     * und bestellen jeder einen Server - doppelt so viele Maschinen und doppelte
+     * Rechnung, ohne dass ein Fehler im Log stuende. Beim Abbau dasselbe in
+     * Gruen: beide loeschen, einer davon ins Leere.</p>
+     *
+     * <h2>Warum kein Lock</h2>
+     *
+     * <p>Ein Lock in der Datenbank waere hier keiner: die Replikation ist
+     * asynchron und Multi-Master. Zwei Nodes koennen dieselbe Zeile im selben
+     * Moment fuer sich beanspruchen, und der Konflikt faellt erst beim Abgleich
+     * auf - da stehen die Server schon.</p>
+     *
+     * <p>Stattdessen eine Regel, die ohne Absprache auskommt: zustaendig ist
+     * die Node, deren Name unter den lebenden zuerst kommt. Alle rechnen mit
+     * derselben Liste und kommen zum selben Ergebnis. Faellt sie aus, faellt
+     * sie nach der Karenz aus dem Verzeichnis und die naechste uebernimmt von
+     * selbst - ohne Wahl, ohne Stimmenzaehlen.</p>
+     *
+     * <p>Damit darf {@code HJ_AUTOSCALE=true} auf jeder Node stehen. Genau so
+     * soll es sein: sonst waere die Einstellung eine Falle, bei der die
+     * Ersatz-Node im Ernstfall stillschweigend nichts tut.</p>
+     */
+    private boolean zustaendig() {
+        java.util.Set<String> lebende = knotenVerzeichnis.alle().keySet();
+        if (lebende.size() <= 1) {
+            return true;
+        }
+        return lebende.stream().min(String::compareTo)
+                .map(erste -> erste.equals(eigeneNode.name()))
+                .orElse(true);
     }
 
     @PostConstruct
@@ -129,6 +179,9 @@ public class AutoScaleService {
 
     private void nachsehen() {
         if (!eingeschaltet() || !hetznerService.eingeschaltet()) {
+            return;
+        }
+        if (!zustaendig()) {
             return;
         }
         if (Instant.now().isBefore(sperreBis)) {
@@ -372,9 +425,24 @@ public class AutoScaleService {
                 .orElse(0);
     }
 
-    private boolean eingeschaltet() {
-        String wert = System.getenv("HJ_AUTOSCALE");
-        return wert != null && wert.trim().equalsIgnoreCase("true");
+    /**
+     * Laeuft das Autoscaling?
+     *
+     * <p>Die Umgebung sagt, was beim Aufsetzen gewollt war; der Schalter in der
+     * Datenbank sagt, was jetzt gilt. Solange niemand geklickt hat, gewinnt die
+     * Umgebung - danach der Klick. Anders herum liesse sich das Autoscaling
+     * nicht abschalten, ohne den Prozess neu zu starten, und das ausgerechnet
+     * in dem Moment, in dem er gerade Server anlegt.</p>
+     */
+    public boolean eingeschaltet() {
+        String ausUmgebung = System.getenv("HJ_AUTOSCALE");
+        boolean vorgabe = ausUmgebung != null && ausUmgebung.trim().equalsIgnoreCase("true");
+        return schalterService.an(SchalterService.AUTOSCALING, vorgabe);
+    }
+
+    /** Legt den Schalter um - der Aufrufer prueft die Rechte. */
+    public void schalten(boolean an, String wer) throws java.sql.SQLException {
+        schalterService.setzen(SchalterService.AUTOSCALING, an, wer);
     }
 
     private double schwelle() {

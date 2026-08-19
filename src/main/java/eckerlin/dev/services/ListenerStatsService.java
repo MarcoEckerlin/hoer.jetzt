@@ -422,7 +422,14 @@ public class ListenerStatsService {
                 FROM music_listener_events
                 WHERE bot_id = ?
                   AND started_at >= ?
-                  AND playback_kind IN ('radio', 'ai_radio')
+                  -- Nur gewoehnliches Radio.
+                  --
+                  -- Das AI-Radio stand hier mit drin und tauchte damit als
+                  -- Quelle "AI Radio" in der oeffentlichen Bestenliste auf -
+                  -- die Seite warb also fuer eine Funktion, die nur wenige
+                  -- Server ueberhaupt bekommen. Aus der Vorlage liess sich das
+                  -- nicht entfernen, weil der Name aus den Daten kam.
+                  AND playback_kind = 'radio'
                 GROUP BY COALESCE(source_label, title), playback_kind
                 ORDER BY listened_seconds DESC, unique_listeners DESC
                 LIMIT 8

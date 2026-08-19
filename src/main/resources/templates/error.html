@@ -5,8 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title th:text="${botBrand.displayName + ' Fehler'}">Discord Bot Fehler</title>
     <link rel="stylesheet" href="/public.css" th:href="@{/public.css(v=${assetVersion})}">
-    <!-- Muss vor dem Rendern laufen, sonst blitzt beim Laden kurz das falsche Farbschema auf. -->
+
+    <!-- Ohne defer und vor dem Rendern: sonst blitzt die helle Fassung auf. -->
+
     <script src="/theme.js" th:src="@{/theme.js(v=${assetVersion})}"></script>
+    <!-- Muss vor dem Rendern laufen, sonst blitzt beim Laden kurz das falsche Farbschema auf. -->
 </head>
 <body class="error-body">
 <main class="error-shell">

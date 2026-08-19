@@ -41,6 +41,19 @@ public class KnotenRegistrierungService {
 
     private final int botId = Config.config.optInt("bot_id", 1);
 
+    /**
+     * Der Deployment-Schluessel dieser Instanz.
+     *
+     * <p>Hier stand fest verdrahtet {@code "standard"}, waehrend die Instanz
+     * unter {@code "local"} lief. Sichtbar wurde es nicht, weil die Knotenliste
+     * nach {@code bot_id} sucht und nicht nach dem Schluessel - im Adminbereich
+     * landeten die Knoten aber unter einem Deployment, das es nicht gab. Wer
+     * dort etwas speicherte, schrieb an ihnen vorbei.</p>
+     */
+    private final String deploymentKey = Config.config.optJSONObject("deployment") == null
+            ? "local"
+            : Config.config.optJSONObject("deployment").optString("key", "local").trim();
+
     /** Was ein Knoten von sich erzaehlt. */
     public record Anmeldung(
             String name,
@@ -125,6 +138,67 @@ public class KnotenRegistrierungService {
             anweisung.setString(2, sauber);
             return anweisung.executeUpdate() > 0;
         }
+    }
+
+    /**
+     * Entfernt einen Knoten endgueltig aus der Tabelle.
+     *
+     * <p>Unterschied zu {@link #abmelden(String)}: dort wird ein Knoten nur
+     * stillgelegt und bleibt stehen, weil er sich jederzeit wieder melden
+     * kann. Hier soll er weg - etwa weil der Server dahinter geloescht wurde
+     * oder die Erstinstallation gescheitert ist und ein Eintrag zurueckblieb,
+     * der auf nichts mehr zeigt.</p>
+     *
+     * <p>Anders als beim Abmelden sind hier auch von Hand eingetragene Knoten
+     * erfasst: was ein Mensch eingetragen hat, darf ein Mensch auch loeschen.</p>
+     *
+     * @return die Hetzner-Server-ID, falls es ein automatisch angelegter Knoten
+     *         war - der Aufrufer entscheidet dann, ob der Server mit weg soll
+     */
+    public Optional<Long> entfernen(String name) throws SQLException {
+        String sauber = sauber(name);
+        if (sauber.isBlank()) {
+            return Optional.empty();
+        }
+
+        Long hetznerId = null;
+        try (Connection connection = DB.connection()) {
+            try (PreparedStatement lesen = connection.prepareStatement(
+                    "SELECT hetzner_id FROM deployment_lavalink_nodes WHERE bot_id = ? AND node_name = ?")) {
+                lesen.setInt(1, botId);
+                lesen.setString(2, sauber);
+                try (java.sql.ResultSet zeile = lesen.executeQuery()) {
+                    if (zeile.next()) {
+                        long wert = zeile.getLong("hetzner_id");
+                        // wasNull() muss unmittelbar nach dem Lesen kommen -
+                        // jede weitere Spalte setzt das Kennzeichen neu.
+                        if (!zeile.wasNull()) {
+                            hetznerId = wert;
+                        }
+                    }
+                }
+            }
+
+            try (PreparedStatement anweisung = connection.prepareStatement(
+                    "DELETE FROM deployment_lavalink_nodes WHERE bot_id = ? AND node_name = ?")) {
+                anweisung.setInt(1, botId);
+                anweisung.setString(2, sauber);
+                if (anweisung.executeUpdate() == 0) {
+                    throw new IllegalArgumentException("Kein Knoten mit dem Namen \"" + sauber + "\".");
+                }
+            }
+
+            // Die Session gehoert zu einem Knoten, den es nicht mehr gibt.
+            try (PreparedStatement anweisung = connection.prepareStatement(
+                    "DELETE FROM lavalink_sessions WHERE bot_id = ? AND node_name = ?")) {
+                anweisung.setInt(1, botId);
+                anweisung.setString(2, sauber);
+                anweisung.executeUpdate();
+            }
+        }
+
+        Alert.send("INFO", "AUDIO", "Knoten " + sauber + " aus der Tabelle entfernt.");
+        return Optional.ofNullable(hetznerId);
     }
 
     /** Lebenszeichen ohne vollstaendige Anmeldung. */
@@ -249,13 +323,13 @@ public class KnotenRegistrierungService {
                 VALUES (?, ?, ?, ?, ?, ?, true, ?, ?, ?, ?)
                 """)) {
             anweisung.setInt(1, botId);
-            anweisung.setString(2, "standard");
+            anweisung.setString(2, deploymentKey.isBlank() ? "local" : deploymentKey);
             anweisung.setString(3, name);
             anweisung.setString(4, adresse);
             anweisung.setString(5, sauber(anmeldung.passwort()));
             anweisung.setString(6, stufe);
             anweisung.setString(7, herkunft);
-            anweisung.setString(8, sauber(anmeldung.agentUrl()));
+            anweisung.setString(8, agentAdresse(adresse, anmeldung.agentUrl(), name));
             setzeLangOderNull(anweisung, 9, anmeldung.hetznerId());
             anweisung.setTimestamp(10, java.sql.Timestamp.from(Instant.now()));
             anweisung.executeUpdate();
@@ -296,12 +370,58 @@ public class KnotenRegistrierungService {
             anweisung.setString(2, sauber(anmeldung.passwort()));
             anweisung.setString(3, stufe);
             anweisung.setString(4, herkunft);
-            anweisung.setString(5, sauber(anmeldung.agentUrl()));
+            anweisung.setString(5, agentAdresse(adresse, anmeldung.agentUrl(), anmeldung.name()));
             setzeLangOderNull(anweisung, 6, anmeldung.hetznerId());
             anweisung.setTimestamp(7, java.sql.Timestamp.from(Instant.now()));
             anweisung.setLong(8, id);
             anweisung.setInt(9, botId);
             anweisung.executeUpdate();
+        }
+    }
+
+    /**
+     * Die Adresse, unter der dieser Knoten-Agent wirklich erreichbar ist.
+     *
+     * <p>Der Agent meldet selbst, wo er lauscht - und liegt manchmal daneben.
+     * Laeuft auf dem Knoten Docker, findet die Adressermittlung dort schnell
+     * die Bruecke {@code 172.18.0.1} statt der echten Adresse des Rechners.
+     * Eingetragen wurde das ungeprueft, und der Bot lief anschliessend in
+     * "Connection refused" - gegen eine Adresse, die es nur auf dem fremden
+     * Host gibt.</p>
+     *
+     * <p>Die Korrektur braucht kein Raten: der Agent laeuft immer auf
+     * demselben Rechner wie sein Lavalink, und dessen Adresse kennt der Bot,
+     * weil er sich dorthin verbindet. Stimmen die beiden Rechnernamen nicht
+     * ueberein, gewinnt der von Lavalink; der Port des Agenten bleibt.</p>
+     *
+     * <p>Bewusst nicht "private Adressen verwerfen": im Hetzner-Verbund sind
+     * 10.0.0.2 und 10.0.0.3 die richtigen Adressen. Es geht um die
+     * Abweichung, nicht um den Adressbereich.</p>
+     */
+    private String agentAdresse(String lavalinkAdresse, String gemeldet, String knotenName) {
+        String agent = sauber(gemeldet);
+        if (agent.isBlank() || lavalinkAdresse == null || lavalinkAdresse.isBlank()) {
+            return agent;
+        }
+
+        try {
+            java.net.URI agentUri = java.net.URI.create(agent);
+            java.net.URI lavalinkUri = java.net.URI.create(lavalinkAdresse);
+            String agentHost = agentUri.getHost();
+            String lavalinkHost = lavalinkUri.getHost();
+            if (agentHost == null || lavalinkHost == null || agentHost.equalsIgnoreCase(lavalinkHost)) {
+                return agent;
+            }
+
+            int port = agentUri.getPort();
+            String korrigiert = agentUri.getScheme() + "://" + lavalinkHost + (port > 0 ? ":" + port : "");
+            Alert.send("INFO", "AUDIO", "Agent-Adresse von " + knotenName + " korrigiert: "
+                    + agent + " -> " + korrigiert + " (gemeldeter Rechner passt nicht zu Lavalink).");
+            return korrigiert;
+        } catch (RuntimeException nichtLesbar) {
+            // Keine deutbare Adresse - dann lieber unveraendert eintragen, als
+            // sie zu verwerfen. Der Zustand ist dann sichtbar falsch statt leer.
+            return agent;
         }
     }
 

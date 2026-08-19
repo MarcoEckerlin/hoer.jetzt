@@ -178,6 +178,17 @@ public class EmbedRenderer {
         return werte;
     }
 
+    /**
+     * Platzhalter in einem einzelnen Text ersetzen.
+     *
+     * <p>Oeffentlich, weil nicht jeder Text in einem Embed steckt: die
+     * Begruessung im Ticket-Kanal ist einfacher Fliesstext und blieb deshalb
+     * bisher unersetzt - dort stand woertlich {@code {username}}.</p>
+     */
+    public String ersetzePlatzhalter(String vorlage, Map<String, String> platzhalter) {
+        return ersetze(vorlage, platzhalter);
+    }
+
     private static String ersetze(String vorlage, Map<String, String> platzhalter) {
         if (vorlage == null || vorlage.isBlank()) {
             return "";

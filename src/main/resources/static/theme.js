@@ -1,110 +1,90 @@
 /*
- * Theme-Umschaltung fuer alle Seiten.
+ * Hell oder dunkel - fuer die Seiten, die core selbst ausliefert.
  *
- * Reihenfolge ist wichtig: das gespeicherte Theme wird gesetzt, sobald das
- * Skript laeuft - deshalb wird es im <head> eingebunden. Wuerde man bis
- * DOMContentLoaded warten, blitzt beim Laden kurz das falsche Farbschema auf.
+ * Muss im <head> stehen und ohne "defer" laufen: das Attribut gehoert an das
+ * <html>, bevor der erste Strich gezeichnet wird. Sonst sieht man beim Laden
+ * kurz die helle Fassung aufblitzen und danach die dunkle - der Effekt, den
+ * jeder kennt und niemand will.
+ *
+ * Speicherschluessel und Werte sind dieselben wie in der React-Oberflaeche
+ * (web/src/lib/farbschema.js). Zwei Oberflaechen, eine Wahl: wer im Panel
+ * dunkel einstellt, bekommt auch das Impressum dunkel.
  */
 (function () {
-    "use strict";
+    var SCHLUESSEL = "hoerjetzt.farbschema";
 
-    var STORAGE_KEY = "discordbot-theme";
-    var MODES = ["system", "dark", "light"];
-
-    function readStoredMode() {
+    function gewaehlt() {
         try {
-            var stored = window.localStorage.getItem(STORAGE_KEY);
-            return MODES.indexOf(stored) === -1 ? "system" : stored;
-        } catch (error) {
-            // Privater Modus oder blockierte Storage-API: Systemvorgabe nutzen.
+            var wert = window.localStorage.getItem(SCHLUESSEL);
+            return wert === "hell" || wert === "dunkel" ? wert : "system";
+        } catch (keinSpeicher) {
             return "system";
         }
     }
 
-    function storeMode(mode) {
-        try {
-            window.localStorage.setItem(STORAGE_KEY, mode);
-        } catch (error) {
-            /* Nicht kritisch - die Auswahl gilt dann nur fuer diese Sitzung. */
+    function wirksam(wahl) {
+        if (wahl === "hell" || wahl === "dunkel") {
+            return wahl;
         }
+        return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
+            ? "dunkel"
+            : "hell";
     }
 
-    function resolveTheme(mode) {
-        if (mode === "dark" || mode === "light") {
-            return mode;
+    function anwenden(wahl) {
+        document.documentElement.setAttribute(
+            "data-theme",
+            wirksam(wahl) === "dunkel" ? "dark" : "light"
+        );
+    }
+
+    anwenden(gewaehlt());
+
+    // Die Knoepfe gibt es erst, wenn das Dokument steht.
+    document.addEventListener("DOMContentLoaded", function () {
+        var knoepfe = document.querySelectorAll("[data-theme-option]");
+
+        function markieren() {
+            var wahl = gewaehlt();
+            for (var i = 0; i < knoepfe.length; i++) {
+                knoepfe[i].setAttribute(
+                    "aria-pressed",
+                    knoepfe[i].getAttribute("data-theme-option") === wahl ? "true" : "false"
+                );
+            }
         }
-        return window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches
-            ? "light"
-            : "dark";
-    }
 
-    function apply(mode) {
-        document.documentElement.setAttribute("data-theme", resolveTheme(mode));
-        document.documentElement.setAttribute("data-theme-mode", mode);
-        updateButtons(mode);
-    }
-
-    function updateButtons(mode) {
-        var buttons = document.querySelectorAll("[data-theme-option]");
-        for (var index = 0; index < buttons.length; index++) {
-            var button = buttons[index];
-            button.setAttribute("aria-pressed", String(button.dataset.themeOption === mode));
+        for (var i = 0; i < knoepfe.length; i++) {
+            knoepfe[i].addEventListener("click", function () {
+                var wahl = this.getAttribute("data-theme-option");
+                try {
+                    if (wahl === "system") {
+                        window.localStorage.removeItem(SCHLUESSEL);
+                    } else {
+                        window.localStorage.setItem(SCHLUESSEL, wahl);
+                    }
+                } catch (keinSpeicher) {
+                    // Dann gilt die Wahl nur fuer diese Seite.
+                }
+                anwenden(wahl);
+                markieren();
+            });
         }
-    }
+        markieren();
+    });
 
-    var currentMode = readStoredMode();
-    apply(currentMode);
-
-    // Wechselt der Nutzer die Systemeinstellung, folgt die Seite - aber nur,
-    // solange keine explizite Auswahl getroffen wurde.
+    // Nachziehen, solange "System" gewaehlt ist.
     if (window.matchMedia) {
-        var query = window.matchMedia("(prefers-color-scheme: light)");
-        var onChange = function () {
-            if (currentMode === "system") {
-                apply("system");
+        var abfrage = window.matchMedia("(prefers-color-scheme: dark)");
+        var nachziehen = function () {
+            if (gewaehlt() === "system") {
+                anwenden("system");
             }
         };
-        if (query.addEventListener) {
-            query.addEventListener("change", onChange);
-        } else if (query.addListener) {
-            query.addListener(onChange);
+        if (abfrage.addEventListener) {
+            abfrage.addEventListener("change", nachziehen);
+        } else if (abfrage.addListener) {
+            abfrage.addListener(nachziehen);
         }
     }
-
-    function wireButtons() {
-        updateButtons(currentMode);
-        document.addEventListener("click", function (event) {
-            var target = event.target.closest ? event.target.closest("[data-theme-option]") : null;
-            if (!target) {
-                return;
-            }
-            var mode = target.dataset.themeOption;
-            if (MODES.indexOf(mode) === -1) {
-                return;
-            }
-            currentMode = mode;
-            storeMode(mode);
-            apply(mode);
-        });
-    }
-
-    if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", wireButtons);
-    } else {
-        wireButtons();
-    }
-
-    window.discordBotTheme = {
-        get: function () {
-            return currentMode;
-        },
-        set: function (mode) {
-            if (MODES.indexOf(mode) === -1) {
-                return;
-            }
-            currentMode = mode;
-            storeMode(mode);
-            apply(mode);
-        }
-    };
 })();

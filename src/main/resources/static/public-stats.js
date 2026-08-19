@@ -46,13 +46,11 @@
     const statsSystemHeadline = document.getElementById("statsSystemHeadline");
     const statsSystemNote = document.getElementById("statsSystemNote");
     const statsSystemState = document.getElementById("statsSystemState");
-    const liveStatusBadge = document.getElementById("liveStatusBadge");
+    const statsSystemNodes = document.getElementById("statsSystemNodes");
     const liveListenersValue = document.getElementById("liveListenersValue");
     const liveStreamsValue = document.getElementById("liveStreamsValue");
     const listenTime30dValue = document.getElementById("listenTime30dValue");
     const uniqueListeners30dValue = document.getElementById("uniqueListeners30dValue");
-    const liveStatsList = document.getElementById("liveStatsList");
-    const liveStatsEmpty = document.getElementById("liveStatsEmpty");
     const chartRangeLabel = document.getElementById("chartRangeLabel");
     const chartSummaryTime = document.getElementById("chartSummaryTime");
     const chartSummaryListeners = document.getElementById("chartSummaryListeners");
@@ -184,61 +182,24 @@
 
         const liveStreams = Number(summary.liveStreams || 0);
         const liveListeners = Number(summary.liveListeners || 0);
+        // "Wiedergabe laeuft stabil" stand hier auch dann, wenn gerade der
+        // erste Ton lief - eine Behauptung ueber Stabilitaet, die niemand
+        // geprueft hatte. Jetzt sagt die Zeile nur, was tatsaechlich zaehlbar
+        // ist.
         if (liveStreams > 0) {
-            setText(statsSystemHeadline, "Wiedergabe läuft stabil");
-            setText(statsSystemNote, `${liveStreams} aktive Streams mit ${liveListeners} Live-Hörern.`);
-            setBadge(statsSystemState, "Streaming aktiv", "success");
-            setBadge(liveStatusBadge, "Online", "success");
+            setText(statsSystemHeadline, liveStreams === 1 ? "Ein Stream läuft" : `${liveStreams} Streams laufen`);
+            setText(statsSystemNote, liveListeners === 1
+                ? "Ein Hörer ist gerade verbunden."
+                : `${liveListeners} Hörer sind gerade verbunden.`);
+            setBadge(statsSystemState, "Streaming", "success");
         } else {
-            setText(statsSystemHeadline, "System bereit");
-            setText(statsSystemNote, "Der Bot ist online und wartet aktuell auf die nächste Wiedergabe.");
+            setText(statsSystemHeadline, "Bereit");
+            setText(statsSystemNote, "Der Bot ist online. Gerade läuft keine Wiedergabe.");
             setBadge(statsSystemState, "Bereit", "muted");
-            setBadge(liveStatusBadge, "Kein Stream aktiv", "muted");
         }
-
-        renderLiveItems(liveItems);
         renderRankedList(topTracksList, topTracksEmpty, payload?.topTracks, "Noch keine Track-Daten vorhanden.");
         renderRankedList(topArtistsList, topArtistsEmpty, payload?.topArtists, "Noch keine Artist-Daten vorhanden.");
         renderRankedList(topSourcesList, topSourcesEmpty, payload?.topSources, "Noch keine Radio- oder Quell-Daten vorhanden.");
-    }
-
-    function renderLiveItems(items) {
-        if (!liveStatsList || !liveStatsEmpty) {
-            return;
-        }
-
-        if (!Array.isArray(items) || items.length === 0) {
-            liveStatsList.hidden = true;
-            liveStatsEmpty.hidden = false;
-            liveStatsEmpty.textContent = "Aktuell läuft keine öffentliche Wiedergabe.";
-            return;
-        }
-
-        liveStatsList.hidden = false;
-        liveStatsEmpty.hidden = true;
-        liveStatsList.innerHTML = "";
-
-        items.forEach((item) => {
-            const row = document.createElement("article");
-            row.className = "list-row stats-live-row";
-
-            const content = document.createElement("div");
-            const title = document.createElement("strong");
-            title.textContent = item?.title || "Unbekannt";
-            const subtitle = document.createElement("p");
-            subtitle.textContent = item?.subtitle || "Live";
-            content.append(title, subtitle);
-
-            const meta = document.createElement("div");
-            meta.className = "stats-live-meta";
-            meta.append(
-                createBadge(item?.modeLabel || "Live", "muted"),
-                createBadge(`${number(item?.listenerCount)} Hörer`, "success")
-            );
-
-            row.append(content, meta);
-            liveStatsList.appendChild(row);
-        });
     }
 
     function renderRankedList(container, emptyState, items, emptyMessage) {
@@ -567,9 +528,13 @@
 
         nodeLeer.hidden = knoten.length > 0;
         const erreichbar = knoten.filter((k) => k.erreichbar).length;
-        setBadge(nodeStatusBadge,
-            knoten.length === 0 ? "—" : `${erreichbar} von ${knoten.length} erreichbar`,
+        const knotenText = knoten.length === 0 ? "—" : `${erreichbar} von ${knoten.length} erreichbar`;
+        setBadge(nodeStatusBadge, knotenText,
             erreichbar === knoten.length && knoten.length > 0 ? "success" : "muted");
+
+        // Dieselbe Zahl oben im Systemstatus. Wer wissen will, ob "das System"
+        // laeuft, meint die Knoten - nicht, ob zufaellig jemand Musik hoert.
+        setText(statsSystemNodes, knoten.length === 0 ? "" : `Audio-Knoten: ${knotenText}`);
 
         nodeListe.innerHTML = knoten.map((k) => {
             const last = Math.min(100, Math.round((k.cpuLast || 0) * 100));

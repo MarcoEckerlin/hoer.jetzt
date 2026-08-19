@@ -29,6 +29,11 @@ public record StoredSettings(
         Double llmTemperature,
         Integer llmMaxTokens,
         Integer llmHistoryTurns,
-        String llmSystemMessage
+        String llmSystemMessage,
+        // Bewusst am Ende: dieses Record ist positionsgebunden, und die
+        // SQL-Parameter im DatabaseSettingsService sind es ebenfalls. Ein Feld
+        // in der Mitte einzuschieben verschoebe stillschweigend jeden Index
+        // dahinter - auffallen wuerde das erst beim Speichern.
+        String supportUrl
 ) {
 }

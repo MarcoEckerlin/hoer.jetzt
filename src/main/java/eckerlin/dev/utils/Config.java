@@ -42,7 +42,7 @@ public class Config {
               "bot_id": 1,
               "deployment": {
                 "key": "local",
-                "display_name": "Lokale Instanz"
+                "display_name": ""
               },
               "webinterface": {
                 "port": 8080,

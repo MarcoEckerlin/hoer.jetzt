@@ -56,11 +56,26 @@ public class DiscordOAuthService {
                 ? user.username()
                 : user.globalName();
 
+        /*
+         * Der Zugriffstoken bleibt hier - bewusst.
+         *
+         * Gebraucht wird er genau zweimal, eben gerade: fuer Profil und
+         * Serverliste. Danach fragt ihn keine Stelle der Anwendung mehr ab.
+         * Mitgespeichert landete er ueber die Sitzung in der Datenbank, wurde
+         * auf alle Nodes repliziert und lag dort bis zu 30 Tage - ein
+         * Schluessel zu einem fremden Discord-Konto, den niemand benutzt.
+         * Datenminimierung (Art. 5 Abs. 1 lit. c DSGVO) heisst hier schlicht:
+         * weglassen.
+         *
+         * Wird er spaeter doch gebraucht, etwa um die Serverliste waehrend
+         * einer laufenden Sitzung aufzufrischen, holt man ihn ueber einen
+         * neuen Anmeldevorgang - nicht aus dem Speicher.
+         */
         return new DashboardSession(
                 user.id(),
                 displayName,
                 avatarUrl(user.id(), user.avatar()),
-                token.accessToken(),
+                "",
                 guilds
         );
     }

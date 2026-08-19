@@ -11,10 +11,9 @@ import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.components.actionrow.ActionRow;
 import net.dv8tion.jda.api.components.buttons.Button;
-import net.dv8tion.jda.api.components.selections.SelectOption;
-import net.dv8tion.jda.api.components.selections.StringSelectMenu;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Member;
+import net.dv8tion.jda.api.entities.emoji.Emoji;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.Role;
 import net.dv8tion.jda.api.entities.User;
@@ -29,8 +28,10 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 
 @Service
@@ -76,7 +77,7 @@ public class TicketModuleService {
         if (!state.isEnabled()) {
             notice = "Das Ticket-System ist aktuell deaktiviert.";
         } else if (state.getPanels().isEmpty()) {
-            notice = "Lege mindestens ein Ticket-Panel mit Dropdown oder Buttons an.";
+            notice = "Lege mindestens eine Tafel mit einem Anliegen an.";
         } else {
             notice = state.getPanels().size() + " Ticket-Panel(s) aktiv. Claims, Pausen, Rollen-Zugriff und Transcripts laufen direkt ueber Discord.";
         }
@@ -195,7 +196,10 @@ public class TicketModuleService {
         }
 
         Category category = panel.getCategoryId().isBlank() ? null : guild.getCategoryById(panel.getCategoryId());
-        String channelName = buildChannelName(option.getChannelNameTemplate(), member, guild, option.getLabel());
+        // Vor dem Anlegen vergeben: die Nummer steht im Kanalnamen, also muss
+        // sie feststehen, bevor der Kanal entsteht.
+        int nummer = settingsService.naechsteTicketNummer(guild.getId());
+        String channelName = buildChannelName(option.getChannelNameTemplate(), member, guild, option.getLabel(), nummer);
         String topic = "Ticket fuer " + member.getEffectiveName() + " | " + option.getLabel();
 
         var action = category == null
@@ -251,6 +255,7 @@ public class TicketModuleService {
         activeTicket.setOptionId(option.getId());
         activeTicket.setOptionLabel(option.getLabel());
         activeTicket.setCreatedAt(Instant.now().toString());
+        activeTicket.setNummer(nummer);
 
         String notifyMention = buildRoleMention(guild, panel.getNotifyRoleId());
         Message controlMessage;
@@ -492,8 +497,26 @@ public class TicketModuleService {
         }
 
         String description = panel.getDescription().isBlank()
-                ? "Waehle unten dein Anliegen aus. Der Bot erstellt dafuer sofort einen privaten Ticket-Channel."
+                ? "Druecke unten auf dein Anliegen. Der Bot legt dafuer sofort einen privaten Kanal an."
                 : panel.getDescription();
+
+        // Die Beschreibungen der Anliegen standen frueher in der Auswahlliste.
+        // Die gibt es nicht mehr, und auf einem Knopf ist dafuer kein Platz -
+        // also hierher, sonst waere die Erklaerung mit der Liste verschwunden.
+        StringBuilder erklaerungen = new StringBuilder();
+        for (GuildModuleSettingsService.TicketOption option : panel.getOptions()) {
+            if (option.getDescription() == null || option.getDescription().isBlank()) {
+                continue;
+            }
+            erklaerungen.append(System.lineSeparator())
+                    .append(option.getEmoji().isBlank() ? "•" : option.getEmoji())
+                    .append(" **").append(option.getLabel()).append("** — ")
+                    .append(option.getDescription());
+        }
+        if (erklaerungen.length() > 0) {
+            description += System.lineSeparator() + erklaerungen;
+        }
+
         if (!enabled) {
             description += "\n\nDieses Ticket-Panel ist gerade nicht verfuegbar.";
         }
@@ -514,11 +537,64 @@ public class TicketModuleService {
         return embed.build();
     }
 
+    /**
+     * Die Platzhalter eines Tickets - Standardwerte plus das, was nur hier
+     * bekannt ist.
+     */
+    private Map<String, String> ticketPlatzhalter(
+            Guild guild,
+            GuildModuleSettingsService.TicketPanel panel,
+            GuildModuleSettingsService.ActiveTicket activeTicket
+    ) {
+        // Der Eroeffner ist oft im Cache; ist er es nicht, bleiben die
+        // nutzerbezogenen Platzhalter weg statt falsch zu sein.
+        Member eroeffner = null;
+        try {
+            eroeffner = guild.getMemberById(activeTicket.getOpenerUserId());
+        } catch (RuntimeException ignoriert) {
+            // Nicht-numerische Kennung - kann nur aus alten Daten kommen.
+        }
+
+        Map<String, String> werte = new LinkedHashMap<>(embedRenderer.standardPlatzhalter(guild, eroeffner));
+        werte.put("{ticket}", activeTicket.getOptionLabel());
+        werte.put("{anliegen}", activeTicket.getOptionLabel());
+        werte.put("{count}", String.valueOf(activeTicket.getNummer()));
+        werte.put("{nummer}", String.valueOf(activeTicket.getNummer()));
+        werte.put("{status}", activeTicket.isPaused() ? "pausiert" : "offen");
+        werte.put("{bearbeiter}", activeTicket.getClaimedByDisplay());
+        werte.put("{tafel}", panel.getTitle());
+        // Auch ohne Cache-Treffer muss die Erwaehnung stimmen - sie braucht
+        // nur die Kennung.
+        werte.put("{user}", "<@" + activeTicket.getOpenerUserId() + ">");
+        if (eroeffner == null) {
+            werte.put("{name}", activeTicket.getOpenerDisplay());
+            werte.put("{username}", activeTicket.getOpenerDisplay());
+            werte.put("{userid}", activeTicket.getOpenerUserId());
+        }
+        return werte;
+    }
+
     private net.dv8tion.jda.api.entities.MessageEmbed buildTicketEmbed(
             Guild guild,
             GuildModuleSettingsService.TicketPanel panel,
             GuildModuleSettingsService.ActiveTicket activeTicket
     ) {
+        Map<String, String> platzhalter = ticketPlatzhalter(guild, panel, activeTicket);
+
+        // Die eingestellte Gestaltung galt bisher nur fuer die Tafel, nicht
+        // fuer das geoeffnete Ticket - dort wurde immer der feste Text unten
+        // gebaut. Wer einen Embed gestaltet hat, sah ihn also nie wieder.
+        EmbedVorlage vorlage = null;
+        if (panel.getEmbedVorlageId() != null && !panel.getEmbedVorlageId().isBlank()) {
+            vorlage = settingsService.findEmbedVorlage(guild.getId(), panel.getEmbedVorlageId());
+        }
+        if (vorlage == null || vorlage.istLeer()) {
+            vorlage = panel.getEmbed() != null && !panel.getEmbed().istLeer() ? panel.getEmbed() : null;
+        }
+        if (vorlage != null) {
+            return embedRenderer.baueEmbeds(vorlage, platzhalter).get(0);
+        }
+
         StringBuilder description = new StringBuilder()
                 .append("<@")
                 .append(activeTicket.getOpenerUserId())
@@ -529,7 +605,9 @@ public class TicketModuleService {
                 .append(".\n")
                 .append(panel.getWelcomeMessage().isBlank()
                         ? "Beschreibe dein Anliegen hier. Das Team meldet sich so schnell wie moeglich."
-                        : panel.getWelcomeMessage());
+                        // Hier stand die Begruessung woertlich - "{username}"
+                        // blieb "{username}".
+                        : embedRenderer.ersetzePlatzhalter(panel.getWelcomeMessage(), platzhalter));
         if (!activeTicket.getClaimedByDisplay().isBlank()) {
             description.append("\n\nBearbeitet von **")
                     .append(activeTicket.getClaimedByDisplay())
@@ -552,34 +630,66 @@ public class TicketModuleService {
         return embed.build();
     }
 
+    /**
+     * Die Knoepfe unter der Tafel.
+     *
+     * <p>Nur noch Knoepfe. Die Auswahlliste ist raus - sie kostet einen Klick
+     * mehr, verbirgt die Anliegen hinter einem Aufklapper und sah auf dem
+     * Telefon aus wie ein Formularfeld. Die Grenze ist dieselbe geblieben:
+     * fuenf Knoepfe je Reihe, fuenf Reihen, also 25 Anliegen - genau so viele,
+     * wie eine Auswahlliste auch fasst.</p>
+     *
+     * <p>{@code interactionMode} bleibt im Datensatz stehen und wird
+     * ignoriert. Es zu entfernen haette bedeutet, jeden gespeicherten Server
+     * anzufassen, ohne dass sich etwas daran aendert.</p>
+     */
     private List<ActionRow> buildPanelComponents(GuildModuleSettingsService.TicketPanel panel, boolean enabled) {
         if (!enabled || panel.getOptions().isEmpty()) {
             return List.of();
         }
 
-        if ("buttons".equals(panel.getInteractionMode())) {
-            List<ActionRow> rows = new ArrayList<>();
-            List<Button> currentRow = new ArrayList<>();
-            for (GuildModuleSettingsService.TicketOption option : panel.getOptions()) {
-                String label = option.getEmoji().isBlank()
-                        ? option.getLabel()
-                        : option.getEmoji() + " " + option.getLabel();
-                currentRow.add(Button.primary(createButtonComponentId(panel.getId(), option.getId()), clamp(label, 80)));
-                if (currentRow.size() == 5) {
-                    rows.add(ActionRow.of(new ArrayList<>(currentRow)));
-                    currentRow.clear();
-                }
-                if (rows.size() == 5) {
-                    break;
-                }
+        List<ActionRow> rows = new ArrayList<>();
+        List<Button> currentRow = new ArrayList<>();
+        for (GuildModuleSettingsService.TicketOption option : panel.getOptions()) {
+            currentRow.add(baueAnliegenKnopf(panel, option));
+            if (currentRow.size() == 5) {
+                rows.add(ActionRow.of(new ArrayList<>(currentRow)));
+                currentRow.clear();
             }
-            if (!currentRow.isEmpty() && rows.size() < 5) {
-                rows.add(ActionRow.of(currentRow));
+            if (rows.size() == 5) {
+                break;
             }
-            return rows;
         }
+        if (!currentRow.isEmpty() && rows.size() < 5) {
+            rows.add(ActionRow.of(currentRow));
+        }
+        return rows;
+    }
 
-        return List.of(ActionRow.of(buildSelectMenu(panel)));
+    /**
+     * Ein Knopf je Anliegen - mit dem Emoji im dafuer vorgesehenen Feld.
+     *
+     * <p>Frueher wurde das Emoji vor die Beschriftung geschrieben. Bei einem
+     * Unicode-Zeichen faellt das nicht auf, bei einem Server-Emoji schon: dort
+     * stand dann woertlich {@code <:name:123>} auf dem Knopf. Laesst sich die
+     * Angabe nicht deuten, bleibt es beim vorangestellten Text - lieber ein
+     * schiefes Emoji als ein Knopf, der beim Aufbau der Nachricht platzt.</p>
+     */
+    private Button baueAnliegenKnopf(
+            GuildModuleSettingsService.TicketPanel panel,
+            GuildModuleSettingsService.TicketOption option
+    ) {
+        String id = createButtonComponentId(panel.getId(), option.getId());
+        String emoji = option.getEmoji() == null ? "" : option.getEmoji().trim();
+        if (emoji.isBlank()) {
+            return Button.primary(id, clamp(option.getLabel(), 80));
+        }
+        try {
+            return Button.primary(id, clamp(option.getLabel(), 80))
+                    .withEmoji(Emoji.fromFormatted(emoji));
+        } catch (RuntimeException nichtDeutbar) {
+            return Button.primary(id, clamp(emoji + " " + option.getLabel(), 80));
+        }
     }
 
     private List<ActionRow> buildTicketComponents(
@@ -606,47 +716,78 @@ public class TicketModuleService {
         return List.of(ActionRow.of(buttons));
     }
 
-    private StringSelectMenu buildSelectMenu(GuildModuleSettingsService.TicketPanel panel) {
-        List<SelectOption> options = new ArrayList<>();
-        for (GuildModuleSettingsService.TicketOption option : panel.getOptions()) {
-            SelectOption selectOption = SelectOption.of(
-                    clamp(option.getLabel(), 100),
-                    option.getId()
-            );
-            if (option.getDescription() != null && !option.getDescription().isBlank()) {
-                selectOption = selectOption.withDescription(clamp(option.getDescription(), 100));
-            }
-            options.add(selectOption);
-        }
+    // Hier stand buildSelectMenu. Gebaut wird keine Auswahlliste mehr.
+    //
+    // Der Empfang bleibt aber bestehen (isTicketCreateComponent und
+    // CREATE_PREFIX): Tafeln, die vor dieser Aenderung veroeffentlicht wurden,
+    // haengen als Nachricht mit Auswahlliste weiterhin in Discord und werden
+    // erst beim naechsten Speichern auf Knoepfe umgestellt. Bis dahin muessen
+    // Klicks darauf weiter funktionieren - sonst laeuft jemand in eine tote
+    // Nachricht, ohne zu wissen warum.
 
-        return StringSelectMenu.create(CREATE_PREFIX + panel.getId())
-                .setPlaceholder(panel.getPlaceholder().isBlank() ? "Waehle dein Anliegen" : clamp(panel.getPlaceholder(), 150))
-                .addOptions(options)
-                .build();
+    /**
+     * Erkennt den Knopf-Modus.
+     *
+     * <p>Hier stand {@code "buttons".equals(...)} - die Oberflaeche schickt
+     * aber {@code "button"} im Singular. Der Zweig wurde damit nie betreten,
+     * und jede Tafel bekam eine Auswahlliste, egal was eingestellt war. Beide
+     * Schreibweisen zu akzeptieren ist billiger, als sich auf eine zu einigen
+     * und die gespeicherten Daten anzufassen.</p>
+     */
+    private static boolean istKnopfModus(String modus) {
+        String wert = modus == null ? "" : modus.trim().toLowerCase(Locale.ROOT);
+        return wert.equals("button") || wert.equals("buttons") || wert.equals("knopf") || wert.equals("knoepfe");
     }
 
-    private String buildChannelName(String template, Member member, Guild guild, String optionLabel) {
+    /**
+     * Der Kanalname aus der Vorlage.
+     *
+     * @param nummer fortlaufende Ticketnummer fuer {@code {count}}
+     */
+    private String buildChannelName(String template, Member member, Guild guild, String optionLabel, int nummer) {
         String raw = (template == null || template.isBlank() ? "ticket-{label}-{user}" : template)
-                .replace("{user}", safeSlug(member.getEffectiveName()))
-                .replace("{guild}", safeSlug(guild.getName()))
-                .replace("{label}", safeSlug(optionLabel));
-        String slug = safeSlug(raw);
-        return slug.isBlank() ? "ticket-" + member.getId().substring(Math.max(0, member.getId().length() - 4)) : slug;
+                .replace("{user}", kanalTauglich(member.getEffectiveName()))
+                .replace("{username}", kanalTauglich(member.getUser().getName()))
+                .replace("{name}", kanalTauglich(member.getEffectiveName()))
+                .replace("{guild}", kanalTauglich(guild.getName()))
+                .replace("{server}", kanalTauglich(guild.getName()))
+                .replace("{label}", kanalTauglich(optionLabel))
+                // {count} gab es bisher gar nicht - "bug-{count}" wurde
+                // deshalb zu "bug-count", weil die geschweiften Klammern
+                // anschliessend als Sonderzeichen wegfielen.
+                .replace("{count}", String.valueOf(nummer))
+                .replace("{nummer}", String.valueOf(nummer))
+                .replace("{anzahl}", String.valueOf(nummer));
+        String name = kanalTauglich(raw);
+        return name.isBlank() ? "ticket-" + nummer : name;
     }
 
-    private String safeSlug(String value) {
+    /**
+     * Macht aus einem Text einen Discord-tauglichen Kanalnamen.
+     *
+     * <p>Die alte Fassung ersetzte alles ausser {@code [a-z0-9]} durch einen
+     * Bindestrich. Discord ist da deutlich grosszuegiger: Emoji und Zeichen
+     * wie {@code │} sind in Kanalnamen ueblich und erlaubt. Aus
+     * {@code "│🐞│bug-{count}"} wurde so {@code "bug-count"} - erst fiel die
+     * Verzierung weg, dann die Klammern des Platzhalters.</p>
+     *
+     * <p>Jetzt bleibt alles stehen, was Discord akzeptiert. Entfernt werden
+     * nur Steuerzeichen und die Handvoll ASCII-Zeichen, an denen Discord sich
+     * tatsaechlich stoert; Leerraum wird - wie in Discord selbst - zum
+     * Bindestrich.</p>
+     */
+    private String kanalTauglich(String value) {
         if (value == null || value.isBlank()) {
-            return "ticket";
+            return "";
         }
 
-        String slug = value.toLowerCase(Locale.ROOT)
-                .replaceAll("[^a-z0-9]+", "-")
-                .replaceAll("(^-+|-+$)", "")
-                .replaceAll("-{2,}", "-");
-        if (slug.length() > 80) {
-            slug = slug.substring(0, 80);
-        }
-        return slug;
+        String name = value.toLowerCase(Locale.ROOT)
+                .replaceAll("\\s+", "-")
+                .replaceAll("[\\p{Cntrl}@#:,.?%*|\"<>\\\\/]+", "")
+                .replaceAll("-{2,}", "-")
+                .replaceAll("(^-+|-+$)", "");
+        // Discord erlaubt 100 Zeichen; etwas Reserve fuer den Rest der Vorlage.
+        return name.length() > 90 ? name.substring(0, 90) : name;
     }
 
     private String buildTranscript(TextChannel channel) {

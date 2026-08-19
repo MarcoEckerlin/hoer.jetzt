@@ -5,8 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title th:text="${'Status & Statistik | ' + botBrand.displayName}">Status & Statistik</title>
     <link rel="stylesheet" href="/public.css" th:href="@{/public.css(v=${assetVersion})}">
-    <!-- Muss vor dem Rendern laufen, sonst blitzt beim Laden kurz das falsche Farbschema auf. -->
+
+    <!-- Ohne defer und vor dem Rendern: sonst blitzt die helle Fassung auf. -->
+
     <script src="/theme.js" th:src="@{/theme.js(v=${assetVersion})}"></script>
+    <!-- Muss vor dem Rendern laufen, sonst blitzt beim Laden kurz das falsche Farbschema auf. -->
 </head>
 <body class="dashboard-body">
 <main class="landing-shell legal-layout stats-layout">
@@ -37,6 +40,9 @@
                 </p>
             </div>
             <div class="stats-system-state">
+                <!-- Wird nachgeladen. Ohne geprueften Wert bleibt die Zeile leer,
+                     statt eine Erreichbarkeit zu behaupten. -->
+                <span id="statsSystemNodes" class="stats-system-nodes"></span>
                 <span id="statsSystemState" class="badge success"
                       th:text="${stats.summary.liveStreams > 0 ? 'Streaming aktiv' : 'Bereit'}">Bereit</span>
             </div>
@@ -51,7 +57,7 @@
             <article class="mini-panel">
                 <span class="mini-label">Aktive Streams</span>
                 <strong id="liveStreamsValue" th:text="${stats.summary.liveStreams}">0</strong>
-                <p>Musik, Radio oder AI Radio</p>
+                <p>gerade aktiv</p>
             </article>
             <article class="mini-panel">
                 <span class="mini-label">30 Tage Hörzeit</span>
@@ -75,31 +81,6 @@
             </div>
             <div id="nodeListe" class="node-liste"></div>
             <div id="nodeLeer" class="empty-state" hidden>Kein Audio-Knoten eingetragen.</div>
-        </section>
-
-        <section class="stats-block">
-            <div class="panel-title-row">
-                <div>
-                    <h3>Aktuelle Wiedergaben</h3>
-                    <p class="panel-copy">Live-Ansicht aller aktuell laufenden Musik-, Radio- und AI-Radio-Wiedergaben.</p>
-                </div>
-                <span id="liveStatusBadge" class="badge success" th:text="${stats.summary.liveStreams > 0 ? 'Online' : 'Kein Stream aktiv'}">Online</span>
-            </div>
-            <div id="liveStatsList" class="stats-live-list" th:attr="hidden=${#lists.isEmpty(stats.liveItems)} ? 'hidden' : null">
-                <article class="list-row stats-live-row" th:each="item : ${stats.liveItems}">
-                    <div>
-                        <strong th:text="${item.title}">Titel</strong>
-                        <p th:text="${item.subtitle}">Quelle</p>
-                    </div>
-                    <div class="stats-live-meta">
-                        <span class="badge muted" th:text="${item.modeLabel}">Modus</span>
-                        <span class="badge success" th:text="${item.listenerCount + ' Hörer'}">0 Hörer</span>
-                    </div>
-                </article>
-            </div>
-            <div id="liveStatsEmpty" class="empty-state" th:attr="hidden=${!#lists.isEmpty(stats.liveItems)} ? 'hidden' : null">
-                Aktuell läuft keine öffentliche Wiedergabe.
-            </div>
         </section>
 
         <section class="stats-block">
@@ -224,7 +205,7 @@
                 <div class="panel-title-row">
                     <div>
                         <h3>Radio & Quellen</h3>
-                        <p class="panel-copy">Die am längsten gehörten Radio- und AI-Radio-Quellen.</p>
+                        <p class="panel-copy">Die am längsten gehörten Radioquellen.</p>
                     </div>
                 </div>
                 <div id="topSourcesList" class="leaderboard-list" th:attr="hidden=${#lists.isEmpty(stats.topSources)} ? 'hidden' : null">
@@ -257,13 +238,14 @@
         <footer class="portal-footer">
             <a class="ghost-button" href="/">Zur Startseite</a>
             <div class="theme-switcher" role="group" aria-label="Farbschema">
-                <button class="theme-switch-option" type="button" data-theme-option="system" aria-pressed="true">System</button>
-                <button class="theme-switch-option" type="button" data-theme-option="dark" aria-pressed="false">Dunkel</button>
-                <button class="theme-switch-option" type="button" data-theme-option="light" aria-pressed="false">Hell</button>
+                <button class="theme-switch-option" type="button" data-theme-option="system">System</button>
+                <button class="theme-switch-option" type="button" data-theme-option="hell">Hell</button>
+                <button class="theme-switch-option" type="button" data-theme-option="dunkel">Dunkel</button>
             </div>
             <div class="footer-links">
                 <a href="/impressum">Impressum</a>
                 <a href="/datenschutz">Datenschutz</a>
+                <a href="/nutzungsbedingungen">Nutzungsbedingungen</a>
             </div>
         </footer>
     </section>

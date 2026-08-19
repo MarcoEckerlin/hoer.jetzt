@@ -22,126 +22,96 @@
 
 /* == 1. Design-Tokens ==================================================== */
 
+/* == 1. Design-Tokens ====================================================
+   Eine Fassung, kein Hell/Dunkel mehr - dieselbe Entscheidung wie im Panel.
+   Die Namen bleiben, damit keine der Regeln weiter unten angefasst werden
+   muss; sie zeigen jetzt auf die fuenf Farben des Designs.
+   ====================================================================== */
+
+@font-face {
+    font-family: "Space Grotesk";
+    font-style: normal;
+    font-weight: 300 700;
+    font-display: swap;
+    src: url("/schrift/space-grotesk-a57c9413.woff2") format("woff2");
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+2000-206F, U+20AC, U+2122;
+}
+
+@font-face {
+    font-family: "Space Grotesk";
+    font-style: normal;
+    font-weight: 300 700;
+    font-display: swap;
+    src: url("/schrift/space-grotesk-e911c2d9.woff2") format("woff2");
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+1E00-1E9F, U+2020, U+20A0-20AB;
+}
+
 :root {
-    color-scheme: dark;
+    color-scheme: light;
 
-    /* Flaechen: von der dunkelsten Ebene (App-Hintergrund) nach vorne.
-       Die Werte stammen aus der neuen Oberflaeche - beide sollen wie ein
-       Haus aussehen, nicht wie zwei. Der Aufbau der Seiten bleibt unberuehrt:
-       geaendert sind ausschliesslich diese Variablen, keine einzige Regel
-       weiter unten. */
-    --bg: #0b0d12;
-    --bg-deep: #07090d;
-    --surface: #151821;
-    --surface-raised: #1c2029;
-    --surface-hover: #232836;
-    --surface-sunken: #10131a;
+    --tinte: #10100f;
+    --papier: #f2efe7;
+    --acid: #d9ff43;
+    --violett: #7667ff;
+    --orange: #ff6b3d;
 
-    --line: #262b36;
-    --line-strong: #333a48;
+    --bg: var(--papier);
+    --bg-deep: #e8e4d9;
+    --surface: #f8f6ef;
+    --surface-raised: #ffffff;
+    --surface-hover: #eae6db;
+    --surface-sunken: #eae6db;
 
-    --text: #e6e9ef;
-    --text-strong: #ffffff;
-    --muted: #9aa3b2;
-    --muted-strong: #c4cbd7;
+    --line: var(--tinte);
+    --line-strong: var(--tinte);
 
-    /* Der Akzent ist jetzt hell statt dunkel. Deshalb muss die Schrift *auf*
-       ihm dunkel sein - weisse Schrift auf hellem Blau ergaebe einen Knopf,
-       den man ahnt statt liest (Kontrast 1.9 statt 8.3). */
-    --accent: #7ca9ff;
-    --accent-hover: #a3c3ff;
-    --accent-contrast: #0b0d12;
-    --accent-soft: rgba(124, 169, 255, 0.16);
-    --accent-ring: rgba(124, 169, 255, 0.45);
+    --text: var(--tinte);
+    --text-strong: #000000;
+    --muted: #5f5d57;
+    --muted-strong: #35342f;
 
-    /* Diagrammfarben. Eigene Toene, gegen die Kartenflaeche geprueft: im
-       Helligkeitsband des dunklen Modus, ueber 3:1 Kontrast, und bei
-       Rot-Gruen-Schwaeche mit Delta E 19.6 klar zu unterscheiden. Die
-       Akzentfarbe der Oberflaeche waere als duenne Linie zu blass. */
-    --chart-1: #3987e5;
-    --chart-1-soft: rgba(57, 135, 229, 0.18);
-    --chart-2: #199e70;
-    --chart-2-soft: rgba(25, 158, 112, 0.18);
+    /* Abgedunkelt fuer Schrift - das helle Violett kommt auf Papier nur auf
+       3.55 und ist als Text unlesbar. Die Flaechenfarbe bleibt --violett. */
+    --accent: #5f4fe0;
+    --accent-hover: #4f3fc9;
+    --accent-contrast: #ffffff;
+    --accent-soft: rgba(118, 103, 255, 0.14);
+    --accent-ring: rgba(118, 103, 255, 0.45);
 
-    --success: #4ade80;
-    --success-contrast: #07120b;
-    --success-soft: rgba(74, 222, 128, 0.16);
-    --warn: #f5c451;
-    --warn-soft: rgba(245, 196, 81, 0.16);
-    --danger: #f87171;
-    --danger-contrast: #1a0707;
-    --danger-hover: #fca5a5;
-    --danger-soft: rgba(248, 113, 113, 0.16);
+    --chart-1: #5f4fe0;
+    --chart-1-soft: rgba(118, 103, 255, 0.16);
+    --chart-2: #1c6b3f;
+    --chart-2-soft: rgba(28, 107, 63, 0.16);
 
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.28);
-    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.32);
-    --shadow-lg: 0 10px 32px rgba(0, 0, 0, 0.4);
+    --success: #1c6b3f;
+    --success-contrast: #ffffff;
+    --success-soft: rgba(28, 107, 63, 0.12);
+    --warn: #8a6a12;
+    --warn-soft: rgba(217, 255, 67, 0.35);
+    --danger: #c02a1c;
+    --danger-contrast: #ffffff;
+    --danger-hover: #a2210f;
+    --danger-soft: rgba(192, 42, 28, 0.1);
 
-    --radius-xl: 16px;
-    --radius-lg: 12px;
-    --radius-md: 8px;
-    --radius-sm: 6px;
+    /* Harte Versatzschatten statt Weichzeichner - das Erkennungszeichen des
+       Designs. */
+    --shadow-sm: 3px 3px 0 var(--tinte);
+    --shadow-md: 5px 5px 0 var(--tinte);
+    --shadow-lg: 8px 8px 0 var(--tinte);
+
+    --radius-xl: 0px;
+    --radius-lg: 0px;
+    --radius-md: 0px;
+    --radius-sm: 0px;
 
     --gap: 16px;
     --gap-lg: 24px;
 
-    --font-main: "Inter", "gg sans", "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
+    --font-main: "Space Grotesk", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
     --font-mono: "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
 
     --sidebar-width: 296px;
     --transition: 140ms ease;
-}
-
-/* Heller Modus. Wird ueber data-theme am <html> gesetzt (siehe theme.js). */
-:root[data-theme="light"] {
-    color-scheme: light;
-
-    --bg: #f7f8fb;
-    --bg-deep: #eef0f6;
-    --surface: #ffffff;
-    --surface-raised: #ffffff;
-    --surface-hover: #f0f2f7;
-    --surface-sunken: #f7f8fb;
-
-    --line: #e2e6ee;
-    --line-strong: #cbd2e0;
-
-    --text: #12151c;
-    --text-strong: #000000;
-    --muted: #5c6472;
-    --muted-strong: #2b313d;
-
-    /* Nicht derselbe Blauton wie im dunklen Modus: #7ca9ff auf Weiss kommt
-       auf Kontrast 1.7 und ist als Text unbrauchbar. #3868cd besteht in
-       beide Richtungen - als Schrift auf hellem Grund (4.9) und als Flaeche
-       unter weisser Schrift (5.2). */
-    --accent: #3868cd;
-    --accent-hover: #2f5cbd;
-    --accent-contrast: #ffffff;
-    --accent-soft: rgba(56, 104, 205, 0.1);
-    --accent-ring: rgba(56, 104, 205, 0.35);
-
-    /* Eigene Stufen fuer den hellen Modus, kein Umkehren der dunklen: das
-       Gruen von oben kommt auf Weiss nur auf 2.8:1 und waere als duenne
-       Linie kaum zu sehen. */
-    --chart-1: #2a78d6;
-    --chart-1-soft: rgba(42, 120, 214, 0.14);
-    --chart-2: #0f8f61;
-    --chart-2-soft: rgba(15, 143, 97, 0.14);
-
-    --success: #15803d;
-    --success-contrast: #ffffff;
-    --success-soft: rgba(21, 128, 61, 0.12);
-    --warn: #8a6d0b;
-    --warn-soft: rgba(138, 109, 11, 0.12);
-    --danger: #c92a2a;
-    --danger-contrast: #ffffff;
-    --danger-hover: #a51f1f;
-    --danger-soft: rgba(201, 42, 42, 0.1);
-
-    --shadow-sm: 0 1px 2px rgba(30, 31, 34, 0.06);
-    --shadow-md: 0 2px 8px rgba(30, 31, 34, 0.08);
-    --shadow-lg: 0 8px 24px rgba(30, 31, 34, 0.12);
 }
 
 /* Nutzer, die Bewegung reduzieren wollen, bekommen keine Uebergaenge. */
@@ -696,9 +666,44 @@ code {
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
 
-.primary-grid,
-.stats-board-grid {
+.primary-grid {
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+/*
+ * Zwei Spalten, die dritte Karte quer darunter.
+ *
+ * Vorher galt hier dieselbe Regel wie fuer .primary-grid: auto-fit ab 220px.
+ * Bei drei Karten hiess das auf einem breiten Bildschirm drei schmale Spalten,
+ * und in eine 220px-Spalte passt kein Titel mit Interpret und Dauer - alles
+ * brach um. Tracks und Artists sind dieselbe Art Liste und stehen deshalb
+ * nebeneinander; die Quellen tragen lange Sendernamen und bekommen die volle
+ * Breite.
+ */
+.stats-board-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.stats-board-grid > article:last-child {
+    grid-column: 1 / -1;
+}
+
+@media (max-width: 900px) {
+    .stats-board-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Die Knotenzeile im Systemstatus - eine Zeile unter dem Zustandsschild. */
+.stats-system-state {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
+}
+
+.stats-system-nodes {
+    font-size: 0.8125rem;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
 }
 
 .module-grid-extended {
@@ -878,6 +883,28 @@ code {
     margin: 0;
     font-size: 0.8125rem;
     color: var(--muted);
+}
+
+/* Aufzaehlungen in den Rechtstexten.
+   Die Nutzungsbedingungen listen Verbote auf - als Fliesstext waere das eine
+   Bleiwueste, in der niemand findet, was ihn betrifft. Groesse und Farbe wie
+   der umgebende Absatz, damit die Liste kein Fremdkoerper ist. */
+.copy-list ul {
+    margin: 6px 0 0;
+    padding-left: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 0.8125rem;
+    color: var(--muted);
+}
+
+.copy-list li::marker { color: var(--accent); }
+
+/* Fuer Adressen und Pfade mitten im Text. */
+.mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.95em;
 }
 
 /* == Statusanzeigen ====================================================== */
@@ -2285,3 +2312,272 @@ input[type="range"] {
 }
 
 .chart-table td:not(:first-child) { font-variant-numeric: tabular-nums; }
+
+/* ===== Rechtstexte: Verarbeitungstabelle und Pruefhinweise ================ */
+
+/* Die Datenschutzerklaerung listet die Verarbeitungen als Tabelle. Auf einem
+   Telefon passt sie nicht in die Breite - deshalb scrollt sie in ihrem eigenen
+   Kasten, statt die ganze Seite waagerecht zu schieben. */
+.datentabelle-huelle {
+    overflow-x: auto;
+    margin: 10px 0 4px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+}
+
+.datentabelle {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 620px;
+    font-size: 0.8125rem;
+}
+
+.datentabelle th,
+.datentabelle td {
+    text-align: left;
+    vertical-align: top;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--line);
+}
+
+.datentabelle th {
+    color: var(--text-strong);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.datentabelle td { color: var(--muted); }
+.datentabelle tr:last-child td { border-bottom: 0; }
+
+/* Eine offene Speicherdauer ist kein Schoenheitsfehler, sondern der Punkt, an
+   dem die Erklaerung von der Wirklichkeit abweicht - entsprechend sichtbar. */
+.datentabelle td.offen { color: var(--warn); font-weight: 600; }
+
+/* Was noch geklaert werden muss. Bewusst auffaellig: diese Stellen sollen
+   verschwinden, nicht sich einleben. */
+.hinweis-offen {
+    border-left: 3px solid var(--warn);
+    background: var(--warn-soft);
+    border-radius: 0 8px 8px 0;
+    padding: 10px 12px;
+    margin: 8px 0 0;
+    font-size: 0.8125rem;
+}
+
+.hinweis-inline {
+    display: inline-block;
+    color: var(--warn);
+    font-weight: 600;
+}
+
+/* Abschnitte der Rechtstexte zaehlen sich selbst.
+   Fest eingetippte Nummern waren nicht haltbar: der Premium-Abschnitt erscheint
+   nur, wenn Premium angeboten wird - und verschob dann alles dahinter. Aus
+   demselben Grund verweist der Text auf Abschnittsnamen statt auf Nummern. */
+.copy-list { counter-reset: rechtsabschnitt; }
+.copy-list > div { counter-increment: rechtsabschnitt; }
+.copy-list > div > strong:first-child::before {
+    content: counter(rechtsabschnitt) ". ";
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+}
+
+/* == Akzente aus dem Entwurf ==============================================
+   Die Rechts- und Statistikseiten liefen bisher als schlichte Karten. Sie
+   bekommen dieselben Mittel wie die Startseite: harte Versatzschatten, eine
+   Acid-Scheibe hinter der Ueberschrift und Kanten statt Rundungen. Nur
+   Gestaltung - kein Inhalt aendert sich.
+   ====================================================================== */
+
+.legal-layout,
+.landing-shell {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+}
+
+/* Die Scheibe hinter dem Seitenkopf. Rein dekorativ, deshalb ohne Inhalt und
+   fuer Vorleseprogramme unsichtbar. */
+.legal-card::before {
+    content: "";
+    position: absolute;
+    width: 420px;
+    height: 420px;
+    border-radius: 50%;
+    background: var(--acid);
+    border: 1.5px solid var(--tinte);
+    box-shadow: 15px 15px 0 var(--violett);
+    right: -180px;
+    top: -150px;
+    z-index: -1;
+    pointer-events: none;
+}
+
+.legal-card {
+    position: relative;
+    isolation: isolate;
+    border: 1.5px solid var(--tinte);
+    box-shadow: var(--shadow-lg);
+    background: var(--surface);
+}
+
+.legal-card h1 {
+    font-size: clamp(44px, 8vw, 96px);
+    line-height: .84;
+    letter-spacing: -.06em;
+    font-weight: 800;
+}
+
+.legal-card .eyebrow {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+
+/* Die Abschnittsnummern als Marke statt als graue Ziffer. */
+.copy-list > div > strong:first-child::before {
+    display: inline-block;
+    background: var(--acid);
+    border: 1.5px solid var(--tinte);
+    padding: 1px 7px;
+    margin-right: 9px;
+    color: var(--tinte);
+    font-weight: 800;
+}
+
+.copy-list > div {
+    border-top: 1.5px solid var(--tinte);
+    padding-top: 20px;
+}
+
+.copy-list > div:first-child { border-top: 0; padding-top: 0; }
+
+/* Knoepfe bekommen die Kante des Designs. */
+.primary-button,
+.ghost-button {
+    border: 1.5px solid var(--tinte);
+    border-radius: 0;
+    box-shadow: var(--shadow-sm);
+    font-weight: 800;
+    transition: transform .18s, box-shadow .18s;
+}
+
+.primary-button { background: var(--acid); color: var(--tinte); }
+
+.primary-button:hover,
+.ghost-button:hover {
+    transform: translate(-2px, -2px);
+    box-shadow: var(--shadow-md);
+}
+
+.footer-links a { font-weight: 700; }
+.footer-links a:hover { background: var(--acid); }
+
+/* Der Cookie-Hinweis in derselben Sprache. */
+.cookie-notice {
+    border: 1.5px solid var(--tinte);
+    border-radius: 0;
+    box-shadow: var(--shadow-md);
+    background: var(--surface-raised);
+}
+
+@media (max-width: 620px) {
+    .legal-card::before { width: 260px; height: 260px; right: -140px; top: -110px; }
+}
+
+/* == Dunkelfassung =======================================================
+   Geschaltet ueber data-theme am <html>, gesetzt von theme.js. Dieselben
+   Werte wie im Panel - beide Oberflaechen sollen ein Haus sein.
+   ====================================================================== */
+
+:root[data-theme="dark"] {
+    color-scheme: dark;
+
+    --bg: #14130f;
+    --bg-deep: #0e0d0a;
+    --surface: #1c1b16;
+    --surface-raised: #262419;
+    --surface-hover: #2f2d22;
+    --surface-sunken: #14130f;
+
+    --line: #6b6965;
+    --line-strong: #85827a;
+
+    --text: var(--papier);
+    --text-strong: #ffffff;
+    --muted: #b5b1a7;
+    --muted-strong: #d8d4ca;
+
+    /* Aufgehellt: #5f4fe0 kommt auf dunklem Grund nur auf 3.1. */
+    --accent: #a99bff;
+    --accent-hover: #c0b6ff;
+    --accent-contrast: var(--tinte);
+    --accent-soft: rgba(169, 155, 255, 0.16);
+    --accent-ring: rgba(169, 155, 255, 0.45);
+
+    --chart-1: #a99bff;
+    --chart-1-soft: rgba(169, 155, 255, 0.18);
+    --chart-2: #4ade80;
+    --chart-2-soft: rgba(74, 222, 128, 0.18);
+
+    --success: #4ade80;
+    --success-contrast: #07120b;
+    --success-soft: rgba(74, 222, 128, 0.16);
+    --warn: #f5c451;
+    --warn-soft: rgba(245, 196, 81, 0.16);
+    --danger: #f87171;
+    --danger-contrast: #1a0707;
+    --danger-hover: #fca5a5;
+    --danger-soft: rgba(248, 113, 113, 0.16);
+
+    /* Schwarz waere auf dunklem Grund unsichtbar - der Versatzschatten wird
+       violett, genau wie im dunklen Abschnitt des Entwurfs. */
+    --shadow-sm: 3px 3px 0 var(--violett);
+    --shadow-md: 5px 5px 0 var(--violett);
+    --shadow-lg: 8px 8px 0 var(--violett);
+}
+
+/* Die Acid-Scheibe hinter dem Seitenkopf traegt auf dunklem Grund ebenso -
+   nur der Schatten wird heller, damit er sich noch abhebt. */
+:root[data-theme="dark"] .legal-card::before {
+    border-color: var(--papier);
+    box-shadow: 15px 15px 0 var(--papier);
+}
+
+:root[data-theme="dark"] .legal-card {
+    border-color: var(--line);
+}
+
+:root[data-theme="dark"] .primary-button,
+:root[data-theme="dark"] .ghost-button {
+    border-color: var(--papier);
+}
+
+:root[data-theme="dark"] .copy-list > div > strong:first-child::before {
+    border-color: var(--tinte);
+}
+
+/* Umschalter in der Fusszeile - gleiche Form wie im Panel. */
+.theme-switcher {
+    display: inline-flex;
+    border: 1.5px solid var(--line);
+    background: var(--surface);
+    width: max-content;
+}
+
+.theme-switch-option {
+    border: 0;
+    border-right: 1.5px solid var(--line);
+    background: transparent;
+    color: var(--muted);
+    font: inherit;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 5px 11px;
+    cursor: pointer;
+}
+
+.theme-switch-option:last-child { border-right: 0; }
+.theme-switch-option:hover { color: var(--text); background: var(--surface-hover); }
+.theme-switch-option[aria-pressed="true"] { background: var(--acid); color: var(--tinte); }
