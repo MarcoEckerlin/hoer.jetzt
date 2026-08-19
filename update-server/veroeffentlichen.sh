@@ -1,5 +1,5 @@
-#!/usr/bin/env bash
-#
+            -t "${REGISTRY_PUSH}/${teil}:${VERSION}" \
+            -t "${REGISTRY_PUSH}/${teil}:latest" \
 # hoer.jetzt - ein Release bauen und ausliefern.
 #
 #   bash veroeffentlichen.sh                 Version aus RELEASE nehmen
@@ -49,7 +49,27 @@ if [[ -z "$HJ_UPDATE_HOST" && -f "${HIER}/.env" ]]; then
     HJ_UPDATE_HOST="$(grep '^HJ_UPDATE_HOST=' "${HIER}/.env" | cut -d= -f2- || true)"
 fi
 [[ -n "$HJ_UPDATE_HOST" ]] || fail "HJ_UPDATE_HOST ist nicht gesetzt und steht in keiner .env."
+# Zwei Namen fuer dieselbe Registry, und sie fallen auseinander:
+#
+#   REGISTRY_PUSH   Der Weg von diesem Host aus - direkt auf den internen
+#                   Port, ohne Umweg ueber den Nginx Proxy Manager. Der
+#                   Umweg ginge zum Router hinaus und wieder herein, und
+#                   NAT-Hairpin koennen viele Anschluesse nicht.
+#
+#   REGISTRY        Der Name, der ins Manifest kommt. Den benutzen die
+#                   Knoten, und die kommen von aussen - also durch den NPM.
+#
+# Frueher war beides derselbe Name, weil ein /etc/hosts-Eintrag ihn auf
+# diesem Host nach innen bog. Das geht nicht mehr: der Port gehoert zum
+# Namen, und /etc/hosts kennt keine Ports.
+HJ_PORT_INTERN="${HJ_PORT_INTERN:-}"
+if [[ -z "$HJ_PORT_INTERN" && -f "${HIER}/.env" ]]; then
+    HJ_PORT_INTERN="$(grep '^HJ_PORT_INTERN=' "${HIER}/.env" | cut -d= -f2- || true)"
+fi
+HJ_PORT_INTERN="${HJ_PORT_INTERN:-8086}"
+
 REGISTRY="${HJ_UPDATE_HOST}/hoerjetzt"
+REGISTRY_PUSH="127.0.0.1:${HJ_PORT_INTERN}/hoerjetzt"
 
 MANIFEST_QUELLE="${QUELLEN}/main/RELEASE"
 [[ -f "$MANIFEST_QUELLE" ]] || fail "${MANIFEST_QUELLE} fehlt - stimmt QUELLEN?"
@@ -61,6 +81,7 @@ fi
 
 step "Release ${VERSION}"
 info "$(printf '%-12s %s' "Registry" "$REGISTRY")"
+info "$(printf '%-12s %s' "Hochladen" "$REGISTRY_PUSH")"
 info "$(printf '%-12s %s' "Quellen" "$QUELLEN")"
 
 # ------------------------------------------------------------------ 2  Bauen
@@ -77,14 +98,14 @@ if [[ "$NUR_MANIFEST" -eq 0 ]]; then
         # Manifest zeigt und die einen Rueckweg offen haelt; "latest" ist nur
         # fuer den Menschen an der Kommandozeile.
         docker build \
-            -t "${REGISTRY}/${teil}:${VERSION}" \
-            -t "${REGISTRY}/${teil}:latest" \
+            -t "${REGISTRY_PUSH}/${teil}:${VERSION}" \
+            -t "${REGISTRY_PUSH}/${teil}:latest" \
             "${QUELLEN}/${teil}" \
             || fail "${teil} liess sich nicht bauen."
 
         step "Hochladen: ${teil}"
-        docker push "${REGISTRY}/${teil}:${VERSION}" || fail "${teil} liess sich nicht hochladen."
-        docker push "${REGISTRY}/${teil}:latest"     || fail "${teil}: latest fehlgeschlagen."
+        docker push "${REGISTRY_PUSH}/${teil}:${VERSION}" || fail "${teil} liess sich nicht hochladen."
+        docker push "${REGISTRY_PUSH}/${teil}:latest"     || fail "${teil}: latest fehlgeschlagen."
         info "${REGISTRY}/${teil}:${VERSION}"
     done
 else

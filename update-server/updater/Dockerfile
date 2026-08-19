@@ -34,11 +34,12 @@ USER updater
 # 8080 Torwaechter (nur im internen Netz), 8081 Oberflaeche (privates Netz).
 EXPOSE 8080 8081
 
-# Bewusst gegen den Torwaechter-Port und einen Pfad, den es dort gibt: ein
-# Health-Check gegen die Oberflaeche wuerde nur die Anmeldeseite pruefen und
+# Gegen den Torwaechter-Port und einen Pfad, den es dort gibt. Ohne
+# Passwort antwortet er 401 - genau das beweist, dass er laeuft und
+# nicht wahllos durchlaesst. Ein Health-Check gegen die Oberflaeche
 # waere auch dann gruen, wenn die Datenbank nicht aufgeht.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=45s --retries=3 \
-    CMD curl -fsS -o /dev/null -w '%{http_code}' \
-        http://127.0.0.1:8080/intern/pruefen | grep -qE '^(204|403)$' || exit 1
+    CMD curl -s -o /dev/null -w '%{http_code}' \
+        http://127.0.0.1:8080/intern/pruefen | grep -qE '^(401|403|204)$' || exit 1
 
 ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75", "-jar", "/app/updater.jar"]

@@ -1,91 +1,50 @@
 # hoer.jetzt - was der Update-Server nach aussen gibt.
 #
-# Drei Zugaenge, drei Vertrauensstufen:
+# ---------------------------------------------------------------------------
+# Kein TLS hier drin. Das macht der Nginx Proxy Manager.
 #
-#   /knoten/    Passwort. Kurz genug, um es in eine Befehlszeile zu tippen.
-#               Gibt das Installationsskript und die Compose-Dateien heraus -
-#               keinen Schluessel und kein Zugangsdatum. Wird einmal beim
-#               Aufsetzen gebraucht und danach nirgends gespeichert.
+# Caddy spricht auf diesem Port einfaches HTTP und ist nur im LAN erreichbar.
+# Die Kette ist: Cloudflare -> NPM -> hierher. NPM haelt das Zertifikat, wie
+# fuer alles andere auf diesem Anschluss auch.
 #
-#   /v2/        Client-Zertifikat, 4096 Bit. Die Abbilder. Docker legt den
-#               Ausweis von sich aus vor, wenn er unter
-#               /etc/docker/certs.d/<host>/ liegt.
-#
-#   /release/   Client-Zertifikat. Welches Release gerade gilt.
-#
-#   /tresor/    Client-Zertifikat - und der Inhalt ist zusaetzlich an den
-#               Tresor-Schluessel gerichtet. Selbst wer einen gueltigen Ausweis
-#               hat, bekommt hier nur einen CMS-Umschlag, den er nicht
-#               aufbekommt.
-#
-#   /melden     Client-Zertifikat. Der Herzschlag der Knoten nach einem
-#               Update-Lauf. Geht an den Updater.
+# Was dadurch wegfaellt: eigene CA, Serverzertifikat, Client-Zertifikate,
+# ACME, Port 80. Ein Knoten braucht kein einziges Zertifikat mehr, sondern
+# ein Passwort - und das ueberlebt jeden Reverse-Proxy, waehrend ein
+# Client-Zertifikat es nicht tut.
 #
 # ---------------------------------------------------------------------------
-# Warum dieser Dienst an Cloudflare und am Nginx Proxy Manager vorbeigeht
+# Zwei Zugaenge:
 #
-# Weil Client-Zertifikate keinen Reverse-Proxy ueberleben. Cloudflare im
-# Proxy-Modus terminiert TLS, NPM terminiert TLS - in beiden Faellen kommt
-# hier kein Zertifikat des Knotens mehr an, sondern eines der Zwischenstelle.
-# Das laesst sich nicht konfigurieren, das ist die Bauart von TLS.
+#   /knoten/    Kurzes Passwort, tippbar. Gibt das Installationsskript und
+#               die Compose-Dateien heraus - sonst nichts. Wird einmal beim
+#               Aufsetzen gebraucht.
 #
-# Deshalb:
-#   - Der Name steht in Cloudflare auf DNS only (graue Wolke).
-#   - Ein eigener Port wird im Router direkt hierher weitergeleitet.
-#   - Port 80 wird nicht angefasst; der gehoert dem NPM.
-#   - Das Zertifikat kommt aus der eigenen CA, nicht von Let's Encrypt.
-#     Damit wird Port 80 auch fuer die Ausstellung nicht gebraucht.
+#   alles Uebrige (Abbilder, Release, Tresor, Melden)
+#               Das Knoten-Passwort: 4096 Bit Zufall. Zusaetzlich muss die
+#               Adresse freigeschaltet sein.
 #
-# HJ_UPDATE_HOST traegt den Port mit, also z.B.
-# "update.system.hoer.jetzt:8443". Das passt an allen Stellen zusammen:
-# in der URL, im Registry-Namen und als Verzeichnis unter
-# /etc/docker/certs.d/ - Docker erwartet dort genau diese Schreibweise.
-#
-# Warum "verify_if_given" und nicht "require_and_verify": /knoten/ muss ohne
-# Ausweis erreichbar sein - ein frischer Knoten hat ja noch keinen. Der Zwang
-# steht deshalb nicht am Anschluss, sondern an den Pfaden, die ihn brauchen.
-# Stuende er am Anschluss, waere die Erstinstallation unmoeglich.
+# Beide Pruefungen macht der Updater, nicht Caddy - deshalb forward_auth.
+# Der Grund ist derselbe wie bei den Freigaben: eine Aenderung soll sofort
+# gelten, ohne den Webserver neu zu laden. Und es gibt genau eine Stelle,
+# die ueber Zugang entscheidet, statt zwei, die auseinanderlaufen koennen.
 #
 # ---------------------------------------------------------------------------
-# Zweite Stufe: die Adresse.
+# Die Adresse des Aufrufers
 #
-# Ein gueltiger Ausweis reicht seit dem Updater nicht mehr. Vor jedem Zugriff
-# auf die vier geschuetzten Pfade fragt Caddy beim Updater nach, ob diese
-# Adresse freigeschaltet ist. Warum dort und nicht hier mit "remote_ip":
-# Caddys eigener Adressvergleich will die Liste in dieser Datei stehen haben.
-# Jede Freischaltung waere eine Dateiaenderung plus ein Neuladen des
-# Webservers - moeglicherweise waehrend gerade ein Knoten zieht. Im Updater
-# ist es eine Zeile in der Datenbank und gilt sofort.
+# Hinter Cloudflare und NPM ist die Gegenstelle dieser Verbindung der NPM,
+# nicht der Knoten. Die echte Adresse steht in den Koepfen, und welcher davon
+# zaehlt, entscheidet der Updater - siehe TorController. Caddy reicht sie nur
+# unveraendert durch.
 
 {
-	# Kein Let's Encrypt und keine automatische HTTPS-Verwaltung.
-	#
-	# Das Serverzertifikat kommt aus der eigenen CA (schluessel.sh). Das
-	# passt hier besser als eine oeffentliche Stelle: die Gegenstellen sind
-	# ausschliesslich eigene Maschinen, und die tragen die CA ohnehin schon,
-	# weil sie sich selbst damit ausweisen. Eine oeffentliche Stelle wuerde
-	# nur einen erreichbaren Port 80 und eine Abhaengigkeit nach aussen
-	# hinzufuegen, ohne etwas zu beweisen, was die eigene CA nicht schon
-	# beweist.
-	#
-	# "off" nimmt auch den Umleitungs-Server auf Port 80 mit - genau den
-	# Port, der auf diesem Host dem Nginx Proxy Manager gehoert. Ohne das
-	# scheitert der Start mit "address already in use".
+	# Kein automatisches HTTPS: es gibt keinen Namen, fuer den Caddy ein
+	# Zertifikat holen sollte. Ohne diese Zeile versucht es das trotzdem und
+	# will dafuer Port 80.
 	auto_https off
 }
 
-https://{$HJ_UPDATE_HOST} {
+:{$HJ_PORT_INTERN} {
 	encode zstd gzip
-
-	# Erst das eigene Zertifikat, dann die Pruefung der Gegenseite. Beide
-	# Richtungen haengen an derselben CA - ein Knoten prueft den Server
-	# gegen ca.crt, der Server den Knoten ebenso.
-	tls /schluessel/server.crt /schluessel/server.key {
-		client_auth {
-			mode verify_if_given
-			trusted_ca_cert_file /schluessel/ca.crt
-		}
-	}
 
 	log {
 		output file /data/zugriff.log {
@@ -95,45 +54,27 @@ https://{$HJ_UPDATE_HOST} {
 	}
 
 	header {
-		Strict-Transport-Security "max-age=31536000"
 		X-Content-Type-Options "nosniff"
 		-Server
 	}
 
-	# Ohne vorgelegten Ausweis ist dieser Platzhalter leer. "verify_if_given"
-	# heisst: ein vorgelegter Ausweis wurde bereits gegen die CA geprueft -
-	# hier steht also nur noch die Frage, ob ueberhaupt einer kam.
-	@ohne_ausweis expression `{http.request.tls.client.subject} == ""`
-
-	# Die Adresspruefung als wiederverwendbarer Baustein.
-	#
-	# X-Echte-Ip wird hier gesetzt und ueberschreibt dabei, was der Aufrufer
-	# geschickt hat - die Angabe ist damit nicht faelschbar. Der Updater
-	# nimmt sie und nicht X-Forwarded-For, dessen ersten Eintrag sich jeder
-	# Aufrufer selbst aussuchen kann.
-	#
-	# {http.request.remote.host} ist die Gegenstelle dieser Verbindung. Caddy
-	# steht direkt am Netz, das ist also der tatsaechliche Aufrufer.
-	(adresse_pruefen) {
+	# Die Pruefung als wiederverwendbarer Baustein. 2xx heisst durchlassen,
+	# alles andere geht unveraendert an den Aufrufer zurueck.
+	(zugang) {
 		forward_auth updater:8080 {
 			uri /intern/pruefen
-			header_up X-Echte-Ip {http.request.remote.host}
+			copy_headers X-Knoten
 		}
 	}
 
 	# ------------------------------------------------------------- Registry
 	#
-	# Nur dieser Pfad geht zu Forgejo. Die Weboberflaeche und das Git bleiben
-	# im LAN - ein Knoten braucht davon nichts.
-	#
 	# "route" statt einfach untereinander: Caddy sortiert Direktiven sonst
-	# nach einer festen Rangfolge, und dabei kaeme der reverse_proxy vor das
-	# respond - die Sperre liefe ins Leere. Aus demselben Grund steht die
-	# Adresspruefung ausdruecklich zwischen Ausweispruefung und Weiterleitung.
+	# nach einer festen Rangfolge, und dabei kaeme der reverse_proxy vor die
+	# Pruefung - die liefe dann ins Leere.
 	handle /v2/* {
 		route {
-			respond @ohne_ausweis "Client-Zertifikat noetig." 403
-			import adresse_pruefen
+			import zugang
 			reverse_proxy forgejo:3000 {
 				# Abbild-Schichten sind gross. Die Vorgabe von 30s wuerde den
 				# Upload beim Veroeffentlichen mittendrin abschneiden.
@@ -148,8 +89,7 @@ https://{$HJ_UPDATE_HOST} {
 	# ------------------------------------------------------------- Release
 	handle /release/* {
 		route {
-			respond @ohne_ausweis "Client-Zertifikat noetig." 403
-			import adresse_pruefen
+			import zugang
 			root * /srv/ausliefern
 			file_server
 		}
@@ -158,40 +98,35 @@ https://{$HJ_UPDATE_HOST} {
 	# ------------------------------------------------------------- Tresor
 	handle /tresor/* {
 		route {
-			respond @ohne_ausweis "Client-Zertifikat noetig." 403
-			import adresse_pruefen
+			import zugang
 			root * /srv/ausliefern
 			file_server
 		}
 	}
 
 	# ------------------------------------------------------------- Melden
-	#
-	# Der Herzschlag. Nach aussen ein kurzer Pfad, innen die
-	# Maschinen-Schnittstelle des Updaters unter /intern/.
 	handle /melden {
 		route {
-			respond @ohne_ausweis "Client-Zertifikat noetig." 403
-			import adresse_pruefen
+			import zugang
 			rewrite * /intern/melden
-			reverse_proxy updater:8080 {
-				header_up X-Echte-Ip {http.request.remote.host}
-			}
+			reverse_proxy updater:8080
 		}
 	}
 
 	# ------------------------------------------------------------- Knoten
 	#
-	# Der einzige Bereich mit Passwort - und der einzige, den ein Rechner
-	# ohne Ausweis erreicht. Bewusst ohne Adresspruefung: ein frisch
-	# aufgesetzter Rechner ist noch nicht freigeschaltet, und genau das
-	# Skript, das er hier holt, sagt ihm, dass er es werden muss.
+	# Der einzige Bereich mit dem kurzen Passwort - und der einzige ohne
+	# Adresspruefung. Das ist Absicht: ein frisch aufgesetzter Rechner ist
+	# noch nicht freigeschaltet, und genau das Skript, das er hier holt,
+	# sagt ihm, dass er es werden muss.
 	handle /knoten/* {
-		basic_auth {
-			knoten {$HJ_HASH_KNOTEN}
+		route {
+			forward_auth updater:8080 {
+				uri /intern/pruefen-knoten
+			}
+			root * /srv/ausliefern
+			file_server
 		}
-		root * /srv/ausliefern
-		file_server
 	}
 
 	# Alles andere gibt es hier nicht. Bewusst 404 und nicht 403: wer nur

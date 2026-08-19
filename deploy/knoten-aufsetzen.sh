@@ -26,7 +26,6 @@
 set -euo pipefail
 
 ARBEIT="${ARBEIT:-/opt/hoerjetzt}"
-AUSWEIS="${ARBEIT}/ausweis"
 
 step() { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
 info() { printf '    %s\n' "$*"; }
@@ -82,7 +81,10 @@ case "$PROFIL" in
 esac
 
 frage HJ_UPDATE_HOST "Update-Server" "update.system.hoer.jetzt"
-geheim KNOTEN_PW "Knoten-Passwort (dasselbe wie eben)"
+# Das kurze, tippbare Passwort - dasselbe, mit dem dieses Skript gerade
+# geholt wurde. Es oeffnet nur /knoten/ und wird weiter unten noch fuer die
+# Compose-Dateien gebraucht. Das lange Knoten-Passwort kommt spaeter.
+geheim AUFSETZ_PW "Aufsetz-Passwort (dasselbe wie eben)"
 
 # ------------------------------------------------------------------ 2  Docker
 
@@ -96,115 +98,51 @@ fi
 docker compose version >/dev/null 2>&1 || fail "docker compose (v2) fehlt."
 info "$(docker --version)"
 
-# ------------------------------------------------------------------ 3  Schluessel
+# ------------------------------------------------------------------ 3  Zugang
+
+step "Knoten-Passwort"
+info "Das lange Passwort vom Update-Server - 4096 Bit, rund 684 Zeichen."
+info "einrichten.sh hat es beim Aufsetzen des Servers einmal angezeigt."
+info "Einfuegen, nicht abtippen."
+geheim HJ_TOKEN_KNOTEN "Knoten-Passwort"
+
+# Ein Tippfehler faellt hier auf, nicht erst drei Schritte spaeter beim
+# Tresor - und dort saehe es nach einem Problem mit dem Tresor aus.
+if [[ "${#HJ_TOKEN_KNOTEN}" -lt 40 ]]; then
+    warn "Das sind nur ${#HJ_TOKEN_KNOTEN} Zeichen - erwartet werden rund 684."
+    ja "Trotzdem weiter?" n || fail "Abgebrochen."
+fi
+
+mkdir -p "$ARBEIT"
+chmod 755 "$ARBEIT"
+
+# ------------------------------------------------------------------ 3b  Docker
 #
-# Beide sind 4096 Bit und damit zu lang zum Abtippen. Entweder liegen sie
-# schon auf der Maschine (scp), oder sie werden hier hineingeklebt.
+# Docker meldet sich mit demselben Passwort an. Kein Zertifikat mehr unter
+# /etc/docker/certs.d/ - das brauchte es nur fuer den beidseitigen
+# TLS-Handschlag, und den gibt es nicht mehr: TLS terminiert der Nginx Proxy
+# Manager vor dem Update-Server.
 
-einlesen_pem() {
-    local ziel="$1" titel="$2" pfad=""
-    echo
-    info "${titel}"
-    frage pfad "Pfad zur Datei (leer = einfuegen)" ""
-    if [[ -n "$pfad" ]]; then
-        [[ -f "$pfad" ]] || fail "${pfad} gibt es nicht."
-        cp "$pfad" "$ziel"
-    else
-        info "Jetzt den kompletten Block einfuegen, mit BEGIN- und END-Zeile."
-        info "Nach der END-Zeile ist Schluss - Enter genuegt."
-        : > "$ziel"
-        local zeile
-        while IFS= read -r zeile; do
-            printf '%s\n' "$zeile" >> "$ziel"
-            [[ "$zeile" == *"-----END"* ]] && break
-        done
-    fi
-    # Ein leerer oder halber Block faellt sonst erst beim ersten naechtlichen
-    # Update auf - und dann ohne jemanden, der zusieht.
-    grep -q -- "-----BEGIN" "$ziel" || fail "In ${ziel} steht kein PEM-Block."
-    grep -q -- "-----END"   "$ziel" || fail "${ziel} hoert mittendrin auf."
-}
-
-mkdir -p "$AUSWEIS"
-chmod 700 "$AUSWEIS"
-
-step "Update-Ausweis"
-einlesen_pem "${AUSWEIS}/update.crt" "Das Zertifikat (update-ausweis.crt)"
-einlesen_pem "${AUSWEIS}/update.key" "Der zugehoerige Schluessel (update-ausweis.key)"
-chmod 600 "${AUSWEIS}/update.key"
-chmod 644 "${AUSWEIS}/update.crt"
-
-# Gehoeren die beiden zusammen? Wenn nicht, endet das sonst in einem 403,
-# dessen Ursache nirgends steht.
-A="$(openssl x509 -noout -modulus -in "${AUSWEIS}/update.crt" 2>/dev/null | openssl sha256)"
-B="$(openssl rsa  -noout -modulus -in "${AUSWEIS}/update.key" 2>/dev/null | openssl sha256)"
-[[ -n "$A" && "$A" == "$B" ]] || fail "Zertifikat und Schluessel gehoeren nicht zusammen."
-info "Zertifikat und Schluessel passen zueinander."
-
-
-# ------------------------------------------------------------------ 3b  CA
-
-# Der Server weist sich mit einem Zertifikat aus der eigenen CA aus, nicht
-# mit einem von Let's Encrypt. Diese Maschine kennt sie noch nicht - also
-# holen wir sie, bevor irgendetwas anderes geprueft werden kann.
-#
-# Der Haken, damit er ausgesprochen ist: dieser eine Abruf laeuft ungeprueft
-# (-k). Anders geht es beim ersten Kontakt nicht - man kann die CA nicht mit
-# sich selbst pruefen. Deshalb der Fingerabdruck: einrichten.sh hat ihn beim
-# Aufsetzen des Servers angezeigt. Stimmen die beiden ueberein, war niemand
-# dazwischen. Alles danach laeuft gegen diese CA.
-step "CA des Update-Servers holen"
-CADATEI="${AUSWEIS}/ca.crt"
-curl -fsSk -m 30 "https://${HJ_UPDATE_HOST}/knoten/ca.crt" -o "$CADATEI" \
-    || fail "ca.crt liess sich nicht holen - ist ${HJ_UPDATE_HOST} erreichbar?"
-chmod 644 "$CADATEI"
-
-openssl x509 -in "$CADATEI" -noout >/dev/null 2>&1 \
-    || fail "Was da kam, ist kein Zertifikat. Zeigt der Name auf den richtigen Server?"
-
-FINGER="$(openssl x509 -in "$CADATEI" -noout -fingerprint -sha256 \
-    | cut -d= -f2- | tr -d ':')"
-info ""
-info "Fingerabdruck der CA:"
-info "    ${FINGER}"
-info ""
-info "Derselbe muss beim Aufsetzen des Update-Servers angezeigt worden sein."
-info "Er steht dort unter 'Jetzt notieren'."
-ja "Stimmt er ueberein?" j || fail "Abgebrochen - dann war jemand dazwischen oder der Name zeigt falsch."
-
-# Ab hier prueft jeder Aufruf gegen diese CA.
-PRUEF=(--cacert "$CADATEI")
-# Docker legt den Ausweis von sich aus vor, wenn er hier liegt - und zwar
-# unter genau diesen Namen. "client.crt" statt "client.cert" wird stillschweigend
-# ignoriert, der pull scheitert dann mit "unauthorized".
-step "Ausweis fuer Docker hinterlegen"
-DOCKERAUSWEIS="/etc/docker/certs.d/${HJ_UPDATE_HOST}"
-mkdir -p "$DOCKERAUSWEIS"
-cp "${AUSWEIS}/update.crt" "${DOCKERAUSWEIS}/client.cert"
-cp "${AUSWEIS}/update.key" "${DOCKERAUSWEIS}/client.key"
-chmod 600 "${DOCKERAUSWEIS}/client.key"
-# Und die CA - damit prueft Docker den Server. Ohne sie bricht der pull mit
-# "x509: certificate signed by unknown authority" ab, und das sieht nach
-# einem Problem mit dem Ausweis aus, obwohl es die andere Richtung ist.
-cp "$CADATEI" "${DOCKERAUSWEIS}/ca.crt"
-info "$DOCKERAUSWEIS"
-
-step "Tresor-Schluessel"
-TRESORKEY="${AUSWEIS}/tresor.key"
-einlesen_pem "$TRESORKEY" "Der Tresor-Schluessel (tresor.key)"
-chmod 600 "$TRESORKEY"
+step "An der Registry anmelden"
+if printf '%s' "$HJ_TOKEN_KNOTEN" | docker login "$HJ_UPDATE_HOST" \
+        -u knoten --password-stdin >/dev/null 2>&1; then
+    info "Angemeldet an ${HJ_UPDATE_HOST}."
+else
+    fail "Anmeldung an ${HJ_UPDATE_HOST} fehlgeschlagen - stimmt das Passwort?"
+fi
 
 # ------------------------------------------------------------------ 4  Probe
 
 step "Zugang pruefen"
-# Holt etwas mit dem Ausweis - und unterscheidet dabei die beiden Gruende,
+
+# Holt etwas mit dem Knoten-Passwort - und unterscheidet die beiden Gruende,
 # aus denen es scheitern kann. Vorher lautete die Meldung in beiden Faellen
-# "kein Tresor bereit", und das schickt einen an die falsche Stelle: der
-# Ausweis ist in Ordnung, es fehlt die Freischaltung dieser Adresse.
-mit_ausweis() {
+# gleich, und das schickt einen an die falsche Stelle: das Passwort stimmt,
+# es fehlt die Freischaltung dieser Adresse.
+mit_passwort() {
     local ziel="$1" code
-    code="$(curl -sS -m 30 -o /tmp/hj-antwort.$$ -w '%{http_code}' \
-        "${PRUEF[@]}" --cert "${AUSWEIS}/update.crt" --key "${AUSWEIS}/update.key" \
+    code="$(curl -sS -m 30 -o "/tmp/hj-antwort.$$" -w '%{http_code}' \
+        -u "knoten:${HJ_TOKEN_KNOTEN}" \
         "https://${HJ_UPDATE_HOST}${ziel}" 2>/dev/null || echo 000)"
 
     if [[ "$code" == "403" ]]; then
@@ -212,7 +150,7 @@ mit_ausweis() {
         EIGENE_IP="$(curl -fsS -m 10 https://api.ipify.org 2>/dev/null || echo '')"
         fail "Diese Maschine ist auf dem Update-Server nicht freigeschaltet.
 
-       Der Ausweis stimmt - die Adresse fehlt in der Freigabeliste.
+       Das Passwort stimmt - die Adresse fehlt in der Freigabeliste.
        Im Updater unter Freigaben eintragen:
 
            ${EIGENE_IP:-<die oeffentliche Adresse dieser Maschine>}
@@ -223,6 +161,11 @@ mit_ausweis() {
        Danach dieses Skript erneut starten - es gilt sofort."
     fi
 
+    if [[ "$code" == "401" ]]; then
+        rm -f "/tmp/hj-antwort.$$"
+        fail "Das Knoten-Passwort stimmt nicht."
+    fi
+
     if [[ "$code" != "200" ]]; then
         rm -f "/tmp/hj-antwort.$$"
         return 1
@@ -231,8 +174,9 @@ mit_ausweis() {
     cat "/tmp/hj-antwort.$$"
     rm -f "/tmp/hj-antwort.$$"
 }
-MANIFEST="$(mit_ausweis /release/aktuell || true)"
-[[ -n "$MANIFEST" ]] || fail "Kein Zugang mit diesem Ausweis - stimmt der Update-Server?"
+
+MANIFEST="$(mit_passwort /release/aktuell || true)"
+[[ -n "$MANIFEST" ]] || fail "Kein Zugang - stimmt der Update-Server?"
 VERSION="$(printf '%s\n' "$MANIFEST" | grep '^version=' | cut -d= -f2- || true)"
 info "Aktuelles Release: ${VERSION:-unbekannt}"
 
@@ -241,20 +185,12 @@ info "Aktuelles Release: ${VERSION:-unbekannt}"
 step "Zugangsdaten holen"
 UMSCHLAG="$(mktemp)"
 trap 'rm -f "$UMSCHLAG"' EXIT
-mit_ausweis "/tresor/${PROFIL}.enc" > "$UMSCHLAG" \
+mit_passwort "/tresor/${PROFIL}.env" > "$UMSCHLAG" \
     || fail "Fuer das Profil ${PROFIL} liegt kein Tresor bereit."
 
-mkdir -p "$ARBEIT"
 UMGEBUNG="${ARBEIT}/.env"
-
-# -binary: ohne das haengt CMS an jede Zeile ein CRLF, und jeder Wert bekaeme
-# ein unsichtbares Zeichen mehr. Das Datenbank-Passwort waere dann still
-# falsch - ein Fehler, den man lange woanders sucht.
-if ! openssl cms -decrypt -binary -inform PEM -in "$UMSCHLAG" \
-        -inkey "$TRESORKEY" -out "${UMGEBUNG}.neu" 2>/dev/null; then
-    fail "Der Tresor geht mit diesem Schluessel nicht auf."
-fi
-grep -q '^HJ_UPDATE_HOST=' "${UMGEBUNG}.neu" || fail "Der Tresor enthaelt nicht, was er soll."
+grep -q '^HJ_UPDATE_HOST=' "$UMSCHLAG" || fail "Der Tresor enthaelt nicht, was er soll."
+cp "$UMSCHLAG" "${UMGEBUNG}.neu"
 
 # Eine vorhandene .env nicht wegwerfen: darin koennen HJ_SPOCK, eigene Ports
 # oder Tailscale-Angaben stehen, die dieser Host schon hatte.
@@ -290,6 +226,10 @@ setze_wert() {
         printf '%s=%s\n' "$1" "$2" >> "$UMGEBUNG"
     fi
 }
+# Das Knoten-Passwort gehoert in die .env: auto-update.sh braucht es jede
+# Nacht. Es steht im Tresor bewusst nicht drin - man braucht es ja schon,
+# um den Tresor ueberhaupt zu holen.
+setze_wert HJ_TOKEN_KNOTEN "$HJ_TOKEN_KNOTEN"
 setze_wert HJ_PROFIL "$PROFIL"
 grep -q '^HJ_NODE_NAME=' "$UMGEBUNG" || setze_wert HJ_NODE_NAME "$(hostname -s 2>/dev/null || echo knoten)"
 info "$(printf '%s (%s Werte)' "$UMGEBUNG" "$(grep -c '^[A-Z_]*=' "$UMGEBUNG")")"
@@ -298,7 +238,7 @@ info "$(printf '%s (%s Werte)' "$UMGEBUNG" "$(grep -c '^[A-Z_]*=' "$UMGEBUNG")")
 
 step "Compose-Dateien holen"
 PAKET="$(mktemp)"
-curl -fsS -m 60 "${PRUEF[@]}" -u "knoten:${KNOTEN_PW}" \
+curl -fsS -m 60 -u "knoten:${AUFSETZ_PW}" \
     "https://${HJ_UPDATE_HOST}/knoten/${PROFIL}.tar.gz" -o "$PAKET" \
     || fail "Paket ${PROFIL}.tar.gz liess sich nicht holen - Passwort falsch?"
 

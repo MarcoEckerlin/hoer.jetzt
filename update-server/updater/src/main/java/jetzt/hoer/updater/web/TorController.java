@@ -2,9 +2,11 @@ package jetzt.hoer.updater.web;
 
 import jetzt.hoer.updater.daten.KnotenDaten;
 import jetzt.hoer.updater.dienst.Torwaechter;
+import jetzt.hoer.updater.dienst.Zugang;
 import jetzt.hoer.updater.modell.Knoten;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -23,35 +25,46 @@ public class TorController {
 
     private static final Logger log = LoggerFactory.getLogger(TorController.class);
 
+    /**
+     * Ohne diesen Kopf fragt "docker login" nicht nach Zugangsdaten, sondern
+     * gibt auf. Der Wert muss "Basic" sein - bei "Bearer" versucht Docker den
+     * Token-Ablauf der Registry-Spezifikation und landet im Nichts.
+     */
+    private static final String FORDERE_ANMELDUNG = "Basic realm=\"hoer.jetzt\"";
+
     private final Torwaechter torwaechter;
+    private final Zugang zugang;
     private final KnotenDaten knoten;
 
-    public TorController(Torwaechter torwaechter, KnotenDaten knoten) {
+    public TorController(Torwaechter torwaechter, Zugang zugang, KnotenDaten knoten) {
         this.torwaechter = torwaechter;
+        this.zugang = zugang;
         this.knoten = knoten;
     }
 
     /**
-     * Caddys forward_auth landet hier - einmal je Anfrage an /v2/, /release/
-     * und /tresor/.
+     * Caddys forward_auth fuer alles ausser /knoten/.
      *
-     * 204 heisst durchlassen, 403 heisst abweisen. Was hier zurueckkommt,
-     * sieht der Knoten; deshalb ein kurzer Klartext statt einer leeren Seite.
-     *
-     * Bewusst GET und HEAD und POST auf demselben Pfad: forward_auth
-     * spiegelt die Methode der urspruenglichen Anfrage nicht, aber ein
-     * Docker-Pull macht auch HEAD-Anfragen, und Caddy reicht die Pruefung
-     * dafuer genauso durch.
+     * Zwei Huerden, und die Reihenfolge ist bewusst so: erst das Passwort,
+     * dann die Adresse. Wer das Passwort nicht hat, soll nicht erfahren, ob
+     * seine Adresse freigeschaltet waere - das waere eine Auskunft ueber die
+     * Freigabeliste an jeden, der anklopft.
      */
     @RequestMapping(value = "/pruefen",
                     method = {RequestMethod.GET, RequestMethod.HEAD, RequestMethod.POST})
     public ResponseEntity<String> pruefen(
-            @RequestHeader(value = "X-Echte-Ip", required = false) String echteIp,
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String anmeldung,
+            @RequestHeader(value = "CF-Connecting-IP", required = false) String cloudflare,
             @RequestHeader(value = "X-Forwarded-For", required = false) String weitergereicht,
             @RequestHeader(value = "X-Forwarded-Uri", required = false) String pfad) {
 
-        String adresse = adresseBestimmen(echteIp, weitergereicht);
+        if (!zugang.knotenPasswort(anmeldung)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .header(HttpHeaders.WWW_AUTHENTICATE, FORDERE_ANMELDUNG)
+                    .body("Passwort fehlt oder stimmt nicht.\n");
+        }
 
+        String adresse = adresseBestimmen(cloudflare, weitergereicht);
         if (torwaechter.darf(adresse, pfad)) {
             return ResponseEntity.noContent().build();
         }
@@ -60,22 +73,51 @@ public class TorController {
     }
 
     /**
-     * X-Echte-Ip setzt Caddy selbst und ueberschreibt dabei, was der Aufrufer
-     * geschickt hat - die Angabe ist damit nicht faelschbar.
-     *
-     * Der Rueckfall auf X-Forwarded-For nimmt den *letzten* Eintrag, nicht
-     * den ersten. Ein Aufrufer kann diesen Kopf selbst mitschicken; Caddy
-     * haengt die tatsaechlich gesehene Adresse hinten an. Der erste Eintrag
-     * ist also der, den sich der Aufrufer ausgesucht hat - wer den nimmt,
-     * laesst sich die Zugangskontrolle vom Aufrufer diktieren.
+     * Caddys forward_auth fuer /knoten/. Nur das kurze Passwort, keine
+     * Adresspruefung - ein frischer Rechner ist noch nicht freigeschaltet.
      */
-    private static String adresseBestimmen(String echteIp, String weitergereicht) {
-        if (echteIp != null && !echteIp.isBlank()) {
-            return echteIp.trim();
+    @RequestMapping(value = "/pruefen-knoten",
+                    method = {RequestMethod.GET, RequestMethod.HEAD})
+    public ResponseEntity<String> pruefenKnoten(
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String anmeldung) {
+
+        if (zugang.aufsetzPasswort(anmeldung)) {
+            return ResponseEntity.noContent().build();
+        }
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .header(HttpHeaders.WWW_AUTHENTICATE, FORDERE_ANMELDUNG)
+                .body("Passwort fehlt oder stimmt nicht.\n");
+    }
+
+    /**
+     * Welche Adresse zaehlt.
+     *
+     * Die Kette ist Cloudflare -> Nginx Proxy Manager -> Caddy -> hier. Die
+     * Gegenstelle der Verbindung ist damit der NPM und nie der Knoten; die
+     * echte Adresse steht nur in den Koepfen.
+     *
+     * CF-Connecting-IP setzt Cloudflare selbst und ueberschreibt dabei, was
+     * der Aufrufer geschickt hat - solange der Verkehr wirklich durch
+     * Cloudflare laeuft, ist die Angabe nicht faelschbar.
+     *
+     * Der Rueckfall auf X-Forwarded-For nimmt den *ersten* Eintrag. Das ist
+     * hier richtig und anderswo falsch: jede Zwischenstelle haengt hinten an,
+     * vorne steht also der urspruengliche Aufrufer. Bei nur einer
+     * Zwischenstelle waere der letzte Eintrag der richtige - deshalb muss
+     * diese Entscheidung zur tatsaechlichen Kette passen und nicht zu einer
+     * Faustregel.
+     *
+     * Das heisst zugleich: wer den Update-Server unter Umgehung von
+     * Cloudflare und NPM direkt erreichen kann, kann sich eine Adresse
+     * aussuchen. Der Port darf deshalb nicht offen im Netz stehen - er
+     * gehoert ins LAN, und davor der NPM.
+     */
+    private static String adresseBestimmen(String cloudflare, String weitergereicht) {
+        if (cloudflare != null && !cloudflare.isBlank()) {
+            return cloudflare.trim();
         }
         if (weitergereicht != null && !weitergereicht.isBlank()) {
-            String[] teile = weitergereicht.split(",");
-            return teile[teile.length - 1].trim();
+            return weitergereicht.split(",")[0].trim();
         }
         return "";
     }
@@ -92,9 +134,8 @@ public class TorController {
     }
 
     /**
-     * Der Herzschlag. Kommt durch Caddy und damit nur mit gueltigem Ausweis
-     * und von einer freigeschalteten Adresse - die Pruefung steht davor,
-     * nicht hier.
+     * Der Herzschlag. Kommt durch Caddy und ist damit schon geprueft - die
+     * Pruefung steht davor, nicht hier.
      *
      * Die Antwort traegt den Merker "sofort aktualisieren" zurueck. Das ist
      * der einzige Weg in Richtung Knoten: es geht keine Verbindung von hier
@@ -103,14 +144,14 @@ public class TorController {
     @PostMapping("/melden")
     public ResponseEntity<Map<String, Object>> melden(
             @RequestBody Meldung meldung,
-            @RequestHeader(value = "X-Echte-Ip", required = false) String echteIp,
+            @RequestHeader(value = "CF-Connecting-IP", required = false) String cloudflare,
             @RequestHeader(value = "X-Forwarded-For", required = false) String weitergereicht) {
 
         if (meldung == null || meldung.kennung() == null || meldung.kennung().isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("fehler", "kennung fehlt"));
         }
 
-        String adresse = adresseBestimmen(echteIp, weitergereicht);
+        String adresse = adresseBestimmen(cloudflare, weitergereicht);
 
         // Der Merker wird vor dem Speichern gelesen: melden() setzt ihn
         // zurueck, und der Knoten soll ihn in genau dieser Antwort noch

@@ -27,63 +27,41 @@ Der Update-Server dreht das um:
 
 ---
 
-## Die drei Zugänge
+## Die zwei Passwörter
 
-Einer zum Tippen, zwei zum Mitnehmen.
+Keine Zertifikate. Client-Zertifikate überleben keinen Reverse-Proxy — und vor
+diesem Dienst stehen Cloudflare und der Nginx Proxy Manager. Ein Passwort
+kommt durch.
 
-### 1 — Knoten-Passwort
+### 1 — Aufsetz-Passwort
 
 Kurz, Form `hj-XXXX-XXXX-XXXX-XXXX`. Alphabet ohne `0/O` und `1/l/I`, damit es
 sich fehlerfrei abtippen lässt. Rund 80 Bit.
 
 Öffnet **nur** `/knoten/` — das Installationsskript und die Compose-Dateien.
-Keinen Schlüssel, kein Zugangsdatum. Wird beim Aufsetzen einmal gebraucht und
-danach nirgends gespeichert.
 
 ```bash
-curl -fsSLku knoten https://update.system.hoer.jetzt:8443/knoten/aufsetzen.sh -o a.sh && bash a.sh
+curl -fsSLu knoten https://update.system.hoer.jetzt/knoten/aufsetzen.sh -o a.sh && bash a.sh
 ```
-
-Das `-k` ist nötig, nicht bequem: der Server weist sich mit der eigenen CA
-aus, und die kennt ein frischer Rechner noch nicht. Dieser **eine** Abruf
-läuft ungeprüft; das Skript holt danach die CA und zeigt ihren
-Fingerabdruck zum Abgleich mit dem, was `einrichten.sh` ausgegeben hat.
-Ab da ist jeder weitere Aufruf geprüft.
 
 Das `-u knoten` ohne Doppelpunkt ist Absicht: curl fragt das Passwort selbst
 ab, statt es in die Shell-Historie zu schreiben.
 
-### 2 — Update-Ausweis (RSA-4096)
+### 2 — Knoten-Passwort
 
-Ein Client-Zertifikat, ausgestellt von einer eigenen kleinen CA. Öffnet
-`/v2/` (die Abbilder), `/release/` und `/tresor/`.
+**4096 Bit** Zufall, rund 684 Zeichen. Öffnet Abbilder, Release, Tresor und die
+Meldestelle. Bleibt dauerhaft in der `.env` des Knotens (0600).
 
-Bleibt dauerhaft auf dem Knoten. Docker legt ihn von sich aus vor, sobald er
-unter `/etc/docker/certs.d/<host>/client.cert` liegt — **kein `docker login`,
-kein Passwort im Speicher**. Der private Schlüssel verlässt die Platte nie; er
-beweist nur, dass er da ist.
+Kein bcrypt darauf: der Updater vergleicht es unmittelbar und in konstanter
+Zeit. bcrypt schnitte nach 72 Byte ab — von 4096 Bit blieben 576 — und der
+Hash enthielte Dollarzeichen, die Docker Compose in der `.env` als Variablen
+liest.
 
-### 3 — Tresor-Schlüssel (RSA-4096)
+### Und die Adresse
 
-Macht die gemeinsamen Zugangsdaten auf. Der Server bekommt nur den
-öffentlichen Teil (`tresor.crt`) und kann damit verschlüsseln — **aufmachen
-kann er den Tresor nicht.**
-
-Selbst wer einen gültigen Ausweis hat und den Tresor herunterlädt, bekommt
-einen CMS-Umschlag, den er nicht öffnet.
-
-### Was das kostet
-
-Das dauerhaft gespeicherte Zugangsdatum (der Ausweis) ist das harmloseste: er
-zieht Container, die der Knoten ohnehin ausführt. Genau umgekehrt zu vorher,
-wo der dauerhaft hinterlegte Deploy-Key den ganzen Quellcode aufschloss.
-
-**Die Einschränkung, damit sie ausgesprochen ist:** wer das Knoten-Passwort
-hat, kann den Installationsvorgang starten — und der fragt anschließend nach
-den beiden Schlüsseln. Ohne sie kommt er nicht weiter. Die drei Stufen sind
-also wirklich drei, aber das Passwort ist der Türöffner zum Verfahren, nicht
-zu den Daten. `einrichten.sh` prüft das ausdrücklich: eine der Proben stellt
-sicher, dass ein gültiger **Ausweis** `/knoten/` *nicht* öffnet und umgekehrt.
+Passwort allein reicht nicht. Jede Adresse muss im Updater freigeschaltet sein.
+Die Reihenfolge der Prüfung ist bewusst erst Passwort, dann Adresse: wer das
+Passwort nicht hat, soll nicht erfahren, ob seine Adresse freigeschaltet wäre.
 
 ---
 
@@ -91,67 +69,37 @@ sicher, dass ein gültiger **Ausweis** `/knoten/` *nicht* öffnet und umgekehrt.
 
 ```
    Knoten
-     |  TLS mit Client-Zertifikat, Port 8443, direkt
-     |  (nicht über Cloudflare, nicht über den NPM)
+     |  https, Basic-Auth mit dem Knoten-Passwort
      v
-   Caddy  (Serverzertifikat aus der eigenen CA, client_auth: verify_if_given)
+   Cloudflare (Proxy, orange Wolke)  -->  CF-Connecting-IP trägt die echte Adresse
      |
-     |--- forward_auth ---> Updater :8080   Adresse freigeschaltet?
+   Nginx Proxy Manager  -->  hält das Zertifikat
+     |  http, nur im LAN
+     v
+   Caddy :8086
+     |
+     |--- forward_auth ---> Updater :8080   Passwort ok? Adresse frei?
      |                      (nur im internen Docker-Netz)
      |
-   /v2/*      ------> Forgejo-Registry      Ausweis + Freigabe
-   /release/* ------> Volume "ausliefern"   Ausweis + Freigabe
-   /tresor/*  ------> Volume "ausliefern"   Ausweis + Freigabe + Tresor-Schlüssel
-   /melden    ------> Updater :8080         Ausweis + Freigabe
-   /knoten/*  ------> Volume "ausliefern"   Passwort
+   /v2/*      ------> Forgejo-Registry      Knoten-Passwort + Freigabe
+   /release/* ------> Volume "ausliefern"   Knoten-Passwort + Freigabe
+   /tresor/*  ------> Volume "ausliefern"   Knoten-Passwort + Freigabe
+   /melden    ------> Updater :8080         Knoten-Passwort + Freigabe
+   /knoten/*  ------> Volume "ausliefern"   Aufsetz-Passwort, keine Freigabe
 
                       Updater :8081         Oberfläche, privates Netz
 ```
 
-## Warum dieser Dienst an Cloudflare und am NPM vorbeigeht
+**Cloudflare darf auf Proxy stehen.** Der Updater liest die echte Adresse aus
+`CF-Connecting-IP`, das Cloudflare selbst setzt und dabei überschreibt.
 
-Weil **Client-Zertifikate keinen Reverse-Proxy überleben**. Cloudflare im
-Proxy-Modus terminiert TLS, der Nginx Proxy Manager terminiert TLS — in beiden
-Fällen kommt bei Caddy kein Zertifikat des Knotens mehr an, sondern eines der
-Zwischenstelle. Das ist keine Einstellung, das ist die Bauart von TLS.
+Daraus folgt aber: **der interne Port darf nicht ins Internet.** Wer Caddy
+direkt erreicht, sucht sich seine Adresse selbst aus. Deshalb liegt er auf
+`127.0.0.1` bzw. der LAN-Adresse, und davor steht der NPM.
 
-Daraus folgt der Rest:
-
-| | |
-|---|---|
-| Cloudflare | Der Name steht auf **DNS only** (graue Wolke), nicht auf Proxy. |
-| Port | Ein eigener, Vorgabe **8443**, im Router direkt auf diesen Host. |
-| Port 80 | Wird nicht angefasst — der gehört dem NPM. |
-| Zertifikat | Aus der **eigenen CA**, kein Let's Encrypt. |
-
-Kein Let's Encrypt heißt hier keinen Verlust: die Gegenstellen sind
-ausschließlich eigene Maschinen, und die tragen die CA ohnehin schon, weil sie
-sich selbst damit ausweisen. Eine öffentliche Stelle würde nur einen
-erreichbaren Port 80 und eine Abhängigkeit nach außen hinzufügen, ohne etwas zu
-beweisen, was die eigene CA nicht schon beweist.
-
-Die Kehrseite, damit sie dasteht: jeder Client braucht `ca.crt`. Das erledigen
-die Skripte — `knoten-aufsetzen.sh` legt sie nach `/etc/docker/certs.d/` und
-`auto-update.sh` prüft, dass sie da ist. Von Hand mit `curl` heißt es
-`--cacert`.
-
-`einrichten.sh` prüft beides ausdrücklich: eine Probe stellt sicher, dass der
-Server **mit** der CA angenommen und **ohne** sie abgelehnt wird.
-
-### Der Port steckt im Namen
-
-`HJ_UPDATE_HOST` ist `update.system.hoer.jetzt:8443` — mit Port. Das passt an
-allen Stellen zusammen: in der URL, im Registry-Namen und als Verzeichnis unter
-`/etc/docker/certs.d/`, wo Docker genau diese Schreibweise erwartet. Für
-Namensauflösung und `/etc/hosts` gibt es daneben `HJ_UPDATE_NAME` ohne Port.
-
-`verify_if_given` statt `require_and_verify`: `/knoten/` muss ohne Ausweis
-erreichbar sein — ein frischer Knoten hat ja noch keinen. Der Zwang steht
-deshalb an den Pfaden, nicht am Anschluss.
-
-`/knoten/` ist auch der einzige Pfad **ohne** Adressprüfung, und zwar
-absichtlich: ein frisch aufgesetzter Rechner ist noch nicht freigeschaltet,
-und genau das Skript, das er dort holt, sagt ihm, dass er es werden muss.
+`/knoten/` ist der einzige Pfad ohne Adressprüfung — ein frisch aufgesetzter
+Rechner ist noch nicht freigeschaltet, und genau das Skript, das er dort holt,
+sagt ihm, dass er es werden muss.
 
 Forgejos Oberfläche und das Git lauschen nur auf `127.0.0.1`. Für die
 Verwaltung: `ssh -L 3000:127.0.0.1:3000`.
@@ -159,51 +107,71 @@ Verwaltung: `ssh -L 3000:127.0.0.1:3000`.
 `ausliefern` ist ein benanntes Docker-Volume, kein Pfad auf dem Host — die
 Bauschritte des CI-Runners laufen in eigenen Containern und kennen keine
 Hostpfade.
+
+---
+
+## Der Tresor
+
+Die gemeinsamen Zugangsdaten, nach Profil getrennt: `voll` bekommt Datenbank,
+Bot-Token und Client-Secret, `lavalink` nur das Lavalink-Passwort. Ein
+Audio-Knoten braucht nichts weiter — und soll nichts weiter bekommen.
+
+Er liegt **im Klartext** im Auslieferungsverzeichnis, geschützt durch dasselbe
+wie die Abbilder. Früher war er an einen eigenen RSA-Schlüssel gerichtet, den
+der Server nicht hatte; er konnte die Zugangsdaten also selbst nicht lesen. Das
+ist jetzt nicht mehr so. Dafür braucht ein Knoten nur noch ein Passwort statt
+Passwort plus Schlüsseldatei.
+
+```bash
+bash tresor.sh fuellen voll
+bash tresor.sh fuellen lavalink
+bash tresor.sh stand
+bash tresor.sh zeigen voll
+```
+
+---
 ## Einrichten
 
 ```bash
 bash einrichten.sh
 ```
 
-Erzeugt die Schlüssel und das Passwort, legt Forgejo an, meldet den Runner an,
-startet Caddy — und prüft sich am Ende selbst. Die letzte Probe lädt ein
-Testabbild hoch und wieder herunter; sie fällt auf alles herein, was die
-anderen nicht sehen (falscher Dateiname in `certs.d`, fehlender
-`/etc/hosts`-Eintrag, ein Leserecht, das Forgejo doch verlangt).
+Fragt nach Name, internem Port, Forgejo-Konto und der Adresse für die
+Updater-Oberfläche. Erzeugt beide Passwörter, legt Forgejo an, meldet den
+Runner an, baut den Updater, startet alles — und prüft sich am Ende selbst.
 
-**Vorher, außerhalb der Maschine:**
+Am Ende zeigt es **einmal** beide Passwörter und die Zugänge. Danach steht in
+der `.env` nur noch das, was verglichen wird; das Passwort der Oberfläche
+liegt als bcrypt-Hash da.
 
-1. In Cloudflare den Eintrag für `update.system.hoer.jetzt` auf **DNS only**
-   stellen (graue Wolke) und auf die eigene Adresse zeigen lassen.
-   `einrichten.sh` erkennt die orange Wolke und warnt — Cloudflare reicht
-   Port 8443 im Proxy-Modus ohnehin nicht durch.
-2. Im Router **8443 → dieser Host:8443** weiterleiten.
+**Danach im Nginx Proxy Manager anlegen:**
 
-Port 80 und 443 bleiben unberührt; der NPM behält sie.
+| | |
+|---|---|
+| Domain | `update.system.hoer.jetzt` |
+| Weiterleiten an | `http://127.0.0.1:8086` |
+| Zertifikat | wie üblich über den NPM |
+| Upload-Grenze | **aus** (`client_max_body_size 0`) |
 
-Das Skript fragt nach Name, Port, Forgejo-Konto und der Adresse für die
-Updater-Oberfläche. Am Ende zeigt es **einmal** das Knoten-Passwort, das
-Updater-Passwort und den **Fingerabdruck der CA** — den braucht man beim
-Aufsetzen jedes Knotens zum Abgleich.
+Die Upload-Grenze ist kein Detail: Abbild-Schichten sind hunderte Megabyte, und
+NPM bricht sonst mittendrin ab — mit einer Meldung, die nach einem Fehler in
+der Registry aussieht.
 
-Dann den Tresor befüllen:
+### Die Selbstprobe
 
-```bash
-bash tresor.sh fuellen voll
-bash tresor.sh fuellen lavalink
-```
+Sie prüft, was man sonst erst im Betrieb merkt:
 
-Der Unterschied ist der eigentliche Gewinn: `lavalink` enthält nur das
-Lavalink-Passwort. Ein Audio-Knoten bekommt weder Datenbank noch Bot-Token —
-er braucht beides nicht.
+- beide Passwörter öffnen **je nur ihren** Bereich, nicht den des anderen
+- eine freigeschaltete Adresse kommt durch, eine fremde nicht
+- ohne Passwort gibt es **keine** Auskunft darüber, ob eine Adresse frei wäre
+- der Torwächter-Port liegt **nicht** auf dem Host
+- ein Testabbild geht wirklich hoch und wieder herunter
 
-```bash
-bash tresor.sh stand           # was da ist, ohne aufzumachen
-bash tresor.sh zeigen voll     # nachsehen, braucht tresor.key
-bash schluessel.sh zeigen      # Fingerabdrücke und Laufzeiten
-```
-
----
+Zusätzlich liest sie die geschriebene `.env` einmal durch Docker Compose zurück
+und vergleicht. Grund: Compose ersetzt in der `.env` Variablen, und ein
+bcrypt-Hash besteht aus Dollarzeichen. Ohne Maskierung bekommt Caddy einen
+zerlegten Hash, Compose warnt kryptisch über nicht gesetzte Variablen, und das
+Forgejo-Konto lässt sich nicht anlegen. Genau das ist einmal passiert.
 
 ## Der Updater — Freigaben, Knoten, Protokoll
 
@@ -372,22 +340,22 @@ den jetzigen Umfang wäre es Aufwand ohne Gegenwert.
 
 ## Offen
 
-**Der Ausweis ist noch für alle Knoten derselbe.** Die Adressfreigabe gibt
-jetzt den Widerruf, der vorher fehlte — aber sie hängt an der IP, und die
-wechselt, wenn eine Hetzner-Maschine neu aufgesetzt wird. Der nächste Schritt
-wäre ein Ausweis **je Knoten**, ausgestellt im Moment der Freischaltung: die
-CA steht, das ist ein Einzeiler in `schluessel.sh`. Dann hinge der Widerruf
-nicht mehr an der Adresse, und die Freigabeliste wäre die zweite Schicht
-statt der einzigen Reißleine.
+**Alle Knoten teilen ein Passwort.** Die Adressfreigabe gibt den Widerruf, der
+sonst fehlte — aber sie hängt an der IP, und die wechselt, wenn eine
+Hetzner-Maschine neu aufgesetzt wird. Ein Passwort **je Knoten** wäre der
+nächste Schritt; der Updater müsste dafür eine Liste statt eines Wertes
+vergleichen.
 
-**Knotenübersicht und Controller überschneiden sich.** Der Controller kennt
-den Live-Zustand im Minutentakt, der Updater das Ergebnis des letzten
-Updates. Beides hat seinen Grund — der Update-Server muss auch dann
-auskunftsfähig sein, wenn die Steuer-Node steht. Ob das auf Dauer zwei
-Ansichten bleiben sollen, ist noch nicht entschieden.
+**Der Tresor liegt im Klartext.** Bewusste Entscheidung für ein Passwort statt
+Passwort plus Schlüsseldatei. Wer das zurückdrehen will, braucht wieder ein
+RSA-Paar und CMS — das war vorher gebaut und getestet, es steht in der
+Git-Historie.
 
-**„Update vormerken" wirkt erst beim nächsten Lauf** von `auto-update.sh`,
-also nachts um drei oder wenn der Agent es auslöst. Es geht keine Verbindung
-vom Update-Server zu den Knoten — die stehen hinter fremdem NAT. Soll es
-schneller gehen, ist der Weg über den Controller der richtige, nicht ein
-zweiter Melde-Timer.
+**„Update vormerken" wirkt erst beim nächsten Lauf** von `auto-update.sh`, also
+nachts um drei oder wenn der Agent es auslöst. Es geht keine Verbindung vom
+Update-Server zu den Knoten — die stehen hinter fremdem NAT.
+
+**Knotenübersicht und Controller überschneiden sich.** Der Controller kennt den
+Live-Zustand im Minutentakt, der Updater das Ergebnis des letzten Updates.
+Beides hat seinen Grund; ob es auf Dauer zwei Ansichten bleiben sollen, ist
+nicht entschieden.

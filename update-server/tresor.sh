@@ -16,21 +16,20 @@
 #              auf jedem Knoten der vollstaendige Quellbaum; wer einen davon
 #              aufmachte, hatte alles.
 #
-# Verschluesselt wird an den Tresor-Schluessel. Dieses Skript braucht dafuer
-# nur den oeffentlichen Teil (tresor.crt) - aufmachen kann den Tresor allein,
-# wer tresor.key hat. Der gehoert in deine Ablage, nicht auf diesen Server.
+# Der Tresor liegt im Klartext im Auslieferungsverzeichnis. Geschuetzt ist er
+# durch dasselbe wie die Abbilder: das Knoten-Passwort und eine
+# freigeschaltete Adresse.
 #
-# RSA-4096 kann direkt nur rund 470 Byte verschluesseln, der Tresor ist
-# groesser. CMS loest das: ein zufaelliger AES-256-Schluessel fuer die Daten,
-# und nur der wird mit RSA verpackt.
+# Frueher war er an einen eigenen Schluessel gerichtet, den dieser Server
+# nicht hatte - er konnte die Zugangsdaten also selbst nicht lesen. Das ist
+# jetzt nicht mehr so. Dafuer braucht ein Knoten nur noch ein Passwort statt
+# Passwort und Schluesseldatei.
 
 set -euo pipefail
 
 HIER="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "${HIER}/lib.sh"
 
-SCHLUESSEL="${HIER}/schluessel"
-command -v openssl >/dev/null 2>&1 || fail "openssl fehlt (Paket openssl)."
 
 BEFEHL="${1:-}"
 PROFIL="${2:-voll}"
@@ -38,28 +37,27 @@ case "$PROFIL" in
     voll|lavalink) ;;
     *) fail "Profil muss voll oder lavalink sein." ;;
 esac
-ZIEL="tresor/${PROFIL}.enc"
+ZIEL="tresor/${PROFIL}.env"
 
-# -binary auf BEIDEN Seiten. Ohne das macht CMS aus jedem Zeilenende ein
-# CRLF - jeder Wert im Tresor bekaeme ein unsichtbares Wagenruecklauf-Zeichen
-# angehaengt, und das Datenbank-Passwort waere still falsch. Das ist der
-# Fehler, den man drei Stunden lang woanders sucht.
-chiffrieren() {
-    openssl cms -encrypt -aes-256-cbc -binary -outform PEM \
-        "${SCHLUESSEL}/tresor.crt"
-}
-dechiffrieren() {
-    openssl cms -decrypt -binary -inform PEM \
-        -inkey "$1"
-}
+# Kein Umschlag mehr. Der Tresor liegt im Klartext im Auslieferungsverzeichnis
+# und ist durch dasselbe geschuetzt wie die Abbilder: Knoten-Passwort plus
+# freigeschaltete Adresse.
+#
+# Was damit wegfaellt: der Knoten braucht keinen zweiten Schluessel, um an
+# seine Zugangsdaten zu kommen - ein Passwort reicht fuer alles.
+#
+# Was damit verloren geht, offen gesagt: vorher konnte dieser Server die
+# Zugangsdaten selbst nicht lesen. Jetzt kann er es. Wer das zurueck will,
+# braucht wieder ein Schluesselpaar und einen zweiten Schluessel auf jedem
+# Knoten.
 
 # ------------------------------------------------------------------ stand
 
 if [[ "$BEFEHL" == "stand" ]]; then
     step "Tresor"
     for p in voll lavalink; do
-        if aus_gibt_es "tresor/${p}.enc"; then
-            groesse="$(aus_lesen "tresor/${p}.enc" | wc -c)"
+        if aus_gibt_es "tresor/${p}.env"; then
+            groesse="$(aus_lesen "tresor/${p}.env" | wc -c)"
             info "$(printf '%-10s %s Bytes' "$p" "$groesse")"
         else
             warn "$(printf '%-10s %s' "$p" "fehlt")"
@@ -74,12 +72,10 @@ fi
 if [[ "$BEFEHL" == "zeigen" ]]; then
     aus_gibt_es "$ZIEL" || fail "Es gibt keinen Tresor fuer das Profil ${PROFIL}."
 
-    frage KEY "Tresor-Schluessel" "${SCHLUESSEL}/tresor.key"
-    [[ -f "$KEY" ]] || fail "${KEY} gibt es nicht."
 
     step "Inhalt ${PROFIL}"
-    if ! aus_lesen "$ZIEL" | dechiffrieren "$KEY" | sed 's/^/    /'; then
-        fail "Aufmachen fehlgeschlagen - falscher Schluessel?"
+    if ! aus_lesen "$ZIEL" | sed 's/^/    /'; then
+        fail "Lesen fehlgeschlagen."
     fi
     echo
     exit 0
@@ -92,8 +88,6 @@ fi
 
 # ------------------------------------------------------------------ fuellen
 
-[[ -f "${SCHLUESSEL}/tresor.crt" ]] \
-    || fail "${SCHLUESSEL}/tresor.crt fehlt - erst 'bash schluessel.sh erzeugen'."
 
 cat <<'KOPF'
 
@@ -112,8 +106,8 @@ HJ_UPDATE_HOST=""
 step "Allgemein"
 frage HJ_UPDATE_HOST "Adresse des Update-Servers" "${HJ_UPDATE_HOST:-update.system.hoer.jetzt}"
 
-# Kein Update-Passwort mehr: den Zugang zur Registry regelt der Ausweis, und
-# der ist eine Datei. Hier steht nur, wohin er sich wenden soll.
+# Kein Passwort im Tresor: das Knoten-Passwort braucht der Knoten schon, um
+# ihn ueberhaupt zu holen. Hier steht nur, wohin er sich wenden soll.
 INHALT="HJ_UPDATE_HOST=${HJ_UPDATE_HOST}"
 
 step "Lavalink"
@@ -161,34 +155,20 @@ HJ_LLM_OLLAMA_URL=${HJ_LLM_OLLAMA_URL}
 HJ_LLM_MODEL=${HJ_LLM_MODEL}"
 fi
 
-# ------------------------------------------------------------------ Umschlag
+# ------------------------------------------------------------------ Ablegen
 
-step "Verschluesseln"
+step "Ablegen"
 UMSCHLAG="$(mktemp)"
 trap 'rm -f "$UMSCHLAG"' EXIT
-printf '%s\n' "$INHALT" | chiffrieren > "$UMSCHLAG" || fail "Verschluesseln fehlgeschlagen."
-
-# Gegenprobe, bevor der alte Stand weicht: was sich nicht wieder aufmachen
-# laesst, ist kein Tresor, sondern ein Datenverlust mit Extraschritt. Geht
-# nur, wenn der private Teil noch hier liegt - hast du ihn schon weggeraeumt,
-# wird die Probe uebersprungen statt zu scheitern.
-if [[ -f "${SCHLUESSEL}/tresor.key" ]]; then
-    if ! dechiffrieren "${SCHLUESSEL}/tresor.key" < "$UMSCHLAG" \
-            | grep -q '^HJ_UPDATE_HOST='; then
-        fail "Gegenprobe fehlgeschlagen - nichts geaendert."
-    fi
-    info "Gegenprobe: geht wieder auf."
-else
-    warn "tresor.key liegt nicht mehr hier - Gegenprobe uebersprungen."
-fi
+printf '%s\n' "$INHALT" > "$UMSCHLAG"
 
 aus_schreiben "$ZIEL" < "$UMSCHLAG" || fail "Tresor liess sich nicht ablegen."
-info "$(printf '%s: %s Zeilen, %s Bytes verschluesselt' \
+info "$(printf '%s: %s Zeilen, %s Bytes' \
        "$ZIEL" "$(printf '%s\n' "$INHALT" | wc -l)" "$(wc -c < "$UMSCHLAG")")"
 
 step "Fertig"
-info "Ein Knoten holt ihn beim Aufsetzen selbst - mit seinem Ausweis:"
-info "    https://${HJ_UPDATE_HOST}/tresor/${PROFIL}.enc"
+info "Ein Knoten holt ihn beim Aufsetzen selbst - mit dem Knoten-Passwort:"
+info "    https://${HJ_UPDATE_HOST}/tresor/${PROFIL}.env"
 echo
 if [[ "$PROFIL" == "voll" ]]; then
     warn "Noch nicht befuellt: das Profil lavalink."

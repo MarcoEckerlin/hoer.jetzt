@@ -12,6 +12,12 @@ server:
 hj:
   # Die Oberflaeche. Liegt im privaten Netz.
   pult-port: 8081
+  # Die beiden Knoten-Passwoerter. Im Klartext, weil sie im Klartext
+  # verglichen werden - ein Hash brauchte hier niemanden zu schuetzen:
+  # wer diese Datei lesen kann, steht ohnehin auf dem Server.
+  token:
+    knoten:    ${HJ_TOKEN_KNOTEN:?Kein Knoten-Passwort - einrichten.sh laufen lassen}
+    aufsetzen: ${HJ_TOKEN_AUFSETZEN:?Kein Aufsetz-Passwort - einrichten.sh laufen lassen}
   verwalter:
     name: ${HJ_VERWALTER_NAME:verwalter}
     hash: ${HJ_VERWALTER_HASH:?Kein Verwalter-Hash - einrichten.sh laufen lassen}

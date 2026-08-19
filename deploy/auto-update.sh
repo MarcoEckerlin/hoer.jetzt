@@ -15,7 +15,8 @@
 #     nur geladen.
 #   - Der Rueckweg ist ein Abbild-Tag, kein Rebuild. Deshalb gibt es
 #     jetzt --zurueck.
-#   - Der Zugang ist ein Passwort in der .env, kein SSH-Deploy-Key mehr.
+#   - Der Zugang ist ein langes Zufallspasswort in der .env, kein
+#     SSH-Deploy-Key mehr und kein Client-Zertifikat.
 #     Wer es abgreift, kann die Abbilder ziehen, die dieser Host ohnehin
 #     ausfuehrt. Zugangsdaten stehen darin nicht.
 #
@@ -80,26 +81,21 @@ flock -n 9 || ende "Ein Update laeuft bereits - dieser Lauf entfaellt."
 
 # ------------------------------------------------------------------ Zugang
 #
-# Kein Passwort mehr, sondern ein Client-Zertifikat. Der Unterschied ist
-# nicht nur die Laenge: ein Passwort geht ueber die Leitung und steht solange
-# im Speicher jedes Prozesses, der es weiterreicht. Der private Schluessel
-# hier verlaesst die Platte nie - er beweist nur, dass er da ist.
+# den Reverse-Proxy, ein Zertifikat nicht. Es steht in der .env (0600).
 
 HJ_UPDATE_HOST="$(wert HJ_UPDATE_HOST)"
-AUSWEIS="${AUSWEIS:-${ARBEIT}/ausweis}"
+HJ_TOKEN_KNOTEN="$(wert HJ_TOKEN_KNOTEN)"
 
 if [[ -z "$HJ_UPDATE_HOST" ]]; then
     fehler "In ${UMGEBUNG} fehlt HJ_UPDATE_HOST.
        Dieser Host haengt noch am alten GitHub-Weg. Umstellen:
-           bash <(curl -fsSLu knoten https://<update-server>/knoten/aufsetzen.sh)"
+           curl -fsSLu knoten https://<update-server>/knoten/aufsetzen.sh -o a.sh && bash a.sh"
 fi
-# ca.crt gehoert dazu: der Update-Server weist sich mit einem Zertifikat
-# aus der eigenen CA aus, nicht mit einem von Let's Encrypt. Ohne die CA
-# lehnt curl den Server ab - und die Meldung klaenge nach einem Problem
-# mit dem eigenen Ausweis, obwohl es die andere Richtung ist.
-for teil in update.crt update.key ca.crt; do
-    [[ -f "${AUSWEIS}/${teil}" ]] || fehler "${AUSWEIS}/${teil} fehlt - ohne Ausweis kein Zugang."
-done
+if [[ -z "$HJ_TOKEN_KNOTEN" ]]; then
+    fehler "In ${UMGEBUNG} fehlt HJ_TOKEN_KNOTEN - ohne Passwort kein Zugang.
+       Dieser Host stammt noch aus der Zeit mit Client-Zertifikaten.
+       Einmal neu aufsetzen holt das nach; die vorhandene .env bleibt erhalten."
+fi
 
 DOCKER="${ARBEIT}/main/deploy/docker"
 [[ -d "$DOCKER" ]] || fehler "${DOCKER} fehlt."
@@ -108,7 +104,7 @@ DOCKER="${ARBEIT}/main/deploy/docker"
 
 hole() {
     curl -fsS -m 30 \
-        --cacert "${AUSWEIS}/ca.crt" --cert "${AUSWEIS}/update.crt" --key "${AUSWEIS}/update.key" \
+        -u "knoten:${HJ_TOKEN_KNOTEN}" \
         "https://${HJ_UPDATE_HOST}$1"
 }
 
@@ -134,7 +130,7 @@ melden() {
     local ergebnis="$1" zustand="${2:-}" antwort
 
     antwort="$(curl -fsS -m 15 -X POST \
-        --cacert "${AUSWEIS}/ca.crt" --cert "${AUSWEIS}/update.crt" --key "${AUSWEIS}/update.key" \
+        -u "knoten:${HJ_TOKEN_KNOTEN}" \
         -H "Content-Type: application/json" \
         -d "$(printf '{"kennung":"%s","name":"%s","profil":"%s","version":"%s","vorher":"%s","zustand":"%s","ergebnis":"%s"}' \
             "$KENNUNG" "$KENNUNG" "$PROFIL" \
@@ -261,15 +257,14 @@ chmod 600 .env
     done
 } >> .env
 
-# Kein "docker login": Docker legt denselben Ausweis von sich aus vor, wenn
-# er unter /etc/docker/certs.d/<host>/ liegt. Deshalb hier nur die Probe, ob
-# das eingerichtet ist - fehlt es, scheitert sonst erst der pull, und die
-# Meldung lautet dann bloss "unauthorized".
-DOCKERAUSWEIS="/etc/docker/certs.d/${HJ_UPDATE_HOST}"
-for teil in client.cert client.key ca.crt; do
-    [[ -f "${DOCKERAUSWEIS}/${teil}" ]] \
-        || fehler "${DOCKERAUSWEIS}/${teil} fehlt - Docker kann sich nicht ausweisen."
-done
+# Docker meldet sich mit demselben Passwort an. "docker login" schreibt es
+# nach ~/.docker/config.json und haelt es dort - der Aufruf hier ist deshalb
+# in den meisten Naechten ein No-op, kostet aber nichts und heilt den Fall,
+# dass jemand die Datei geleert oder das Passwort gewechselt hat.
+if ! printf '%s' "$HJ_TOKEN_KNOTEN" | docker login "$HJ_UPDATE_HOST" \
+        -u knoten --password-stdin >/dev/null 2>&1; then
+    fehler "Anmeldung an der Registry ${HJ_UPDATE_HOST} fehlgeschlagen - stimmt HJ_TOKEN_KNOTEN?"
+fi
 
 # Erst laden, dann umschalten. Bricht das Laden ab - Netz weg, Abbild fehlt,
 # Platte voll - hat der laufende Stack davon nichts mitbekommen. Das war

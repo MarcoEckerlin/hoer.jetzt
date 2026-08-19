@@ -16,36 +16,23 @@ services:
 
   # ------------------------------------------------------------------ Front
   #
-  # Caddy weist sich mit dem Zertifikat aus der eigenen CA aus - kein Let's
-  # Encrypt, siehe Caddyfile. Es bewacht die vier Bereiche, die nach aussen
-  # gehen. Die Hashes kommen aus der .env, die Klartext-Passwoerter stehen
-  # nirgends auf diesem Host.
+  # Caddy spricht hier einfaches HTTP. Das Zertifikat haelt der Nginx
+  # Proxy Manager, wie fuer alles andere auf diesem Anschluss auch.
+  # Der Port gehoert deshalb ins LAN und nicht ins Internet - davor
+  # steht der NPM.
 
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
     ports:
-      # Kein Port 80: der gehoert auf diesem Host dem Nginx Proxy Manager.
-      # Das Zertifikat kommt aus der eigenen CA - es gibt keine Pruefung,
-      # die einen erreichbaren Port 80 braeuchte.
-      #
-      # Aussen- und Innenport sind absichtlich gleich. Caddy leitet den
-      # Site-Namen samt Port aus HJ_UPDATE_HOST ab; waeren sie verschieden,
-      # passte der Host-Kopf der Anfrage nicht mehr zum Site-Block.
-      - "${HJ_HTTPS_PORT:-8443}:${HJ_HTTPS_PORT:-8443}"
+      # Nur im LAN erreichbar. HJ_CADDY_BIND ist die Adresse, unter der
+      # der NPM diesen Dienst findet - bei NPM auf demselben Host reicht
+      # 127.0.0.1, sonst die LAN-Adresse.
+      - "${HJ_CADDY_BIND:-127.0.0.1}:${HJ_PORT_INTERN:-8086}:${HJ_PORT_INTERN:-8086}"
     environment:
-      HJ_UPDATE_HOST: ${HJ_UPDATE_HOST:?Adresse fehlt - z.B. update.system.hoer.jetzt}
-      HJ_HASH_KNOTEN: ${HJ_HASH_KNOTEN:?Hash fehlt - einrichten.sh laufen lassen}
+      HJ_PORT_INTERN: ${HJ_PORT_INTERN:-8086}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      # Nur die CA - Caddy prueft die Ausweise der Knoten dagegen. Die
-      # privaten Schluessel daneben gehen den Webserver nichts an, deshalb
-      # ausdruecklich nur diese eine Datei.
-      - ./schluessel/ca.crt:/schluessel/ca.crt:ro
-      # Das eigene Serverzertifikat. Der Schluessel dazu nur lesend und
-      # nur diese eine Datei - der Rest des Lagers geht Caddy nichts an.
-      - ./schluessel/server.crt:/schluessel/server.crt:ro
-      - ./schluessel/server.key:/schluessel/server.key:ro
       # Benanntes Volume, kein Bind-Mount: der CI-Runner startet die Bauschritte
       # in eigenen Containern, und die koennen ein Volume ueber seinen Namen
       # einhaengen. Einen Pfad des Hosts kennen sie nicht.
@@ -145,6 +132,8 @@ services:
     build: ./updater
     restart: unless-stopped
     environment:
+      HJ_TOKEN_KNOTEN:    ${HJ_TOKEN_KNOTEN:?Kein Knoten-Passwort - einrichten.sh laufen lassen}
+      HJ_TOKEN_AUFSETZEN: ${HJ_TOKEN_AUFSETZEN:?Kein Aufsetz-Passwort - einrichten.sh laufen lassen}
       HJ_VERWALTER_NAME: ${HJ_VERWALTER_NAME:-verwalter}
       HJ_VERWALTER_HASH: ${HJ_VERWALTER_HASH:?Kein Verwalter-Hash - einrichten.sh laufen lassen}
       HJ_PROTOKOLL_TAGE: ${HJ_PROTOKOLL_TAGE:-21}
