@@ -20,9 +20,7 @@
 name: hoerjetzt-nodes
 
 x-knoten: &knoten
-  image: ghcr.io/marcoeckerlin/hoerjetzt-lavalink:${LAVALINK_TAG:-latest}
-  build:
-    context: ${HJ_QUELLEN:-../../..}/lavalink
+  image: ${HJ_REGISTRY:?Registry fehlt - auto-update.sh setzt sie}/lavalink:${LAVALINK_TAG:-latest}
   restart: unless-stopped
   environment: &knotenumgebung
     LAVALINK_SERVER_PASSWORD: ${HJ_LAVALINK_PASSWORD:?Lavalink-Passwort fehlt}

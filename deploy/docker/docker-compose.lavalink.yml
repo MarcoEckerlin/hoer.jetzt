@@ -9,17 +9,16 @@
 
 name: hoerjetzt-node
 
-# Die Komponentenzweige liegen NEBEN main, nicht darin:
-#   /opt/hoerjetzt/main/deploy/docker   <- diese Datei
-#   /opt/hoerjetzt/core                 <- Bauverzeichnis
-# Deshalb drei Ebenen hoch. Wer anders ablegt, setzt HJ_QUELLEN in der .env
-# auf das Verzeichnis, in dem core, ai-radio und lavalink liegen.
+# Hier wird nichts mehr gebaut. Die Abbilder kommen fertig vom
+# Update-Server; HJ_REGISTRY und die *_TAG-Marken setzt auto-update.sh aus
+# dem Release-Manifest in die .env.
+#
+# Frueher stand an jedem Dienst ein build-Block, der den Quellbaum daneben
+# erwartete - deshalb musste auf jeden Knoten der vollstaendige Quellcode.
 
 services:
   lavalink:
-    image: ghcr.io/marcoeckerlin/hoerjetzt-lavalink:${LAVALINK_TAG:-latest}
-    build:
-      context: ${HJ_QUELLEN:-../../..}/lavalink
+    image: ${HJ_REGISTRY:?Registry fehlt - auto-update.sh setzt sie}/lavalink:${LAVALINK_TAG:-latest}
     restart: unless-stopped
     environment:
       LAVALINK_SERVER_PASSWORD: ${HJ_LAVALINK_PASSWORD:?Passwort fehlt}

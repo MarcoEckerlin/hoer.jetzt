@@ -1,0 +1,127 @@
+# hoer.jetzt - Update-Server.
+#
+# Laeuft zuhause, nicht auf einem Knoten. Drei Aufgaben:
+#
+#   1. Abbilder ausliefern   -> Forgejo-Registry unter /v2/
+#   2. Knoten aufsetzen      -> Pakete und Skripte unter /knoten/
+#   3. Zugangsdaten teilen   -> verschluesselter Tresor unter /tresor/
+#
+# Nach aussen geht nur, was Caddy durchlaesst. Die Forgejo-Oberflaeche und
+# das Git bleiben im LAN - ein Knoten braucht beides nicht, und was nicht
+# erreichbar ist, kann auch nicht angegriffen werden.
+
+name: hj-update
+
+services:
+
+  # ------------------------------------------------------------------ Front
+  #
+  # Caddy holt das Zertifikat selbst (ACME/Let's Encrypt) und bewacht die drei
+  # Bereiche mit je einem eigenen Passwort. Die Hashes kommen aus der .env,
+  # die Klartext-Passwoerter stehen nirgends auf diesem Host.
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      # 80 wird fuer die ACME-Pruefung gebraucht und leitet sonst nur um.
+      - "80:80"
+      - "443:443"
+    environment:
+      HJ_UPDATE_HOST: ${HJ_UPDATE_HOST:?Adresse fehlt - z.B. update.system.hoer.jetzt}
+      HJ_ACME_MAIL:   ${HJ_ACME_MAIL:?Mailadresse fuer Let's Encrypt fehlt}
+      HJ_HASH_KNOTEN: ${HJ_HASH_KNOTEN:?Hash fehlt - einrichten.sh laufen lassen}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Nur die CA - Caddy prueft die Ausweise der Knoten dagegen. Die
+      # privaten Schluessel daneben gehen den Webserver nichts an, deshalb
+      # ausdruecklich nur diese eine Datei.
+      - ./schluessel/ca.crt:/schluessel/ca.crt:ro
+      # Benanntes Volume, kein Bind-Mount: der CI-Runner startet die Bauschritte
+      # in eigenen Containern, und die koennen ein Volume ueber seinen Namen
+      # einhaengen. Einen Pfad des Hosts kennen sie nicht.
+      #
+      # Nur lesend: der Webserver soll nichts veraendern koennen.
+      - ausliefern:/srv/ausliefern:ro
+      - caddy-daten:/data
+      - caddy-konfig:/config
+    depends_on:
+      - forgejo
+    networks: [hj-update]
+
+  # ------------------------------------------------------------------ Forgejo
+  #
+  # Git, CI und OCI-Registry in einem. ROOT_URL muss die oeffentliche Adresse
+  # sein: die Registry schickt sie im Www-Authenticate-Kopf mit, und "docker
+  # login" folgt genau dieser Angabe. Steht dort eine LAN-Adresse, laeuft die
+  # Anmeldung von aussen ins Leere.
+
+  forgejo:
+    image: codeberg.org/forgejo/forgejo:11
+    restart: unless-stopped
+    environment:
+      USER_UID: 1000
+      USER_GID: 1000
+      FORGEJO__server__ROOT_URL: https://${HJ_UPDATE_HOST}/
+      FORGEJO__server__DOMAIN: ${HJ_UPDATE_HOST}
+      FORGEJO__server__SSH_DOMAIN: ${HJ_GIT_BIND:-127.0.0.1}
+      FORGEJO__server__SSH_PORT: 2222
+      # Keine offene Registrierung. Den Verwalter legt einrichten.sh an.
+      FORGEJO__service__DISABLE_REGISTRATION: "true"
+      # Bewusst offen: die Abbilder darf jeder ziehen, der bis hierher kommt -
+      # und bis hierher kommt nur, wer Caddy einen gueltigen Ausweis vorgelegt
+      # hat. Die Zugangskontrolle steht am Rand, nicht doppelt. Sonst braeuchte
+      # ein Knoten zwei Zugangsdaten fuer eine Sache.
+      #
+      # Die Kehrseite: wer im LAN direkt an Port 3000 kommt, zieht sie ohne
+      # alles. Deshalb lauscht Forgejo per Vorgabe nur auf 127.0.0.1.
+      FORGEJO__service__REQUIRE_SIGNIN_VIEW: "false"
+      FORGEJO__actions__ENABLED: "true"
+      # SQLite reicht: ein Benutzer, vier Repositories, ein Build pro Release.
+      FORGEJO__database__DB_TYPE: sqlite3
+    volumes:
+      - forgejo-daten:/data
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    ports:
+      # Oberflaeche und SSH nur im LAN. Nach aussen reicht Caddy allein /v2/
+      # durch - siehe Caddyfile.
+      - "${HJ_GIT_BIND:-127.0.0.1}:3000:3000"
+      - "${HJ_GIT_BIND:-127.0.0.1}:2222:22"
+    networks: [hj-update]
+
+  # ------------------------------------------------------------------ Runner
+  #
+  # Baut die Abbilder, wenn ein Release getaggt wird. Er bekommt den
+  # Docker-Socket des Hosts - anders kann er keine Abbilder bauen. Damit hat
+  # er faktisch Wurzelrechte auf diesem Host. Das ist hier vertretbar, weil
+  # er nur eigenen Code baut; auf einer Maschine mit fremden Repositories
+  # waere es das nicht.
+
+  runner:
+    image: code.forgejo.org/forgejo/runner:6
+    restart: unless-stopped
+    depends_on:
+      - forgejo
+    volumes:
+      - runner-daten:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    working_dir: /data
+    # Angemeldet wird einmalig durch einrichten.sh - dafuer braucht es einen
+    # Token, den Forgejo erst im laufenden Betrieb ausstellt. Hier laeuft
+    # deshalb nur noch der Dienst.
+    command: ["forgejo-runner", "daemon", "--config", "/data/config.yml"]
+    networks: [hj-update]
+
+volumes:
+  # Alles, was ausgeliefert wird: Release-Manifest, Knotenpakete, Tresor.
+  # Geschrieben von veroeffentlichen.sh und tresor.sh, gelesen von Caddy.
+  ausliefern:
+  caddy-daten:
+  caddy-konfig:
+  forgejo-daten:
+  runner-daten:
+
+networks:
+  hj-update:
+    driver: bridge

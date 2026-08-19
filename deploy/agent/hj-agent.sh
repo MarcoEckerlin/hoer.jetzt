@@ -132,7 +132,14 @@ if [[ -n "$soll_version" && "$soll_version" != "$version" ]]; then
     geaendert=0   # auto-update.sh startet selbst neu
 elif [[ "$geaendert" -eq 1 ]]; then
     sagen "Shard-Aufteilung geaendert - core neu starten."
-    cp "$UMGEBUNG" .env
+    # Compose liest die .env aus seinem eigenen Verzeichnis. Frueher lag dort
+    # eine Kopie, die hier aufgefrischt wurde - inzwischen ist es ein Symlink
+    # auf dieselbe Datei. Ein "cp" darauf bricht mit "same file" ab, und unter
+    # "set -e" waere der Neustart darunter nie gelaufen: der Agent haette die
+    # Aufteilung geschrieben und nie angewendet.
+    if [[ ! -e .env ]] || ! [[ .env -ef "$UMGEBUNG" ]]; then
+        cp "$UMGEBUNG" .env
+    fi
     docker compose up -d core
 fi
 

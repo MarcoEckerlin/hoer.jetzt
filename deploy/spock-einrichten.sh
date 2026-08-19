@@ -191,6 +191,14 @@ anlegen)
     #
     # Muss nach jedem Schema-Zuwachs erneut laufen: eine Tabelle, die es beim
     # letzten Lauf noch nicht gab, wird nicht von selbst mitgenommen.
+    #
+    # ACHTUNG bei spock.tables: die Sicht listet *jede* Tabelle der Datenbank,
+    # ob sie in einem Replikationsset ist oder nicht - die Zugehoerigkeit steht
+    # in set_name, und der ist sonst leer. Genau daran ist diese Stelle schon
+    # einmal gescheitert: die Kandidatenliste fragte nur, ob eine Tabelle in
+    # spock.tables vorkommt (immer ja), lief deshalb nie, und die Kontrolle
+    # zaehlte dieselbe Sicht ohne Filter und meldete "20 von 20 im Abgleich".
+    # Ergebnis war ein leeres Set, das sich als vollstaendig ausgab.
     ZUGEFUEGT=0
     UEBERSPRUNGEN=""
     while read -r tabelle; do
@@ -204,11 +212,23 @@ anlegen)
         SELECT c.relname
         FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
         WHERE n.nspname = 'public' AND c.relkind = 'r'
-          AND NOT EXISTS (SELECT 1 FROM spock.tables t WHERE t.relid = c.oid)
+          AND NOT EXISTS (
+              SELECT 1 FROM spock.tables t
+              WHERE t.relid = c.oid AND coalesce(t.set_name, '') <> ''
+          )
         ORDER BY c.relname" 2>/dev/null || true)
 
-    IM_ABGLEICH="$(zahl "SELECT count(*) FROM spock.tables" || echo 0)"
+    IM_ABGLEICH="$(zahl "SELECT count(*) FROM spock.tables WHERE coalesce(set_name, '') <> ''" || echo 0)"
     info "${IM_ABGLEICH} von ${VORHANDEN} Tabellen im Abgleich (${ZUGEFUEGT} neu)"
+
+    # Ohne diese Warnung sah ein voellig leeres Replikationsset aus wie Erfolg.
+    if [[ "$IM_ABGLEICH" -eq 0 ]]; then
+        warn "KEINE Tabelle im Abgleich - die Replikation traegt nichts."
+        warn "    Die Subscription meldet trotzdem 'replicating' und der Slot"
+        warn "    steht auf 'active': beides sagt nur, dass die Verbindung"
+        warn "    steht, nicht dass Daten fliessen. Gegenprobe:"
+        warn "        INSERT auf der einen Node, SELECT auf der anderen."
+    fi
 
     if [[ -n "$UEBERSPRUNGEN" ]]; then
         warn "Nicht aufgenommen:${UEBERSPRUNGEN}"

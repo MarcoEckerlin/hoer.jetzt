@@ -1,0 +1,74 @@
+# hoer.jetzt - ein Tag loest das Release aus.
+#
+# Ausgeloest wird nur durch einen Tag "v...", nicht durch einen Push auf main.
+# Das ist dieselbe Regel wie unter GitHub und aus demselben Grund: ein Push
+# soll nicht in derselben Nacht auf einem Produktivsystem landen.
+#
+# Die Zweige haben keine gemeinsame Historie. Welcher Stand von core,
+# ai-radio, lavalink und web zu diesem Release gehoert, sagt die Datei
+# RELEASE - ein Tag allein koennte sie nicht zusammenhalten.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  veroeffentlichen:
+    runs-on: docker
+    container:
+      image: docker:27-cli
+      # Der Socket des Hosts: ohne ihn kann dieser Job keine Abbilder bauen.
+      # Damit hat er faktisch Wurzelrechte auf dem Update-Server. Vertretbar,
+      # solange dort nur eigener Code gebaut wird.
+      volumes:
+        - /var/run/docker.sock:/var/run/docker.sock
+
+    steps:
+      - name: Werkzeuge
+        run: apk add --no-cache git bash tar curl coreutils
+
+      - name: main holen
+        uses: actions/checkout@v4
+        with:
+          path: quellen/main
+          fetch-depth: 0
+
+      # Jeder Komponentenzweig kommt auf genau den Stand, den RELEASE nennt -
+      # nicht auf die Zweigspitze. Sonst baute ein Release Code mit, der noch
+      # gar nicht dazugehoert.
+      - name: Komponenten auf den Stand aus RELEASE bringen
+        run: |
+          set -euo pipefail
+          cd "${GITHUB_WORKSPACE}/quellen"
+          URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+          for teil in core ai-radio lavalink web; do
+              stand="$(grep "^${teil}=" main/RELEASE | cut -d= -f2-)"
+              [ -n "$stand" ] || { echo "RELEASE nennt keinen Stand fuer ${teil}"; exit 1; }
+              git clone -q --branch "$teil" --single-branch \
+                  "https://x-access-token:${GITHUB_TOKEN}@${URL#https://}" "$teil"
+              git -C "$teil" fetch -q origin "$stand"
+              git -C "$teil" checkout -q "$stand"
+              printf '%-10s %s\n' "$teil" "${stand:0:12}"
+          done
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Kein "docker login": gebaut und gepusht wird ueber den Docker-Dienst
+      # des Update-Servers, und der hat den Client-Ausweis unter
+      # /etc/docker/certs.d/ liegen - dieselbe Anmeldung wie auf jedem Knoten,
+      # nur andersherum. einrichten.sh legt ihn dort ab.
+      #
+      # Und weil derselbe Host den Namen in seiner /etc/hosts auf 127.0.0.1
+      # zeigen laesst, geht der Push gar nicht erst zum Router hinaus. Ohne
+      # das braeuchte es NAT-Hairpin, und das koennen viele Anschluesse nicht.
+      - name: Bauen, hochladen, umschalten
+        run: |
+          bash "${GITHUB_WORKSPACE}/quellen/main/update-server/veroeffentlichen.sh" \
+               "${GITHUB_REF_NAME#v}"
+        env:
+          QUELLEN: ${{ github.workspace }}/quellen
+          HJ_UPDATE_HOST: ${{ vars.HJ_UPDATE_HOST }}
+

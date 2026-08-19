@@ -144,7 +144,24 @@ frage HJ_DB_PORT     "Port"              "5432"
 frage HJ_DB_NAME     "Datenbank"         "discordbot"
 frage HJ_DB_USER     "Benutzer"          "discordbot"
 geheim HJ_DB_PASSWORD "Passwort"
-frage HJ_BOT_ID      "Instanz-Nummer"    "1"
+# Die Bot-Nummer, NICHT die Knotennummer.
+#
+# Der Wert steckt im Schluessel praktisch jeder Tabelle. Er trennt zwei
+# *verschiedene* Bots, die sich eine Datenbank teilen - nicht zwei Nodes
+# desselben Bots. Wer auf der zweiten Node eine 2 eintraegt, bekommt eine
+# Installation, die technisch laeuft und trotzdem nichts gemeinsam hat: eigene
+# Admins, eigene Modul-Einstellungen, eigene Knoten. Die Replikation ueber-
+# traegt alles brav, nur liest die andere Seite nie dieselben Zeilen.
+#
+# Genau das ist passiert. Die Frage hiess "Instanz-Nummer", und auf dem zweiten
+# Server tippt da jeder eine 2. Wer sich dann im Panel anmeldete, kam je nach
+# Loadbalancer mal in seinen Adminbereich und mal in einen leeren.
+#
+# Deshalb steht die Nummer, die sich je Node unterscheidet, weiter unten und
+# heisst HJ_NODE_NR. Hier zaehlt: gleicher Bot-Token = gleiche Nummer.
+info "Die Bot-Nummer trennt verschiedene Bots in einer gemeinsamen Datenbank."
+info "Zweite Node desselben Bots? Dann hier denselben Wert wie auf der ersten."
+frage HJ_BOT_ID      "Bot-Nummer (gleicher Bot = gleiche Nummer)"    "1"
 echo
 geheim HJ_BOT_TOKEN             "Bot-Token"
 frage  HJ_DISCORD_CLIENT_ID     "Client-ID"

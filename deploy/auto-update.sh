@@ -5,19 +5,29 @@
 #   bash auto-update.sh              normal, wartet auf eine ruhige Minute
 #   bash auto-update.sh --jetzt      sofort, ohne auf Zuhoerer zu ruecksichtigen
 #   bash auto-update.sh --pruefen    nur nachsehen, nichts aendern
+#   bash auto-update.sh --zurueck    auf das vorige Release zurueck
 #
-# Ein Release ist ein Tag "v..." auf main. Die Datei RELEASE darin sagt, welcher
-# Stand von core, ai-radio, lavalink und web dazugehoert - die Zweige haben keine
-# gemeinsame Historie, ein Tag allein koennte sie nicht zusammenhalten.
+# Bezugsquelle ist der eigene Update-Server, nicht mehr GitHub. Er liefert
+# fertige Abbilder statt Quellcode. Was das aendert:
 #
-# Der ungetaggte Stand eines Zweiges wird bewusst ignoriert. Ein Push soll nicht
-# in derselben Nacht auf einem Produktivsystem landen.
+#   - Auf diesem Host liegt kein Quellbaum mehr, kein Maven, kein JDK.
+#   - Ein Update dauert Sekunden statt Minuten - es wird nichts gebaut,
+#     nur geladen.
+#   - Der Rueckweg ist ein Abbild-Tag, kein Rebuild. Deshalb gibt es
+#     jetzt --zurueck.
+#   - Der Zugang ist ein Passwort in der .env, kein SSH-Deploy-Key mehr.
+#     Wer es abgreift, kann die Abbilder ziehen, die dieser Host ohnehin
+#     ausfuehrt. Zugangsdaten stehen darin nicht.
+#
+# Was gleich bleibt: es zaehlt nur ein veroeffentlichtes Release. Ein Push
+# landet nicht in derselben Nacht auf einem Produktivsystem.
 
 set -euo pipefail
 
 ARBEIT="${ARBEIT:-/opt/hoerjetzt}"
 UMGEBUNG="${ARBEIT}/.env"
 STAND="${ARBEIT}/.installiert"
+VORHER="${ARBEIT}/.vorheriges"
 PROTOKOLL="${PROTOKOLL:-/var/log/hoerjetzt-update.log}"
 SPERRE="/var/lock/hoerjetzt-update.lock"
 
@@ -29,10 +39,12 @@ WARTE_VERSUCHE="${WARTE_VERSUCHE:-8}"
 
 NUR_PRUEFEN=0
 SOFORT=0
+ZURUECK=0
 for argument in "$@"; do
     case "$argument" in
         --pruefen) NUR_PRUEFEN=1 ;;
         --jetzt)   SOFORT=1 ;;
+        --zurueck) ZURUECK=1; SOFORT=1 ;;
         *) echo "Unbekannt: ${argument}" >&2; exit 2 ;;
     esac
 done
@@ -40,16 +52,8 @@ done
 sagen() {
     printf '%s  %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" | tee -a "$PROTOKOLL"
 }
-
-ende() {
-    sagen "$*"
-    exit 0
-}
-
-fehler() {
-    sagen "FEHLER: $*"
-    exit 1
-}
+ende()   { sagen "$*"; exit 0; }
+fehler() { sagen "FEHLER: $*"; exit 1; }
 
 # Compose haengt an den Dienstnamen eine laufende Nummer - der Container heisst
 # also hoerjetzt-core-1, nicht hoerjetzt-core. Beides pruefen, damit es auch
@@ -64,6 +68,8 @@ kernbehaelter() {
     printf '%s' "hoerjetzt-core-1"
 }
 
+wert() { grep "^$1=" "$UMGEBUNG" 2>/dev/null | cut -d= -f2- | head -n1 || true; }
+
 mkdir -p "$(dirname "$PROTOKOLL")" "$(dirname "$SPERRE")" 2>/dev/null || true
 
 # Zwei gleichzeitige Laeufe waeren ein halb gebautes System. Der zweite geht.
@@ -72,43 +78,63 @@ flock -n 9 || ende "Ein Update laeuft bereits - dieser Lauf entfaellt."
 
 [[ -f "$UMGEBUNG" ]] || fehler "${UMGEBUNG} fehlt."
 
-# Ist das Repository privat, steht in der .env eine SSH-Adresse. Die gilt dann
-# auch hier - sonst liefe das naechtliche Update in eine Passwortabfrage.
-if grep -q '^REPO=' "$UMGEBUNG"; then
-    REPO="$(grep '^REPO=' "$UMGEBUNG" | cut -d= -f2-)"
-    export REPO
-fi
-[[ -d "${ARBEIT}/main/.git" ]] || fehler "${ARBEIT}/main ist kein Arbeitsverzeichnis."
+# ------------------------------------------------------------------ Zugang
+#
+# Kein Passwort mehr, sondern ein Client-Zertifikat. Der Unterschied ist
+# nicht nur die Laenge: ein Passwort geht ueber die Leitung und steht solange
+# im Speicher jedes Prozesses, der es weiterreicht. Der private Schluessel
+# hier verlaesst die Platte nie - er beweist nur, dass er da ist.
 
-for zweig in main core ai-radio lavalink web; do
-    git config --global --add safe.directory "${ARBEIT}/${zweig}" 2>/dev/null || true
+HJ_UPDATE_HOST="$(wert HJ_UPDATE_HOST)"
+AUSWEIS="${AUSWEIS:-${ARBEIT}/ausweis}"
+
+if [[ -z "$HJ_UPDATE_HOST" ]]; then
+    fehler "In ${UMGEBUNG} fehlt HJ_UPDATE_HOST.
+       Dieser Host haengt noch am alten GitHub-Weg. Umstellen:
+           bash <(curl -fsSLu knoten https://<update-server>/knoten/aufsetzen.sh)"
+fi
+for teil in update.crt update.key; do
+    [[ -f "${AUSWEIS}/${teil}" ]] || fehler "${AUSWEIS}/${teil} fehlt - ohne Ausweis kein Zugang."
 done
 
-# Der Timer laeuft nachts ohne Aufsicht. Eine Passwortabfrage haette hier
-# niemanden, der sie beantwortet - der Lauf haenge bis zum naechsten Neustart.
-export GIT_TERMINAL_PROMPT=0
+DOCKER="${ARBEIT}/main/deploy/docker"
+[[ -d "$DOCKER" ]] || fehler "${DOCKER} fehlt."
 
 # ------------------------------------------------------------------ Release
 
-git -C "${ARBEIT}/main" fetch -q --tags --force origin || fehler "GitHub nicht erreichbar."
+hole() {
+    curl -fsS -m 30 \
+        --cert "${AUSWEIS}/update.crt" --key "${AUSWEIS}/update.key" \
+        "https://${HJ_UPDATE_HOST}$1"
+}
 
-NEUSTE="$(git -C "${ARBEIT}/main" tag -l 'v*' --sort=-v:refname | head -n1)"
-[[ -n "$NEUSTE" ]] || ende "Kein Release getaggt - nichts zu tun."
+MANIFEST="$(hole /release/aktuell || true)"
+[[ -n "$MANIFEST" ]] || fehler "${HJ_UPDATE_HOST} nicht erreichbar oder Passwort falsch."
+
+manifestwert() { printf '%s\n' "$MANIFEST" | grep "^$1=" | cut -d= -f2- | head -n1 || true; }
+
+NEUSTE="$(manifestwert version)"
+REGISTRY="$(manifestwert registry)"
+[[ -n "$NEUSTE" ]]   || ende "Noch nichts veroeffentlicht - nichts zu tun."
+[[ -n "$REGISTRY" ]] || fehler "Das Manifest nennt keine Registry."
 
 AKTUELL="$(cat "$STAND" 2>/dev/null || true)"
-if [[ "$NEUSTE" == "$AKTUELL" ]]; then
+
+if [[ "$ZURUECK" -eq 1 ]]; then
+    NEUSTE="$(cat "$VORHER" 2>/dev/null || true)"
+    [[ -n "$NEUSTE" ]] || fehler "Kein voriges Release vermerkt - nichts, wohin zurueck."
+    sagen "Zurueck auf ${NEUSTE} (laeuft: ${AKTUELL:-unbekannt})"
+elif [[ "$NEUSTE" == "$AKTUELL" ]]; then
     ende "${NEUSTE} laeuft bereits."
+else
+    sagen "Neues Release: ${NEUSTE} (installiert: ${AKTUELL:-unbekannt})"
 fi
 
-sagen "Neues Release: ${NEUSTE} (installiert: ${AKTUELL:-unbekannt})"
 [[ "$NUR_PRUEFEN" -eq 1 ]] && ende "Nur geprueft, nichts geaendert."
 
 # ------------------------------------------------------------------ Compose
 
-COMPOSE_DATEI="docker-compose.yml"
-DOCKER="${ARBEIT}/main/deploy/docker"
-
-COMPOSE=(-f "$COMPOSE_DATEI")
+COMPOSE=(-f docker-compose.yml)
 
 # Die Erweiterungsdatei muss mit, sonst macht jedes Update sie rueckgaengig.
 #
@@ -116,19 +142,14 @@ COMPOSE=(-f "$COMPOSE_DATEI")
 # aufgesetzt hatte, bekam beim naechsten Update wieder das Standard-Abbild
 # postgres:16-alpine untergeschoben - und auf dem gibt es die Erweiterung
 # nicht. Die Daten im Volume ueberleben das, die Replikation nicht: danach
-# meldet psql nur noch 'relation "spock.node" does not exist'. Die Einrichtung
-# war also nicht "noch offen", sie konnte kein Update ueberstehen.
-#
-# HJ_COMPOSE_EXTRA nimmt weitere Dateien auf, durch Leerzeichen getrennt.
-# HJ_SPOCK=true ist die Abkuerzung fuer den haeufigen Fall.
+# meldet psql nur noch 'relation "spock.node" does not exist'.
 if grep -q '^HJ_SPOCK=true' "$UMGEBUNG" 2>/dev/null; then
-    COMPOSE+=(-f "docker-compose.spock.yml")
+    COMPOSE+=(-f docker-compose.spock.yml)
 fi
-for zusatz in $(grep '^HJ_COMPOSE_EXTRA=' "$UMGEBUNG" 2>/dev/null | cut -d= -f2- || true); do
+for zusatz in $(wert HJ_COMPOSE_EXTRA); do
     [[ -f "${DOCKER}/${zusatz}" ]] || fehler "In HJ_COMPOSE_EXTRA steht ${zusatz}, die Datei gibt es nicht."
     COMPOSE+=(-f "$zusatz")
 done
-
 sagen "Compose: ${COMPOSE[*]}"
 
 # ------------------------------------------------------------------ Zuhoerer
@@ -138,7 +159,7 @@ sagen "Compose: ${COMPOSE[*]}"
 # kein Grund, ein Update ewig aufzuschieben.
 spielende() {
     local passwort antwort
-    passwort="$(grep '^HJ_LAVALINK_PASSWORD=' "$UMGEBUNG" | cut -d= -f2- || true)"
+    passwort="$(wert HJ_LAVALINK_PASSWORD)"
     [[ -n "$passwort" ]] || { echo 0; return 0; }
 
     antwort="$(cd "$DOCKER" && docker compose "${COMPOSE[@]}" exec -T lavalink-free-1 \
@@ -166,43 +187,54 @@ if [[ "$SOFORT" -eq 0 ]]; then
     sagen "Niemand hoert gerade zu - los."
 fi
 
-# ------------------------------------------------------------------ Umstellen
-
-git -C "${ARBEIT}/main" reset -q --hard "$NEUSTE" || fehler "main laesst sich nicht auf ${NEUSTE} stellen."
-
-MANIFEST="${ARBEIT}/main/RELEASE"
-[[ -f "$MANIFEST" ]] || fehler "RELEASE fehlt in ${NEUSTE}."
-
-for zweig in core ai-radio lavalink web; do
-    ziel="$(grep "^${zweig}=" "$MANIFEST" | cut -d= -f2- || true)"
-    [[ -n "$ziel" ]] || fehler "RELEASE nennt keinen Stand fuer ${zweig}."
-
-    if [[ ! -d "${ARBEIT}/${zweig}/.git" ]]; then
-        fehler "${ARBEIT}/${zweig} fehlt - bitte einmal install.sh laufen lassen."
-    fi
-
-    git -C "${ARBEIT}/${zweig}" fetch -q origin "$zweig" || fehler "Zweig ${zweig} nicht erreichbar."
-    git -C "${ARBEIT}/${zweig}" reset -q --hard "$ziel" || fehler "${zweig} laesst sich nicht auf ${ziel} stellen."
-    sagen "$(printf '%-9s %s' "$zweig" "${ziel:0:12}")"
-done
-
-# ------------------------------------------------------------------ Bauen
+# ------------------------------------------------------------------ Laden
 
 cd "$DOCKER"
+
+# Compose liest die Marken aus der Umgebung. Die Registry steht mit darin,
+# damit ein Umzug des Update-Servers keine Aenderung an den Compose-Dateien
+# braucht.
 cp "$UMGEBUNG" .env
 chmod 600 .env
+{
+    printf 'HJ_REGISTRY=%s\n' "$REGISTRY"
+    for teil in core ai-radio lavalink web; do
+        marke="$(manifestwert "$teil")"
+        [[ -n "$marke" ]] || fehler "Das Manifest nennt keinen Stand fuer ${teil}."
+        # core -> CORE_TAG, ai-radio -> AI_RADIO_TAG
+        printf '%s_TAG=%s\n' "$(printf '%s' "$teil" | tr 'a-z-' 'A-Z_')" "$marke"
+    done
+} >> .env
 
-if ! docker compose "${COMPOSE[@]}" build >>"$PROTOKOLL" 2>&1; then
-    fehler "Build fehlgeschlagen - alter Stand laeuft weiter. Einzelheiten in ${PROTOKOLL}."
+# Kein "docker login": Docker legt denselben Ausweis von sich aus vor, wenn
+# er unter /etc/docker/certs.d/<host>/ liegt. Deshalb hier nur die Probe, ob
+# das eingerichtet ist - fehlt es, scheitert sonst erst der pull, und die
+# Meldung lautet dann bloss "unauthorized".
+DOCKERAUSWEIS="/etc/docker/certs.d/${HJ_UPDATE_HOST}"
+for teil in client.cert client.key; do
+    [[ -f "${DOCKERAUSWEIS}/${teil}" ]] \
+        || fehler "${DOCKERAUSWEIS}/${teil} fehlt - Docker kann sich nicht ausweisen."
+done
+
+# Erst laden, dann umschalten. Bricht das Laden ab - Netz weg, Abbild fehlt,
+# Platte voll - hat der laufende Stack davon nichts mitbekommen. Das war
+# frueher der Build an dieser Stelle und dauerte Minuten statt Sekunden.
+if ! docker compose "${COMPOSE[@]}" pull >>"$PROTOKOLL" 2>&1; then
+    fehler "Abbilder liessen sich nicht laden - alter Stand laeuft weiter. Siehe ${PROTOKOLL}."
 fi
 
-# Erst hier wird umgeschaltet. Schlaegt der Build fehl, hat der laufende Stack
-# nichts davon mitbekommen.
 if ! docker compose "${COMPOSE[@]}" up -d >>"$PROTOKOLL" 2>&1; then
     fehler "Start fehlgeschlagen - siehe ${PROTOKOLL}."
 fi
 
+# Der bisherige Stand ist ab jetzt der Rueckweg. Beim Zurueckrollen nicht
+# ueberschreiben, sonst schaukeln sich zwei kaputte Staende gegenseitig hoch.
+if [[ "$ZURUECK" -eq 0 && -n "$AKTUELL" ]]; then
+    printf '%s\n' "$AKTUELL" > "$VORHER"
+fi
 printf '%s\n' "$NEUSTE" > "$STAND"
+
+# ------------------------------------------------------------------ Probe
 
 sleep 30
 KERN="$(kernbehaelter)"
@@ -211,8 +243,10 @@ if [[ "$zustand" == "running" ]]; then
     sagen "${NEUSTE} laeuft."
 else
     sagen "WARNUNG: core steht auf '${zustand}' - docker logs ${KERN}"
+    sagen "Rueckweg: bash ${BASH_SOURCE[0]} --zurueck"
 fi
 
-# Aufgeraeumt wird erst nach dem erfolgreichen Start: die alten Abbilder sind
-# bis dahin der Rueckweg.
-docker image prune -f >/dev/null 2>&1 || true
+# Aufgeraeumt wird erst nach dem erfolgreichen Start, und nur was aelter als
+# eine Woche ist: das vorige Abbild ist der Rueckweg und muss so lange liegen
+# bleiben. "docker image prune -f" haette es sofort mitgenommen.
+docker image prune -f --filter "until=168h" >/dev/null 2>&1 || true

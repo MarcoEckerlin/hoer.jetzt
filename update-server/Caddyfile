@@ -1,0 +1,115 @@
+# hoer.jetzt - was der Update-Server nach aussen gibt.
+#
+# Drei Zugaenge, drei Vertrauensstufen:
+#
+#   /knoten/    Passwort. Kurz genug, um es in eine Befehlszeile zu tippen.
+#               Gibt das Installationsskript und die Compose-Dateien heraus -
+#               keinen Schluessel und kein Zugangsdatum. Wird einmal beim
+#               Aufsetzen gebraucht und danach nirgends gespeichert.
+#
+#   /v2/        Client-Zertifikat, 4096 Bit. Die Abbilder. Docker legt den
+#               Ausweis von sich aus vor, wenn er unter
+#               /etc/docker/certs.d/<host>/ liegt.
+#
+#   /release/   Client-Zertifikat. Welches Release gerade gilt.
+#
+#   /tresor/    Client-Zertifikat - und der Inhalt ist zusaetzlich an den
+#               Tresor-Schluessel gerichtet. Selbst wer einen gueltigen Ausweis
+#               hat, bekommt hier nur einen CMS-Umschlag, den er nicht
+#               aufbekommt.
+#
+# Warum "verify_if_given" und nicht "require_and_verify": /knoten/ muss ohne
+# Ausweis erreichbar sein - ein frischer Knoten hat ja noch keinen. Der Zwang
+# steht deshalb nicht am Anschluss, sondern an den drei Pfaden, die ihn
+# brauchen. Stuende er am Anschluss, waere die Erstinstallation unmoeglich.
+
+{
+	email {$HJ_ACME_MAIL}
+}
+
+{$HJ_UPDATE_HOST} {
+	encode zstd gzip
+
+	tls {
+		client_auth {
+			mode verify_if_given
+			trusted_ca_cert_file /schluessel/ca.crt
+		}
+	}
+
+	log {
+		output file /data/zugriff.log {
+			roll_size 20MiB
+			roll_keep 5
+		}
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		-Server
+	}
+
+	# Ohne vorgelegten Ausweis ist dieser Platzhalter leer. "verify_if_given"
+	# heisst: ein vorgelegter Ausweis wurde bereits gegen die CA geprueft -
+	# hier steht also nur noch die Frage, ob ueberhaupt einer kam.
+	@ohne_ausweis expression `{http.request.tls.client.subject} == ""`
+
+	# ------------------------------------------------------------- Registry
+	#
+	# Nur dieser Pfad geht zu Forgejo. Die Weboberflaeche und das Git bleiben
+	# im LAN - ein Knoten braucht davon nichts.
+	#
+	# "route" statt einfach untereinander: Caddy sortiert Direktiven sonst
+	# nach einer festen Rangfolge, und dabei kaeme der reverse_proxy vor das
+	# respond - die Sperre liefe ins Leere.
+	handle /v2/* {
+		route {
+			respond @ohne_ausweis "Client-Zertifikat noetig." 403
+			reverse_proxy forgejo:3000 {
+				# Abbild-Schichten sind gross. Die Vorgabe von 30s wuerde den
+				# Upload beim Veroeffentlichen mittendrin abschneiden.
+				transport http {
+					read_timeout 30m
+					write_timeout 30m
+				}
+			}
+		}
+	}
+
+	# ------------------------------------------------------------- Release
+	handle /release/* {
+		route {
+			respond @ohne_ausweis "Client-Zertifikat noetig." 403
+			root * /srv/ausliefern
+			file_server
+		}
+	}
+
+	# ------------------------------------------------------------- Tresor
+	handle /tresor/* {
+		route {
+			respond @ohne_ausweis "Client-Zertifikat noetig." 403
+			root * /srv/ausliefern
+			file_server
+		}
+	}
+
+	# ------------------------------------------------------------- Knoten
+	#
+	# Der einzige Bereich mit Passwort - und der einzige, den ein Rechner
+	# ohne Ausweis erreicht.
+	handle /knoten/* {
+		basic_auth {
+			knoten {$HJ_HASH_KNOTEN}
+		}
+		root * /srv/ausliefern
+		file_server
+	}
+
+	# Alles andere gibt es hier nicht. Bewusst 404 und nicht 403: wer nur
+	# Adressen durchprobiert, soll nicht erfahren, welche existieren.
+	handle {
+		respond "Nicht gefunden." 404
+	}
+}

@@ -12,18 +12,31 @@
 
 name: hoerjetzt
 
-# Die Komponentenzweige liegen NEBEN main, nicht darin:
-#   /opt/hoerjetzt/main/deploy/docker   <- diese Datei
-#   /opt/hoerjetzt/core                 <- Bauverzeichnis
-# Deshalb drei Ebenen hoch. Wer anders ablegt, setzt HJ_QUELLEN in der .env
-# auf das Verzeichnis, in dem core, ai-radio und lavalink liegen.
+# Hier wird nichts mehr gebaut. Die Abbilder kommen fertig vom
+# Update-Server; HJ_REGISTRY und die *_TAG-Marken setzt auto-update.sh aus
+# dem Release-Manifest in die .env.
+#
+# Frueher stand an jedem Dienst ein build-Block, der den Quellbaum daneben
+# erwartete - deshalb musste auf jeden Knoten der vollstaendige Quellcode.
+
+# Protokollrotation fuer alle Dienste.
+#
+# Docker schreibt ohne Vorgabe unbegrenzt in json-Dateien. Im Zugriffsprotokoll
+# des Webservers stehen IP-Adressen - personenbezogene Daten, die damit ohne
+# Frist liegen bleiben. Drei Dateien zu 10 MB je Dienst decken die Fehlersuche
+# ab und begrenzen zugleich, wie weit zurueck ueberhaupt etwas gespeichert ist.
+# Die Datenschutzerklaerung nennt genau diese Begrenzung.
+x-protokoll: &protokoll
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
 
 services:
 
   core:
-    image: ghcr.io/marcoeckerlin/hoerjetzt-core:${CORE_TAG:-latest}
-    build:
-      context: ${HJ_QUELLEN:-../../..}/core
+    logging: *protokoll
+    image: ${HJ_REGISTRY:?Registry fehlt - auto-update.sh setzt sie}/core:${CORE_TAG:-latest}
     restart: unless-stopped
     environment:
       HJ_BOT_TOKEN: ${HJ_BOT_TOKEN:?Bot-Token fehlt}
@@ -71,10 +84,67 @@ services:
       HJ_SHARD_VON: ${HJ_SHARD_VON:-}
       HJ_SHARD_BIS: ${HJ_SHARD_BIS:-}
       HJ_NODE_NR: ${HJ_NODE_NR:-1}
+      # Wer diese Node ist - fuer das Knotenverzeichnis und die Weiterleitung
+      # von Dashboard-Anfragen. Im Container waere der Rechnername die
+      # Container-Kennung und aenderte sich bei jedem Neustart; die private
+      # Adresse kennt der Container ohnehin nicht.
+      HJ_NODE_NAME: ${HJ_NODE_NAME:-}
+      HJ_PRIVAT_IP: ${HJ_PRIVAT_IP:-}
       # Nur auf der Steuer-Node gesetzt: dort nimmt core die Meldungen der
       # Agenten entgegen. Auf allen anderen Nodes bleibt es leer, dann ist die
       # Schnittstelle dicht.
       HJ_CONTROLLER_TOKEN: ${HJ_CONTROLLER_TOKEN:-}
+
+      # Knoten und Autoscaling.
+      #
+      # Diese drei fehlten hier, obwohl core sie per System.getenv() liest und
+      # sie in der .env standen. Der Fehler war lautlos und teuer: die
+      # Selbstanmeldung der Knoten antwortete mit 404 (ohne HJ_NODE_TOKEN
+      # bleibt sie absichtlich zu), "Neustart" und "Aktualisieren" in der
+      # Knotenansicht meldeten "HJ_AGENT_TOKEN ist nicht gesetzt", und das
+      # Autoscaling fand keinen Hetzner-Zugang - alles drei sah nach einem
+      # nicht eingerichteten System aus, war aber eine fehlende Zeile.
+      #
+      # Leer heisst weiterhin abgeschaltet, nicht offen.
+      HJ_NODE_TOKEN: ${HJ_NODE_TOKEN:-}
+      HJ_AGENT_TOKEN: ${HJ_AGENT_TOKEN:-}
+      HJ_HETZNER_TOKEN: ${HJ_HETZNER_TOKEN:-}
+
+      # Autoscaling. Darf auf jeder Node stehen: zustaendig ist immer nur eine
+      # (siehe AutoScaleService.zustaendig) - sonst bestellten beide je einen
+      # Server. Die Schwellen sind Vorgaben, hier nur der Vollstaendigkeit
+      # halber durchgereicht.
+      HJ_AUTOSCALE: ${HJ_AUTOSCALE:-false}
+      HJ_AUTOSCALE_SCHWELLE: ${HJ_AUTOSCALE_SCHWELLE:-}
+      HJ_AUTOSCALE_ABBAU_SCHWELLE: ${HJ_AUTOSCALE_ABBAU_SCHWELLE:-}
+      HJ_AUTOSCALE_MAX: ${HJ_AUTOSCALE_MAX:-}
+      HJ_AUTOSCALE_TYPE: ${HJ_AUTOSCALE_TYPE:-}
+      HJ_AUTOSCALE_LOCATION: ${HJ_AUTOSCALE_LOCATION:-}
+      HJ_AUTOSCALE_IMAGE: ${HJ_AUTOSCALE_IMAGE:-}
+      # Namen oder Kennungen - der Bot loest Namen selbst auf.
+      HJ_AUTOSCALE_SSH_KEYS: ${HJ_AUTOSCALE_SSH_KEYS:-}
+      HJ_AUTOSCALE_NETWORK: ${HJ_AUTOSCALE_NETWORK:-}
+      HJ_AUTOSCALE_FIREWALL: ${HJ_AUTOSCALE_FIREWALL:-}
+      # Leer = der Knoten kommt nicht an den Lastverteiler. Solange ein
+      # Autoscale-Knoten nur Lavalink faehrt, ist das auch das Richtige:
+      # der Verteiler sucht auf 8080 eine Weboberflaeche und findet keine.
+      HJ_AUTOSCALE_LOADBALANCER: ${HJ_AUTOSCALE_LOADBALANCER:-}
+
+      # Premium.
+      #
+      # Solange das false ist, erwaehnen die Nutzungsbedingungen kein
+      # kostenpflichtiges Angebot und bezeichnen den Betrieb als privat und
+      # unentgeltlich. Auf true umgelegt erscheint der Premium-Abschnitt, und
+      # der Text stellt auf die gewerbliche Fassung um. Erst umlegen, wenn
+      # Premium tatsaechlich kaufbar ist - ein Abo zu beschreiben, das niemand
+      # abschliessen kann, waere irrefuehrend.
+      HJ_PREMIUM_ENABLED: ${HJ_PREMIUM_ENABLED:-false}
+      # Freitext, erscheint woertlich in den Bedingungen. Beispiel:
+      # "4,99 € pro Monat inkl. USt., Abrechnung monatlich im Voraus."
+      HJ_PREMIUM_PREIS: ${HJ_PREMIUM_PREIS:-}
+      # Freitext: was Premium konkret freischaltet.
+      HJ_PREMIUM_LEISTUNG: ${HJ_PREMIUM_LEISTUNG:-}
+
       HJ_LLM_OLLAMA_URL: ${HJ_LLM_OLLAMA_URL:-http://127.0.0.1:11434}
       HJ_LLM_MODEL: ${HJ_LLM_MODEL:-phi-3.5-mini-instruct}
     # Kein Port nach aussen mehr: web liegt davor und leitet weiter.
@@ -107,6 +177,7 @@ services:
   # Kein Port nach aussen - nur die Dienste in diesem Netz sprechen mit ihr.
   # Wer von aussen hineinsehen will, nimmt einen SSH-Tunnel.
   postgres:
+    logging: *protokoll
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
@@ -134,9 +205,8 @@ services:
   #
   # Der Port der Weboberflaeche wandert damit von core hierher.
   web:
-    image: ghcr.io/marcoeckerlin/hoerjetzt-web:${WEB_TAG:-latest}
-    build:
-      context: ${HJ_QUELLEN:-../../..}/web
+    logging: *protokoll
+    image: ${HJ_REGISTRY:?Registry fehlt - auto-update.sh setzt sie}/web:${WEB_TAG:-latest}
     restart: unless-stopped
     environment:
       HJ_CORE_HOST: core
@@ -152,6 +222,7 @@ services:
   # Redis waere eine zweite verteilte Datenbank mit denselben Problemen und
   # ohne Gewinn.
   redis:
+    logging: *protokoll
     image: redis:7-alpine
     restart: unless-stopped
     command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
@@ -163,9 +234,8 @@ services:
     networks: [hoerjetzt]
 
   ai-radio:
-    image: ghcr.io/marcoeckerlin/hoerjetzt-ai-radio:${AI_RADIO_TAG:-latest}
-    build:
-      context: ${HJ_QUELLEN:-../../..}/ai-radio
+    logging: *protokoll
+    image: ${HJ_REGISTRY:?Registry fehlt - auto-update.sh setzt sie}/ai-radio:${AI_RADIO_TAG:-latest}
     restart: unless-stopped
     environment:
       HJ_BOT_ID: ${HJ_BOT_ID:-1}
@@ -186,9 +256,8 @@ services:
   # ist. Weitere Knoten - vor allem Premium - gehoeren auf eigene Hosts.
 
   lavalink-free-1:
-    image: ghcr.io/marcoeckerlin/hoerjetzt-lavalink:${LAVALINK_TAG:-latest}
-    build:
-      context: ${HJ_QUELLEN:-../../..}/lavalink
+    logging: *protokoll
+    image: ${HJ_REGISTRY:?Registry fehlt - auto-update.sh setzt sie}/lavalink:${LAVALINK_TAG:-latest}
     restart: unless-stopped
     environment:
       LAVALINK_SERVER_PASSWORD: ${HJ_LAVALINK_PASSWORD:?Lavalink-Passwort fehlt}
@@ -208,6 +277,23 @@ services:
       YT_CIPHER_USERAGENT: hoerjetzt
     depends_on:
       - yt-cipher
+    # Erreichbar auch fuer die anderen Nodes des Verbunds.
+    #
+    # Vorher stand hier nur das interne Netz. Fuer den Stack allein genuegte
+    # das - der eigene core spricht den Knoten unter dem Docker-Namen
+    # "lavalink-free-1" an. Sobald sich der Knoten aber selbst beim Bot
+    # anmeldet, tut er das mit seiner privaten Adresse, und die zeigte auf
+    # einen Port, den niemand geoeffnet hatte: im Log stand "Connect timed
+    # out", in der Knotenansicht war der Knoten rot, und jeder core sah am
+    # Ende nur sein eigenes Lavalink. Zwei Nodes, die nebeneinanderher
+    # laufen, statt eines Verbunds.
+    #
+    # Gebunden an die private Adresse, nicht an 0.0.0.0: das Passwort ist der
+    # einzige Schutz, und Lavalink hat im offenen Netz nichts verloren. Ohne
+    # HJ_PRIVAT_IP bleibt es bei 127.0.0.1 - dann laeuft der Stack wie zuvor
+    # allein weiter, statt versehentlich offen zu stehen.
+    ports:
+      - "${HJ_PRIVAT_IP:-127.0.0.1}:2333:2333"
     networks: [hoerjetzt]
 
   # ---------------------------------------------------------------- Cipher
@@ -225,6 +311,7 @@ services:
   #
   # Kein Port nach aussen: nur die Knoten in diesem Netz sprechen mit ihm.
   yt-cipher:
+    logging: *protokoll
     image: ghcr.io/kikkia/yt-cipher:master
     restart: unless-stopped
     environment:
