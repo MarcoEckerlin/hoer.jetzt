@@ -577,12 +577,24 @@ public class AudioService {
 
     private void knotenWacheLauf() {
         try {
+            // Erst die Verbindungen, dann die Tabelle.
+            //
+            // Vorher lief die Wache nur weiter, wenn sich die Knotentabelle
+            // geaendert hatte. Ein Knoten, der neu startet, aendert seine Zeile
+            // aber nicht - er schliesst nur die Verbindung. Genau das ist
+            // passiert: der Premium-Knoten war um 07:33 weg, um 07:39 laengst
+            // wieder erreichbar, und dieser Prozess hatte es nie bemerkt. Jede
+            // Wiedergabe endete danach mit "Node is not available".
+            int wiederverbunden = totgeglaubteKnotenNeuVerbinden();
+
             int geaendert = knotenNeuEinlesen();
-            if (geaendert == 0) {
+            if (geaendert == 0 && wiederverbunden == 0) {
                 return;
             }
-            Alert.send("INFO", "LAVALINK",
-                    geaendert + " Änderung(en) an den Knoten übernommen - ohne Neustart.");
+            if (geaendert > 0) {
+                Alert.send("INFO", "LAVALINK",
+                        geaendert + " Änderung(en) an den Knoten übernommen - ohne Neustart.");
+            }
 
             // Ein frisch angemeldeter Knoten hat noch keine Statistiken
             // gemeldet. Vorher umzuziehen hiesse, im Blindflug zu waehlen.
@@ -601,6 +613,52 @@ public class AudioService {
             // scheduleWithFixedDelay wuerde die Aufgabe sonst still einstellen.
             Alert.send("WARN", "LAVALINK", "Knotenabgleich fehlgeschlagen: " + fehler.getMessage());
         }
+    }
+
+    /**
+     * Verbindet Knoten neu, die eingetragen und eingeschaltet sind, aber keine
+     * Verbindung haben.
+     *
+     * <p>Die Bibliothek baut eine normal geschlossene Verbindung nicht von
+     * selbst wieder auf - und ein Lavalink, das neu startet, schliesst normal.
+     * Ohne diese Pruefung bleibt der Knoten bis zum naechsten Neustart des Bots
+     * verschwunden, obwohl er laengst wieder antwortet.</p>
+     *
+     * @return wie viele Knoten neu verbunden wurden
+     */
+    /*
+     * Das Neuverbinden raeumt auch die haengenden Server auf.
+     *
+     * knotenNeuVerbinden ruft removeNode - und damit wirft die Bibliothek den
+     * Knoten samt seiner Links weg. Genau diese Links waren das Problem: sie
+     * zeigten auf einen Knoten, den es nicht mehr gab, und jeder Abspielversuch
+     * endete in "Node is not available", weil schon das Aufraeumen des Links
+     * ueber den toten Knoten laufen wollte. Nach dem Wegwerfen legt der naechste
+     * Zugriff den Link ueber den Balancer neu an - auf einem Knoten, der lebt.
+     */
+    private int totgeglaubteKnotenNeuVerbinden() {
+        if (lavalinkClient == null) {
+            return 0;
+        }
+
+        int wieder = 0;
+        for (LavalinkNode knoten : List.copyOf(lavalinkClient.getNodes())) {
+            if (knoten.getAvailable()) {
+                continue;
+            }
+            String name = knoten.getName();
+            Alert.send("WARN", "LAVALINK",
+                    "Knoten " + name + " ist nicht verbunden - wird neu aufgebaut.");
+            try {
+                if (knotenNeuVerbinden(name)) {
+                    wieder++;
+                }
+            } catch (RuntimeException fehler) {
+                Alert.send("WARN", "LAVALINK",
+                        "Knoten " + name + " liess sich nicht neu verbinden: " + fehler.getMessage());
+            }
+        }
+        return wieder;
     }
 
     /**
@@ -737,9 +795,17 @@ public class AudioService {
                                         String nach = neu.getNode().getName();
                                         Alert.send("INFO", "LAVALINK",
                                                 guild.getName() + " von " + von + " auf " + nach + " umgezogen.");
+                                        // Gemeldet wird nur der Wechsel, nicht das
+                                        // Betreten eines Kanals: hier ist es die
+                                        // Erklaerung fuer den Aussetzer, den man
+                                        // gerade gehoert hat.
                                         if (tierService.tierOfNode(nach) == NodeTier.PREMIUM) {
                                             meldeImChat(guild,
                                                     "Der Premium-Knoten ist wieder da - die Wiedergabe läuft jetzt wieder darüber.");
+                                        } else if (tierService.tierOfNode(von) == NodeTier.PREMIUM) {
+                                            meldeImChat(guild,
+                                                    "Der Premium-Knoten ist ausgefallen. Die Wiedergabe läuft vorerst über einen "
+                                                    + "Standard-Knoten weiter — sobald Premium zurück ist, wird zurückgewechselt.");
                                         }
                                     },
                                     fehler -> Alert.send("WARN", "LAVALINK",
