@@ -1,0 +1,126 @@
+/* hoer.jetzt Updater - Oberflaeche.
+   Eine Werkzeugseite, keine Schauseite: dichte Tabellen, wenig Zierrat,
+   Farbe nur dort, wo sie eine Aussage traegt. */
+
+:root {
+    --grund:   #14161a;
+    --flaeche: #1c1f25;
+    --rand:    #2b3038;
+    --text:    #e4e7ec;
+    --leise:   #8b93a1;
+    --gut:     #6ec98b;
+    --warnung: #e3b341;
+    --schlecht:#e06c6c;
+    --akzent:  #6ea8fe;
+}
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    background: var(--grund);
+    color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+nav {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    padding: 0 1.5rem;
+    background: var(--flaeche);
+    border-bottom: 1px solid var(--rand);
+}
+nav a {
+    color: var(--leise);
+    text-decoration: none;
+    padding: .9rem 0;
+    border-bottom: 2px solid transparent;
+}
+nav a:hover { color: var(--text); }
+nav a.hier  { color: var(--text); border-bottom-color: var(--akzent); }
+nav .rechts { margin-left: auto; }
+
+main { max-width: 1100px; margin: 0 auto; padding: 1.5rem; }
+main.mitte { max-width: 22rem; margin-top: 15vh; }
+
+h1 { font-size: 1.4rem; margin: 0 0 .3rem; }
+h2 { font-size: 1.05rem; margin: 2rem 0 .3rem; color: var(--leise); font-weight: 600; }
+
+.lage  { color: var(--leise); margin: 0 0 1.2rem; }
+.klein { font-size: .8rem; color: var(--leise); }
+.leer  { color: var(--leise); padding: 2rem 0; }
+
+.gut      { color: var(--gut); }
+.warnung  { color: var(--warnung); }
+.schlecht { color: var(--schlecht); }
+
+.meldung, .fehler {
+    padding: .6rem .9rem;
+    border-radius: 4px;
+    border-left: 3px solid;
+}
+.meldung { background: #1b2a20; border-color: var(--gut); }
+.fehler  { background: #2a1b1b; border-color: var(--schlecht); }
+
+table { width: 100%; border-collapse: collapse; margin: .5rem 0 1rem; }
+th {
+    text-align: left;
+    font-size: .75rem;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--leise);
+    font-weight: 600;
+    padding: .4rem .6rem;
+    border-bottom: 1px solid var(--rand);
+}
+td { padding: .55rem .6rem; border-bottom: 1px solid var(--rand); vertical-align: top; }
+tr.stumm td { opacity: .5; }
+
+form.inline { display: inline; }
+.knoepfe { white-space: nowrap; }
+
+button {
+    font: inherit;
+    font-size: .85rem;
+    padding: .3rem .7rem;
+    border-radius: 4px;
+    border: 1px solid var(--rand);
+    background: var(--flaeche);
+    color: var(--text);
+    cursor: pointer;
+}
+button:hover { border-color: var(--akzent); }
+button.schlicht { border-color: transparent; color: var(--leise); }
+button.schlicht:hover { color: var(--schlecht); }
+button.vorgemerkt { border-color: var(--akzent); color: var(--akzent); }
+
+input {
+    font: inherit;
+    padding: .35rem .5rem;
+    border-radius: 4px;
+    border: 1px solid var(--rand);
+    background: var(--grund);
+    color: var(--text);
+    width: 100%;
+}
+input:focus { outline: none; border-color: var(--akzent); }
+
+form.anlegen {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+    gap: .8rem;
+    align-items: end;
+    padding: 1rem;
+    background: var(--flaeche);
+    border: 1px solid var(--rand);
+    border-radius: 6px;
+    margin-bottom: 1.5rem;
+}
+form.anlegen label { display: block; font-size: .8rem; color: var(--leise); }
+form.anlegen input { margin-top: .25rem; }
+
+form.anmeldung { display: grid; gap: .8rem; }
+form.anmeldung label { font-size: .8rem; color: var(--leise); }
+
+a { color: var(--akzent); }

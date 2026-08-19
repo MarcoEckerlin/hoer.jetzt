@@ -1,0 +1,51 @@
+# hoer.jetzt - Update-Server, Verwaltungsteil.
+
+server:
+  # Der Torwaechter. Wird im Compose-Verbund nicht auf den Host gelegt.
+  port: 8080
+  # Tomcat soll den echten Pfad der urspruenglichen Anfrage nicht selbst
+  # aus den X-Forwarded-Koepfen ableiten - die Auswertung steht im
+  # TorController, und zwar bewusst anders als die Vorgabe (letzter statt
+  # erster Eintrag). Zwei Auswertungen derselben Koepfe waeren eine zu viel.
+  forward-headers-strategy: none
+
+hj:
+  # Die Oberflaeche. Liegt im privaten Netz.
+  pult-port: 8081
+  verwalter:
+    name: ${HJ_VERWALTER_NAME:verwalter}
+    hash: ${HJ_VERWALTER_HASH:?Kein Verwalter-Hash - einrichten.sh laufen lassen}
+  # Wie lange das Zugriffsprotokoll aufbewahrt wird.
+  protokoll-tage: ${HJ_PROTOKOLL_TAGE:21}
+
+spring:
+  application:
+    name: hj-updater
+  datasource:
+    url: jdbc:sqlite:${HJ_DATEN:/daten}/updater.db
+    driver-class-name: org.sqlite.JDBC
+    hikari:
+      # SQLite vertraegt genau einen Schreiber. Ein Pool mit mehreren
+      # Verbindungen brauchte dafuer eine Wiederholung auf SQLITE_BUSY -
+      # bei dieser Last waere das Aufwand fuer nichts: der Torwaechter
+      # beantwortet das meiste aus seinem Zwischenspeicher, und was hier
+      # ankommt, sind einzelne Abfragen.
+      maximum-pool-size: 1
+      # Ohne WAL sperrt ein Schreibvorgang die gesamte Datei, auch fuer
+      # Leser. Mit WAL laufen Lesen und Schreiben nebeneinander.
+      connection-init-sql: PRAGMA journal_mode=WAL
+  sql:
+    init:
+      # schema.sql ist durchgehend "IF NOT EXISTS" - der Lauf bei jedem Start
+      # ist damit folgenlos und spart eine Wanderungsmechanik, die es fuer
+      # drei Tabellen nicht braucht.
+      mode: always
+  thymeleaf:
+    cache: true
+
+logging:
+  level:
+    root: INFO
+    jetzt.hoer.updater: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} %-5level %logger{0} - %msg%n"

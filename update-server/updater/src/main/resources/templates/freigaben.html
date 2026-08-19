@@ -1,0 +1,99 @@
+<!doctype html>
+<html xmlns:th="http://www.thymeleaf.org" lang="de">
+<head th:replace="~{grund :: kopf('Freigaben')}"></head>
+<body>
+<nav th:replace="~{grund :: navigation('freigaben')}"></nav>
+<main>
+    <div th:replace="~{grund :: meldungen}"></div>
+
+    <h1>Freigaben</h1>
+    <p class="lage">
+        Nur diese Adressen kommen an die Abbilder, das Release und den Tresor.
+        Eine Aenderung gilt sofort.
+    </p>
+
+    <form th:action="@{/freigaben}" method="post" class="anlegen">
+        <label>Adresse oder Bereich
+            <input type="text" name="bereich" required placeholder="z.B. 203.0.113.7 oder 10.0.0.0/24">
+        </label>
+        <label>Name
+            <input type="text" name="name" placeholder="z.B. hetzner-audio-2">
+        </label>
+        <label>Laeuft ab <span class="klein">(freilassen = unbefristet)</span>
+            <input type="date" name="laeuftAb">
+        </label>
+        <label>Notiz
+            <input type="text" name="notiz">
+        </label>
+        <button type="submit">Freischalten</button>
+    </form>
+
+    <table th:unless="${#lists.isEmpty(freigaben)}">
+        <thead>
+        <tr>
+            <th>Bereich</th><th>Name</th><th>Notiz</th>
+            <th>Angelegt</th><th>Laeuft ab</th><th>Zustand</th><th></th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="f : ${freigaben}" th:classappend="${!f.gueltig(jetzt)} ? 'stumm'">
+            <td th:text="${f.bereich}"></td>
+            <td th:text="${f.name}"></td>
+            <td class="klein" th:text="${f.notiz}"></td>
+            <td class="klein" th:text="${seit.apply(f.angelegt, jetzt)}"></td>
+            <td class="klein">
+                <span th:if="${f.laeuftAb == null}">&ndash;</span>
+                <span th:if="${f.laeuftAb != null}"
+                      th:text="${#temporals.format(f.laeuftAb, 'yyyy-MM-dd')}"></span>
+            </td>
+            <td>
+                <span th:if="${f.gueltig(jetzt)}" class="gut">gilt</span>
+                <span th:if="${!f.aktiv}" class="schlecht">gesperrt</span>
+                <span th:if="${f.aktiv and !f.gueltig(jetzt)}" class="warnung">abgelaufen</span>
+            </td>
+            <td class="knoepfe">
+                <form th:if="${f.aktiv}" th:action="@{'/freigaben/' + ${f.id} + '/sperren'}" method="post" class="inline">
+                    <button type="submit">sperren</button>
+                </form>
+                <form th:unless="${f.aktiv}" th:action="@{'/freigaben/' + ${f.id} + '/freigeben'}" method="post" class="inline">
+                    <button type="submit">wieder freigeben</button>
+                </form>
+                <form th:action="@{'/freigaben/' + ${f.id} + '/loeschen'}" method="post" class="inline"
+                      onsubmit="return confirm('Endgueltig loeschen? Sperren erhaelt die Spur, loeschen nimmt sie mit.');">
+                    <button type="submit" class="schlicht">loeschen</button>
+                </form>
+            </td>
+        </tr>
+        </tbody>
+    </table>
+
+    <section th:unless="${#lists.isEmpty(abgelehnt)}">
+        <h2>Hat es vergeblich versucht</h2>
+        <p class="klein">Ein Klick uebernimmt die Adresse ins Formular oben &ndash;
+            abtippen ist die Stelle, an der man sich vertut.</p>
+        <table>
+            <tr th:each="z : ${abgelehnt}">
+                <td><button type="button" class="schlicht uebernehmen"
+                            th:attr="data-ip=${z.ip}" th:text="${z.ip}"></button></td>
+                <td class="klein" th:text="${z.pfad}"></td>
+                <td class="klein" th:text="${seit.apply(z.zeit, jetzt)}"></td>
+            </tr>
+        </table>
+    </section>
+
+    <p class="klein">Gemerkte Entscheidungen im Torwaechter: <span th:text="${gemerkt}"></span></p>
+
+    <script>
+        // Einzige Zeile Javascript auf dieser Seite. Ohne sie funktioniert
+        // alles weiter, nur muss man die Adresse abtippen.
+        document.querySelectorAll('.uebernehmen').forEach(function (b) {
+            b.addEventListener('click', function () {
+                var feld = document.querySelector('input[name=bereich]');
+                feld.value = b.dataset.ip;
+                feld.focus();
+            });
+        });
+    </script>
+</main>
+</body>
+</html>

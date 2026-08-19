@@ -1,0 +1,32 @@
+<!doctype html>
+<html xmlns:th="http://www.thymeleaf.org" lang="de">
+<head th:replace="~{grund :: kopf('Protokoll')}"></head>
+<body>
+<nav th:replace="~{grund :: navigation('protokoll')}"></nav>
+<main>
+    <h1>Zugriffsprotokoll</h1>
+    <p class="lage">
+        Gleiche Adresse mit gleichem Ergebnis wird hoechstens einmal pro Minute
+        vermerkt &ndash; ein Docker-Pull fragt je Abbildschicht einmal nach und
+        wuerde die Liste sonst zuschuetten.
+    </p>
+    <table>
+        <thead>
+        <tr><th>Wann</th><th>Adresse</th><th>Bereich</th><th>Ergebnis</th></tr>
+        </thead>
+        <tbody>
+        <tr th:each="z : ${zugriffe}">
+            <td class="klein" th:text="${seit.apply(z.zeit, jetzt)}"></td>
+            <td th:text="${z.ip}"></td>
+            <td class="klein" th:text="${z.pfad}"></td>
+            <td>
+                <span th:if="${z.erlaubt}" class="gut" th:text="${z.grund}"></span>
+                <span th:unless="${z.erlaubt}" class="schlecht" th:text="${z.grund}"></span>
+            </td>
+        </tr>
+        </tbody>
+    </table>
+    <p th:if="${#lists.isEmpty(zugriffe)}" class="leer">Noch nichts protokolliert.</p>
+</main>
+</body>
+</html>

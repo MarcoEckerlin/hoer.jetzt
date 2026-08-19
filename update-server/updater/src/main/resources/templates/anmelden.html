@@ -1,0 +1,16 @@
+<!doctype html>
+<html xmlns:th="http://www.thymeleaf.org" lang="de">
+<head th:replace="~{grund :: kopf('Anmelden')}"></head>
+<body>
+<main class="mitte">
+    <h1>hoer.jetzt Updater</h1>
+    <form th:action="@{/anmelden}" method="post" class="anmeldung">
+        <p class="fehler" th:if="${param.error}">Name oder Passwort stimmt nicht.</p>
+        <p class="meldung" th:if="${param.ab}">Abgemeldet.</p>
+        <label>Name <input type="text" name="username" autofocus required></label>
+        <label>Passwort <input type="password" name="password" required></label>
+        <button type="submit">Anmelden</button>
+    </form>
+</main>
+</body>
+</html>

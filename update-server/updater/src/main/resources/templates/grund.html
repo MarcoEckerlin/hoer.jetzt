@@ -1,0 +1,28 @@
+<!doctype html>
+<!--
+  Gemeinsamer Rahmen. Kein Layout-Dialekt als Fremdabhaengigkeit - fuer drei
+  Seiten reichen die Bordmittel von Thymeleaf.
+-->
+<html xmlns:th="http://www.thymeleaf.org" lang="de">
+<head th:fragment="kopf(titel)">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title th:text="'hoer.jetzt Updater - ' + ${titel}">hoer.jetzt Updater</title>
+    <link rel="stylesheet" th:href="@{/stil.css}">
+</head>
+<body>
+<nav th:fragment="navigation(hier)">
+    <a th:href="@{/}" th:classappend="${hier == 'uebersicht'} ? 'hier'">Knoten</a>
+    <a th:href="@{/freigaben}" th:classappend="${hier == 'freigaben'} ? 'hier'">Freigaben</a>
+    <a th:href="@{/protokoll}" th:classappend="${hier == 'protokoll'} ? 'hier'">Protokoll</a>
+    <form th:action="@{/abmelden}" method="post" class="rechts">
+        <button type="submit" class="schlicht">Abmelden</button>
+    </form>
+</nav>
+
+<div th:fragment="meldungen">
+    <p class="meldung" th:if="${meldung}" th:text="${meldung}"></p>
+    <p class="fehler" th:if="${fehler}" th:text="${fehler}"></p>
+</div>
+</body>
+</html>

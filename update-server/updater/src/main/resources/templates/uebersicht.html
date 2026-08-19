@@ -1,0 +1,104 @@
+<!doctype html>
+<html xmlns:th="http://www.thymeleaf.org" lang="de">
+<head th:replace="~{grund :: kopf('Knoten')}"></head>
+<body>
+<nav th:replace="~{grund :: navigation('uebersicht')}"></nav>
+<main>
+    <div th:replace="~{grund :: meldungen}"></div>
+
+    <h1>Knoten</h1>
+
+    <!--
+      Die Kopfzeile beantwortet die Frage, mit der man diese Seite aufruft:
+      laeuft ueberall dasselbe, und meldet sich noch jeder.
+    -->
+    <p class="lage">
+        <span th:text="${#lists.size(knoten)} + ' Knoten'">0 Knoten</span>
+        <span th:if="${#lists.size(versionen) == 1}" class="gut">
+            &middot; alle auf <span th:text="${versionen[0]}"></span>
+        </span>
+        <span th:if="${#lists.size(versionen) > 1}" class="warnung">
+            &middot; <span th:text="${#lists.size(versionen)}"></span> verschiedene Staende:
+            <span th:text="${#strings.listJoin(versionen, ', ')}"></span>
+        </span>
+        <span th:if="${stumme > 0}" class="schlecht">
+            &middot; <span th:text="${stumme}"></span> seit ueber einem Tag stumm
+        </span>
+    </p>
+
+    <p th:if="${#lists.isEmpty(knoten)}" class="leer">
+        Noch kein Knoten hat sich gemeldet. Ein Knoten taucht hier auf, sobald
+        er das erste Mal ein Update gefahren hat &ndash; nicht schon beim
+        Aufsetzen.
+    </p>
+
+    <table th:unless="${#lists.isEmpty(knoten)}">
+        <thead>
+        <tr>
+            <th>Name</th>
+            <th>Profil</th>
+            <th>Version</th>
+            <th>Zustand</th>
+            <th>Gesehen</th>
+            <th>Adresse</th>
+            <th></th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="k : ${knoten}" th:classappend="${k.stumm(jetzt)} ? 'stumm'">
+            <td>
+                <form th:action="@{'/knoten/' + ${k.kennung} + '/name'}" method="post" class="inline">
+                    <input type="text" name="name" th:value="${k.name}"
+                           th:placeholder="${k.kennung}" size="16">
+                </form>
+                <div class="klein" th:text="${k.kennung}"></div>
+            </td>
+            <td th:text="${k.profil}"></td>
+            <td>
+                <span th:text="${k.version} ?: '?'"></span>
+                <div class="klein" th:if="${k.vorher}">
+                    zurueck: <span th:text="${k.vorher}"></span>
+                </div>
+            </td>
+            <td>
+                <span th:text="${k.zustand} ?: '?'"
+                      th:classappend="${k.zustand == 'running'} ? 'gut' : 'warnung'"></span>
+                <div class="klein" th:if="${k.ergebnis}" th:text="${k.ergebnis}"></div>
+            </td>
+            <td th:text="${seit.apply(k.zuletztGesehen, jetzt)}"></td>
+            <td class="klein" th:text="${k.letzteIp}"></td>
+            <td class="knoepfe">
+                <form th:if="${!k.updateAngefordert}"
+                      th:action="@{'/knoten/' + ${k.kennung} + '/update'}" method="post" class="inline">
+                    <input type="hidden" name="an" value="true">
+                    <button type="submit">Update vormerken</button>
+                </form>
+                <form th:if="${k.updateAngefordert}"
+                      th:action="@{'/knoten/' + ${k.kennung} + '/update'}" method="post" class="inline">
+                    <input type="hidden" name="an" value="false">
+                    <button type="submit" class="vorgemerkt">vorgemerkt &times;</button>
+                </form>
+                <form th:action="@{'/knoten/' + ${k.kennung} + '/loeschen'}" method="post" class="inline"
+                      onsubmit="return confirm('Diesen Knoten aus der Uebersicht entfernen? Er taucht beim naechsten Herzschlag wieder auf.');">
+                    <button type="submit" class="schlicht">entfernen</button>
+                </form>
+            </td>
+        </tr>
+        </tbody>
+    </table>
+
+    <section th:unless="${#lists.isEmpty(abgelehnt)}">
+        <h2>Zuletzt abgewiesen</h2>
+        <p class="klein">Adressen, die es versucht haben und nicht freigeschaltet sind.</p>
+        <table>
+            <tr th:each="z : ${abgelehnt}">
+                <td th:text="${z.ip}"></td>
+                <td th:text="${z.pfad}"></td>
+                <td th:text="${seit.apply(z.zeit, jetzt)}"></td>
+            </tr>
+        </table>
+        <p><a th:href="@{/freigaben}">Freischalten &rarr;</a></p>
+    </section>
+</main>
+</body>
+</html>
