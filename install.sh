@@ -31,9 +31,26 @@ docker_pruefen() {
     info "Docker: $(docker --version)"
 }
 
+# ---------------------------------------------------------------------------
+# Fragen, die man auch vorher beantworten kann
+#
+# Ist die Variable beim Aufruf schon gesetzt, wird nicht gefragt. Damit laesst
+# sich dieselbe Installation von Hand durchklicken *und* aus einem fertigen
+# Befehl heraus fahren - ohne zweiten Weg, der irgendwann auseinanderlaeuft.
+#
+# Vorher las jede Frage stur von der Tastatur. Wer HJ_LAVALINK_PASSWORD und
+# HJ_NODE_TIER exportierte, bekam trotzdem jede Frage gestellt und am Ende ein
+# selbst erzeugtes Passwort: die Exporte waren wirkungslos, und der Knoten trug
+# andere Werte, als der Bot erwartete.
+# ---------------------------------------------------------------------------
+
 # frage VARIABLE "Text" "Vorgabe"
 frage() {
     local __v="$1" __t="$2" __d="${3:-}" __e=""
+    if [[ -n "${!__v:-}" ]]; then
+        info "${__t}: ${!__v}  (vorgegeben)"
+        return 0
+    fi
     if [[ -n "$__d" ]]; then
         read -r -p "    ${__t} [${__d}]: " __e || true
         __e="${__e:-$__d}"
@@ -45,6 +62,10 @@ frage() {
 
 geheim() {
     local __v="$1" __t="$2" __e=""
+    if [[ -n "${!__v:-}" ]]; then
+        info "${__t}: uebernommen  (vorgegeben)"
+        return 0
+    fi
     while [[ -z "$__e" ]]; do read -r -s -p "    ${__t}: " __e || true; echo; done
     printf -v "$__v" '%s' "$__e"
 }
@@ -122,17 +143,18 @@ esac
 # Anmeldung und ohne Cipher-Dienst - und damit mit genau den Luecken, die im
 # Hauptstack laengst geschlossen sind.
 
-YOUTUBE_OAUTH=false
-YOUTUBE_REFRESH_TOKEN=""
-YT_CIPHER_URL=""
-YT_CIPHER_PASSWORD=""
+# Mitgegebene Werte ueberleben - nur was fehlt, wird auf die Vorgabe gesetzt.
+YOUTUBE_OAUTH="${YOUTUBE_OAUTH:-false}"
+YOUTUBE_REFRESH_TOKEN="${YOUTUBE_REFRESH_TOKEN:-}"
+YT_CIPHER_URL="${YT_CIPHER_URL:-}"
+YT_CIPHER_PASSWORD="${YT_CIPHER_PASSWORD:-}"
 CIPHER_EIGEN=0
 
 step "YouTube"
 info "Ohne Anmeldung liefert YouTube altersbeschraenkte Titel nicht aus"
 info "(Rammstein und aehnliche Kataloge). Mit Anmeldung schon."
 info "Dafuer ein Wegwerf-Konto nehmen - nicht das eigene."
-if ja "Bei YouTube anmelden?" n; then
+if [[ "$YOUTUBE_OAUTH" == "true" ]] || ja "Bei YouTube anmelden?" n; then
     YOUTUBE_OAUTH=true
     echo
     info "Laeuft anderswo schon ein angemeldeter Knoten, kann dessen"
@@ -208,17 +230,28 @@ step "Anbindung an den Bot"
 info "Traegt sich der Knoten selbst ein, entfaellt der Eintrag im Adminbereich."
 info "Dafuer braucht es die Adresse des Bots und das gemeinsame Geheimnis"
 info "HJ_NODE_TOKEN aus dessen .env."
-HJ_CORE_URL=""
-HJ_NODE_TOKEN=""
-if ja "Selbst beim Bot anmelden?"; then
+# Beides schon mitgegeben? Dann ist die Frage beantwortet.
+#
+# Hier stand vorher ein hartes Zuruecksetzen auf "" - damit waren mitgegebene
+# Werte weg, noch bevor die erste Frage kam, und die Installation endete mit
+# dem Zettel zum Abtippen statt mit einem angemeldeten Knoten.
+if [[ -n "${HJ_CORE_URL:-}" && -n "${HJ_NODE_TOKEN:-}" ]]; then
+    HJ_CORE_URL="${HJ_CORE_URL%/}"
+    info "Meldet sich selbst bei ${HJ_CORE_URL} an."
+elif ja "Selbst beim Bot anmelden?"; then
     frage HJ_CORE_URL "Adresse des Bots (z.B. https://hoer.jetzt)"
     geheim HJ_NODE_TOKEN "HJ_NODE_TOKEN"
     HJ_CORE_URL="${HJ_CORE_URL%/}"
 else
+    HJ_CORE_URL=""
+    HJ_NODE_TOKEN=""
     warn "Dann bleibt der Eintrag im Adminbereich von Hand noetig."
 fi
 
-HJ_AGENT_TOKEN="$(zufall)"
+# Muss auf beiden Seiten gleich sein - sonst erreicht der Bot den Agenten
+# nicht ("HJ_AGENT_TOKEN muss auf beiden Seiten gleich sein"). Nur erzeugen,
+# wenn keiner mitgegeben wurde.
+HJ_AGENT_TOKEN="${HJ_AGENT_TOKEN:-$(zufall)}"
 frage HJ_AGENT_PORT "Port des Knoten-Agenten" "$((8098 + INSTANZ))"
 
 step "Abbild bauen"

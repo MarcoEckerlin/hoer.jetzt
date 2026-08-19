@@ -229,6 +229,13 @@ def beim_bot_melden(pfad, nutzlast):
         headers={
             "Content-Type": "application/json",
             "Authorization": "Bearer %s" % NODE_TOKEN,
+            # Ohne eigene Kennung schickt urllib "Python-urllib/3.x". Steht die
+            # Bot-Adresse hinter Cloudflare, wird die Anfrage allein deswegen
+            # verworfen - "HTTP 403: error code: 1010". Der Bot sieht sie nie;
+            # im Log steht nur eine Anmeldung, die scheitert, ohne dass an
+            # Token oder Adresse etwas falsch waere.
+            "User-Agent": "hoerjetzt-knoten-agent/%s" % VERSION,
+            "Accept": "application/json",
         },
         method="POST",
     )

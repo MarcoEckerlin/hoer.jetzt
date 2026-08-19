@@ -28,7 +28,25 @@ set -euo pipefail
 
 HIER="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 KNOTEN_DIR="$(cd "${HIER}/.." && pwd)"
-UMGEBUNG="/etc/hoerjetzt-knoten-agent.env"
+# Instanz, Dienstname, Konfigdatei und Port haengen zusammen.
+#
+# Zwei Lavalink-Container auf einem Host brauchen zwei Agenten - ein Agent
+# verwaltet genau einen Container. Bisher schrieben beide Installationen in
+# dieselbe Datei und dieselbe Unit: die zweite ueberschrieb die erste. Es lief
+# genau ein Agent, und der zweite Knoten zeigte auf einen Port, an dem niemand
+# fuer ihn zustaendig war.
+#
+# Instanz 1 behaelt die bisherigen Namen. Sonst muesste jede bestehende
+# Installation angefasst werden, ohne dass sich fuer sie etwas aendert.
+INSTANZ="${HJ_NODE_CONTAINER##*-}"
+[[ "$INSTANZ" =~ ^[0-9]+$ ]] || INSTANZ=1
+
+if [[ "$INSTANZ" == "1" ]]; then
+    DIENST="hoerjetzt-knoten-agent"
+else
+    DIENST="hoerjetzt-knoten-agent-${INSTANZ}"
+fi
+UMGEBUNG="/etc/${DIENST}.env"
 
 info() { printf '    %s\n' "$*"; }
 warn() { printf '    \033[1;33m%s\033[0m\n' "$*"; }
@@ -66,17 +84,38 @@ if [[ -z "${HJ_NODE_NAME:-}" ]]; then
     INSTANZ_NR="${HJ_NODE_CONTAINER##*-}"
     [[ "$INSTANZ_NR" =~ ^[0-9]+$ && "$INSTANZ_NR" != "1" ]] && HJ_NODE_NAME="${HJ_NODE_NAME}-${INSTANZ_NR}"
 fi
-HJ_AGENT_PORT="${HJ_AGENT_PORT:-8099}"
+# Je Instanz ein eigener Port: 8099, 8100, 8101 ... Zwei Prozesse koennen
+# denselben Port nicht binden - der zweite Agent kam bisher gar nicht hoch.
+HJ_AGENT_PORT="${HJ_AGENT_PORT:-$(( 8098 + INSTANZ ))}"
 
 # Ohne Angabe an die private Adresse binden, wenn es eine gibt. Ein Agent, der
 # neu starten und aktualisieren kann, hat im offenen Netz nichts verloren -
 # das Token ist dort die einzige Huerde.
 if [[ -z "${HJ_AGENT_BIND:-}" ]]; then
-    HJ_AGENT_BIND="$(ip -4 -o addr show 2>/dev/null | awk '{print $4}' | cut -d/ -f1 \
-        | grep -E '^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.)' | head -n1 || true)"
-    if [[ -z "$HJ_AGENT_BIND" ]]; then
-        HJ_AGENT_BIND="0.0.0.0"
-        warn "Keine private Adresse - der Agent lauscht auf allen. Per Firewall auf den Bot begrenzen."
+    # Docker-Bruecken ausdruecklich ueberspringen.
+    #
+    # Sie liegen im selben privaten Bereich (172.16/12) und stehen bei
+    # "ip addr" oft vor der echten Adresse. Der Agent band dann an 172.18.0.1,
+    # meldete brav "lauscht auf 172.18.0.1:8099" - und der Bot kam nie an ihn
+    # heran. Diese Bruecken gehoeren dem Host allein; von aussen ist dort
+    # nichts erreichbar.
+    adressen() {
+        ip -4 -o addr show scope global 2>/dev/null \
+            | grep -vE ' (docker[0-9]*|br-[0-9a-f]+|veth[0-9a-f]+|virbr[0-9]*) ' \
+            | awk '{print $4}' | cut -d/ -f1
+    }
+
+    HJ_AGENT_BIND="$(adressen | grep -E '^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.)' | head -n1 || true)"
+
+    # Keine private Adresse? Dann ist der Knoten ohnehin nur oeffentlich
+    # erreichbar - dort gezielt binden statt auf allen Adressen.
+    [[ -n "$HJ_AGENT_BIND" ]] || HJ_AGENT_BIND="$(adressen | head -n1 || true)"
+    [[ -n "$HJ_AGENT_BIND" ]] || HJ_AGENT_BIND="0.0.0.0"
+
+    if [[ ! "$HJ_AGENT_BIND" =~ ^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.) ]]; then
+        warn "Der Agent lauscht auf ${HJ_AGENT_BIND} - das ist keine private Adresse."
+        warn "    Unbedingt per Firewall auf die Adresse des Bots begrenzen;"
+        warn "    das Token ist dort die einzige Huerde."
     fi
 fi
 
@@ -113,18 +152,20 @@ chmod 600 "$UMGEBUNG"
 
 # Die Unit zeigt fest auf /opt/hoerjetzt-node. Liegt der Zweig woanders, muss
 # der Pfad mit - sonst startet der Dienst ins Leere.
-sed "s#/opt/hoerjetzt-node#${KNOTEN_DIR}#g" "${HIER}/hoerjetzt-knoten-agent.service" \
-    > /etc/systemd/system/hoerjetzt-knoten-agent.service
+sed -e "s#/opt/hoerjetzt-node#${KNOTEN_DIR}#g" \
+    -e "s#/etc/hoerjetzt-knoten-agent.env#${UMGEBUNG}#g" \
+    "${HIER}/hoerjetzt-knoten-agent.service" \
+    > "/etc/systemd/system/${DIENST}.service"
 
 systemctl daemon-reload
-systemctl enable --now hoerjetzt-knoten-agent >/dev/null 2>&1 || fail "Agent laesst sich nicht starten."
-systemctl restart hoerjetzt-knoten-agent
+systemctl enable --now "$DIENST" >/dev/null 2>&1 || fail "Agent laesst sich nicht starten."
+systemctl restart "$DIENST"
 
 sleep 2
 if curl -fsS -m 5 "http://127.0.0.1:${HJ_AGENT_PORT}/gesund" >/dev/null 2>&1; then
     info "Agent laeuft auf ${HJ_AGENT_URL}"
 else
-    warn "Agent antwortet noch nicht: journalctl -u hoerjetzt-knoten-agent -n 30"
+    warn "Agent antwortet noch nicht: journalctl -u ${DIENST} -n 30"
 fi
 
 if [[ -n "${HJ_CORE_URL:-}" && -n "${HJ_NODE_TOKEN:-}" ]]; then
