@@ -154,9 +154,39 @@ chmod 600 "$TRESORKEY"
 # ------------------------------------------------------------------ 4  Probe
 
 step "Zugang pruefen"
+# Holt etwas mit dem Ausweis - und unterscheidet dabei die beiden Gruende,
+# aus denen es scheitern kann. Vorher lautete die Meldung in beiden Faellen
+# "kein Tresor bereit", und das schickt einen an die falsche Stelle: der
+# Ausweis ist in Ordnung, es fehlt die Freischaltung dieser Adresse.
 mit_ausweis() {
-    curl -fsS -m 30 --cert "${AUSWEIS}/update.crt" --key "${AUSWEIS}/update.key" \
-        "https://${HJ_UPDATE_HOST}$1"
+    local ziel="$1" code
+    code="$(curl -sS -m 30 -o /tmp/hj-antwort.$$ -w '%{http_code}' \
+        --cert "${AUSWEIS}/update.crt" --key "${AUSWEIS}/update.key" \
+        "https://${HJ_UPDATE_HOST}${ziel}" 2>/dev/null || echo 000)"
+
+    if [[ "$code" == "403" ]]; then
+        rm -f "/tmp/hj-antwort.$$"
+        EIGENE_IP="$(curl -fsS -m 10 https://api.ipify.org 2>/dev/null || echo '')"
+        fail "Diese Maschine ist auf dem Update-Server nicht freigeschaltet.
+
+       Der Ausweis stimmt - die Adresse fehlt in der Freigabeliste.
+       Im Updater unter Freigaben eintragen:
+
+           ${EIGENE_IP:-<die oeffentliche Adresse dieser Maschine>}
+
+       Die Oberflaeche liegt im privaten Netz, Vorgabe:
+           http://<update-server>:8090/freigaben
+
+       Danach dieses Skript erneut starten - es gilt sofort."
+    fi
+
+    if [[ "$code" != "200" ]]; then
+        rm -f "/tmp/hj-antwort.$$"
+        return 1
+    fi
+
+    cat "/tmp/hj-antwort.$$"
+    rm -f "/tmp/hj-antwort.$$"
 }
 MANIFEST="$(mit_ausweis /release/aktuell || true)"
 [[ -n "$MANIFEST" ]] || fail "Kein Zugang mit diesem Ausweis - stimmt der Update-Server?"
@@ -206,6 +236,19 @@ else
     mv "${UMGEBUNG}.neu" "$UMGEBUNG"
 fi
 chmod 600 "$UMGEBUNG"
+
+# Kennung und Profil festhalten. Der Herzschlag in auto-update.sh meldet
+# beides an den Update-Server; die Kennung ist dieselbe, die der Agent
+# benutzt, damit nicht zwei Listen entstehen, die dasselbe meinen.
+setze_wert() {
+    if grep -q "^$1=" "$UMGEBUNG"; then
+        sed -i "s|^$1=.*|$1=$2|" "$UMGEBUNG"
+    else
+        printf '%s=%s\n' "$1" "$2" >> "$UMGEBUNG"
+    fi
+}
+setze_wert HJ_PROFIL "$PROFIL"
+grep -q '^HJ_NODE_NAME=' "$UMGEBUNG" || setze_wert HJ_NODE_NAME "$(hostname -s 2>/dev/null || echo knoten)"
 info "$(printf '%s (%s Werte)' "$UMGEBUNG" "$(grep -c '^[A-Z_]*=' "$UMGEBUNG")")"
 
 # ------------------------------------------------------------------ 6  Paket

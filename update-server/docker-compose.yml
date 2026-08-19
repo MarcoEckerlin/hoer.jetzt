@@ -47,6 +47,7 @@ services:
       - caddy-konfig:/config
     depends_on:
       - forgejo
+      - updater
     networks: [hj-update]
 
   # ------------------------------------------------------------------ Forgejo
@@ -113,6 +114,39 @@ services:
     command: ["forgejo-runner", "daemon", "--config", "/data/config.yml"]
     networks: [hj-update]
 
+
+  # ------------------------------------------------------------------ Updater
+  #
+  # Torwaechter und Verwaltung. Zwei Anschluesse, und der Unterschied zwischen
+  # ihnen steht genau hier - nicht in der Anwendung:
+  #
+  #   8080  Torwaechter. Taucht unten bei "ports" NICHT auf. Damit ist er
+  #         ausschliesslich ueber das interne Docker-Netz erreichbar, also
+  #         durch Caddy. Kein Login davor, weil die Grenze das Netz ist.
+  #
+  #   8081  Oberflaeche. Wird auf HJ_PULT_BIND gelegt - Vorgabe 127.0.0.1,
+  #         fuer den Zugriff von unterwegs die Tailscale-Adresse dieses Hosts.
+  #
+  # Waere 8080 hier mit aufgefuehrt, haenge die Zugangskontrolle des gesamten
+  # Servers offen im Netz. Das ist der Grund, warum die Trennung an dieser
+  # Stelle steht und nicht nur in einer Pfadregel: eine fehlende Zeile faellt
+  # beim Lesen auf, eine falsche Pfadregel nicht.
+
+  updater:
+    build: ./updater
+    restart: unless-stopped
+    environment:
+      HJ_VERWALTER_NAME: ${HJ_VERWALTER_NAME:-verwalter}
+      HJ_VERWALTER_HASH: ${HJ_VERWALTER_HASH:?Kein Verwalter-Hash - einrichten.sh laufen lassen}
+      HJ_PROTOKOLL_TAGE: ${HJ_PROTOKOLL_TAGE:-21}
+      HJ_DATEN: /daten
+      TZ: ${TZ:-Europe/Berlin}
+    volumes:
+      - updater-daten:/daten
+    ports:
+      - "${HJ_PULT_BIND:-127.0.0.1}:${HJ_PULT_PORT:-8090}:8081"
+    networks: [hj-update]
+
 volumes:
   # Alles, was ausgeliefert wird: Release-Manifest, Knotenpakete, Tresor.
   # Geschrieben von veroeffentlichen.sh und tresor.sh, gelesen von Caddy.
@@ -121,6 +155,9 @@ volumes:
   caddy-konfig:
   forgejo-daten:
   runner-daten:
+  # Freigaben, Knotenmeldungen und Zugriffsprotokoll. Klein, aber der
+  # Verlust hiesse: alle Knoten ausgesperrt, bis von Hand neu freigeschaltet.
+  updater-daten:
 
 networks:
   hj-update:

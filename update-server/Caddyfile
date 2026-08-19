@@ -18,10 +18,24 @@
 #               hat, bekommt hier nur einen CMS-Umschlag, den er nicht
 #               aufbekommt.
 #
+#   /melden     Client-Zertifikat. Der Herzschlag der Knoten nach einem
+#               Update-Lauf. Geht an den Updater.
+#
 # Warum "verify_if_given" und nicht "require_and_verify": /knoten/ muss ohne
 # Ausweis erreichbar sein - ein frischer Knoten hat ja noch keinen. Der Zwang
-# steht deshalb nicht am Anschluss, sondern an den drei Pfaden, die ihn
-# brauchen. Stuende er am Anschluss, waere die Erstinstallation unmoeglich.
+# steht deshalb nicht am Anschluss, sondern an den Pfaden, die ihn brauchen.
+# Stuende er am Anschluss, waere die Erstinstallation unmoeglich.
+#
+# ---------------------------------------------------------------------------
+# Zweite Stufe: die Adresse.
+#
+# Ein gueltiger Ausweis reicht seit dem Updater nicht mehr. Vor jedem Zugriff
+# auf die vier geschuetzten Pfade fragt Caddy beim Updater nach, ob diese
+# Adresse freigeschaltet ist. Warum dort und nicht hier mit "remote_ip":
+# Caddys eigener Adressvergleich will die Liste in dieser Datei stehen haben.
+# Jede Freischaltung waere eine Dateiaenderung plus ein Neuladen des
+# Webservers - moeglicherweise waehrend gerade ein Knoten zieht. Im Updater
+# ist es eine Zeile in der Datenbank und gilt sofort.
 
 {
 	email {$HJ_ACME_MAIL}
@@ -55,6 +69,22 @@
 	# hier steht also nur noch die Frage, ob ueberhaupt einer kam.
 	@ohne_ausweis expression `{http.request.tls.client.subject} == ""`
 
+	# Die Adresspruefung als wiederverwendbarer Baustein.
+	#
+	# X-Echte-Ip wird hier gesetzt und ueberschreibt dabei, was der Aufrufer
+	# geschickt hat - die Angabe ist damit nicht faelschbar. Der Updater
+	# nimmt sie und nicht X-Forwarded-For, dessen ersten Eintrag sich jeder
+	# Aufrufer selbst aussuchen kann.
+	#
+	# {http.request.remote.host} ist die Gegenstelle dieser Verbindung. Caddy
+	# steht direkt am Netz, das ist also der tatsaechliche Aufrufer.
+	(adresse_pruefen) {
+		forward_auth updater:8080 {
+			uri /intern/pruefen
+			header_up X-Echte-Ip {http.request.remote.host}
+		}
+	}
+
 	# ------------------------------------------------------------- Registry
 	#
 	# Nur dieser Pfad geht zu Forgejo. Die Weboberflaeche und das Git bleiben
@@ -62,10 +92,12 @@
 	#
 	# "route" statt einfach untereinander: Caddy sortiert Direktiven sonst
 	# nach einer festen Rangfolge, und dabei kaeme der reverse_proxy vor das
-	# respond - die Sperre liefe ins Leere.
+	# respond - die Sperre liefe ins Leere. Aus demselben Grund steht die
+	# Adresspruefung ausdruecklich zwischen Ausweispruefung und Weiterleitung.
 	handle /v2/* {
 		route {
 			respond @ohne_ausweis "Client-Zertifikat noetig." 403
+			import adresse_pruefen
 			reverse_proxy forgejo:3000 {
 				# Abbild-Schichten sind gross. Die Vorgabe von 30s wuerde den
 				# Upload beim Veroeffentlichen mittendrin abschneiden.
@@ -81,6 +113,7 @@
 	handle /release/* {
 		route {
 			respond @ohne_ausweis "Client-Zertifikat noetig." 403
+			import adresse_pruefen
 			root * /srv/ausliefern
 			file_server
 		}
@@ -90,15 +123,33 @@
 	handle /tresor/* {
 		route {
 			respond @ohne_ausweis "Client-Zertifikat noetig." 403
+			import adresse_pruefen
 			root * /srv/ausliefern
 			file_server
+		}
+	}
+
+	# ------------------------------------------------------------- Melden
+	#
+	# Der Herzschlag. Nach aussen ein kurzer Pfad, innen die
+	# Maschinen-Schnittstelle des Updaters unter /intern/.
+	handle /melden {
+		route {
+			respond @ohne_ausweis "Client-Zertifikat noetig." 403
+			import adresse_pruefen
+			rewrite * /intern/melden
+			reverse_proxy updater:8080 {
+				header_up X-Echte-Ip {http.request.remote.host}
+			}
 		}
 	}
 
 	# ------------------------------------------------------------- Knoten
 	#
 	# Der einzige Bereich mit Passwort - und der einzige, den ein Rechner
-	# ohne Ausweis erreicht.
+	# ohne Ausweis erreicht. Bewusst ohne Adresspruefung: ein frisch
+	# aufgesetzter Rechner ist noch nicht freigeschaltet, und genau das
+	# Skript, das er hier holt, sagt ihm, dass er es werden muss.
 	handle /knoten/* {
 		basic_auth {
 			knoten {$HJ_HASH_KNOTEN}

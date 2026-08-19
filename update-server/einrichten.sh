@@ -89,6 +89,13 @@ info "    ssh -L 3000:127.0.0.1:3000 root@$(hostname -s 2>/dev/null || echo dies
 frage HJ_GIT_BIND "Auf welcher Adresse lauschen" "127.0.0.1"
 frage HJ_ADMIN    "Benutzername fuer die Verwaltung" "marco"
 
+info "Die Oberflaeche des Updaters - Freigaben, Knoten, Protokoll -"
+info "liegt auf einem eigenen Port und gehoert ins private Netz."
+info "127.0.0.1 heisst: nur per SSH-Tunnel. Fuer Zugriff von unterwegs"
+info "hier die Tailscale-Adresse dieses Hosts eintragen."
+frage HJ_PULT_BIND "Auf welcher Adresse soll die Oberflaeche lauschen" "127.0.0.1"
+frage HJ_PULT_PORT "Auf welchem Port" "8090"
+
 # ------------------------------------------------------------------ 2  Schluessel
 
 step "Schluessel erzeugen"
@@ -104,12 +111,21 @@ step "Knoten-Passwort"
 gruppe() { head -c 32 /dev/urandom | tr -dc 'ABCDEFGHJKMNPQRSTUVWXYZ23456789' | cut -c1-4; }
 PW_KNOTEN="hj-$(gruppe)-$(gruppe)-$(gruppe)-$(gruppe)"
 PW_ADMIN="$(zufall)"
+# Fuer die Updater-Oberflaeche. Kein tippbares Kurzpasswort wie beim
+# Knoten-Zugang: dieses hier wird in einen Browser eingefuegt, nicht in
+# eine Befehlszeile abgetippt - also darf es lang sein.
+PW_PULT="$(zufall)"
 info "${#PW_KNOTEN} Zeichen, tippbar."
 
 step "Hash bilden"
 docker pull -q caddy:2-alpine >/dev/null 2>&1 || fail "caddy:2-alpine nicht ladbar."
 HJ_HASH_KNOTEN="$(docker run --rm caddy:2-alpine caddy hash-password --plaintext "$PW_KNOTEN")"
 [[ -n "$HJ_HASH_KNOTEN" ]] || fail "Hashen fehlgeschlagen."
+# Caddys hash-password liefert bcrypt im Format $2a$ - genau das, was
+# Springs BCryptPasswordEncoder im Updater liest. Ein zweites Werkzeug
+# nur zum Hashen waere hier ueberfluessig.
+HJ_VERWALTER_HASH="$(docker run --rm caddy:2-alpine caddy hash-password --plaintext "$PW_PULT")"
+[[ -n "$HJ_VERWALTER_HASH" ]] || fail "Hashen des Verwalter-Passworts fehlgeschlagen."
 info "bcrypt."
 
 step "Umgebungsdatei"
@@ -122,6 +138,10 @@ HJ_UPDATE_HOST=${HJ_UPDATE_HOST}
 HJ_ACME_MAIL=${HJ_ACME_MAIL}
 HJ_GIT_BIND=${HJ_GIT_BIND}
 HJ_HASH_KNOTEN=${HJ_HASH_KNOTEN}
+HJ_VERWALTER_NAME=${HJ_ADMIN}
+HJ_VERWALTER_HASH=${HJ_VERWALTER_HASH}
+HJ_PULT_BIND=${HJ_PULT_BIND}
+HJ_PULT_PORT=${HJ_PULT_PORT}
 ENV
 chmod 600 "$UMGEBUNG"
 info "${UMGEBUNG} (0600)"
@@ -254,6 +274,38 @@ probe "Ausweis oeffnet /knoten/ NICHT" \
     test 401 = "$(curl -s -o /dev/null -w '%{http_code}' -m 15 "${AUSWEIS[@]}" \
                   "https://${HJ_UPDATE_HOST}/knoten/" || echo 0)"
 
+
+# --------------------------------------------------------------- Torwaechter
+#
+# Die Adresspruefung ist die zweite Stufe und die neue Fehlerquelle: laesst
+# sie zu viel durch, faellt es nie auf. Deshalb beide Richtungen pruefen.
+#
+# Die Rueckschleife kommt durch, weil der Updater beim ersten Start
+# Grundfreigaben anlegt (siehe Erstbelegung.java). Genau darauf beruht auch
+# die Registry-Probe weiter unten - sie geht ueber /etc/hosts nach 127.0.0.1.
+probe "Updater antwortet am Tor" \
+    docker compose exec -T updater curl -fsS -m 10 -o /dev/null \
+        -w '%{http_code}' http://127.0.0.1:8080/intern/pruefen
+probe "Tor weist ohne Adresse ab" \
+    test 403 = "$(docker compose exec -T updater curl -s -o /dev/null -m 10 \
+                  -w '%{http_code}' http://127.0.0.1:8080/intern/pruefen 2>/dev/null || echo 0)"
+probe "Tor laesst die Rueckschleife durch" \
+    test 204 = "$(docker compose exec -T updater curl -s -o /dev/null -m 10 \
+                  -H 'X-Echte-Ip: 127.0.0.1' -w '%{http_code}' \
+                  http://127.0.0.1:8080/intern/pruefen 2>/dev/null || echo 0)"
+probe "Tor sperrt eine fremde Adresse" \
+    test 403 = "$(docker compose exec -T updater curl -s -o /dev/null -m 10 \
+                  -H 'X-Echte-Ip: 203.0.113.7' -w '%{http_code}' \
+                  http://127.0.0.1:8080/intern/pruefen 2>/dev/null || echo 0)"
+# Der Torwaechter-Port darf vom Host aus NICHT erreichbar sein - er steht
+# absichtlich nicht unter "ports". Kaeme hier eine Antwort, haenge die
+# Zugangskontrolle des Servers offen im Netz.
+probe "Tor-Port liegt NICHT auf dem Host" \
+    test 000 = "$(curl -s -o /dev/null -m 5 -w '%{http_code}' \
+                  http://127.0.0.1:8080/intern/pruefen 2>/dev/null || echo 000)"
+probe "Oberflaeche verlangt Anmeldung" \
+    test 302 = "$(curl -s -o /dev/null -m 10 -w '%{http_code}' \
+                  "http://${HJ_PULT_BIND}:${HJ_PULT_PORT}/" 2>/dev/null || echo 0)"
 # Die entscheidende Probe: einmal wirklich hoch und wieder herunter. Sie
 # faellt auf alles herein, was die Proben oben nicht sehen - den falschen
 # Dateinamen im certs.d-Verzeichnis, einen fehlenden /etc/hosts-Eintrag, ein
@@ -290,6 +342,13 @@ cat <<ENDE
           Neuen Knoten aufsetzen - das ist die ganze Zeile:
 
           curl -fsSLu knoten https://${HJ_UPDATE_HOST}/knoten/aufsetzen.sh -o a.sh && bash a.sh
+
+      Updater           ${HJ_ADMIN} / ${PW_PULT}
+                        http://${HJ_PULT_BIND}:${HJ_PULT_PORT}/
+                        Freigaben, Knoten, Zugriffsprotokoll.
+
+                        Neue Knoten muessen dort freigeschaltet werden,
+                        bevor sie an Tresor und Abbilder kommen.
 
       Forgejo           ${HJ_ADMIN} / ${PW_ADMIN}
                         ssh -L 3000:127.0.0.1:3000 und dann

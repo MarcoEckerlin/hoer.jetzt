@@ -108,6 +108,43 @@ hole() {
         "https://${HJ_UPDATE_HOST}$1"
 }
 
+# ------------------------------------------------------------------ Melden
+#
+# Ein Herzschlag an den Update-Server, einmal je Lauf. Bewusst nicht mehr:
+# der Agent (deploy/agent/hj-agent.sh) meldet ohnehin jede Minute Zustand
+# und Version an den Controller. Was der Update-Server zusaetzlich wissen
+# will, faellt nur hier an - naemlich ob das Update selbst durchgelaufen ist
+# und auf welchem Stand dieser Host danach steht.
+#
+# Die Kennung ist dieselbe wie beim Agenten, damit sich beide Ansichten
+# ueber einen Namen zusammenbringen lassen und nicht zwei Listen entstehen,
+# die dasselbe meinen.
+KENNUNG="$(wert HJ_NODE_NAME)"
+KENNUNG="${KENNUNG:-$(hostname -s 2>/dev/null || echo unbekannt)}"
+PROFIL="$(wert HJ_PROFIL)"
+
+# Schlaegt der Herzschlag fehl, ist das kein Grund abzubrechen: die Meldung
+# ist Beiwerk, das Update ist die Aufgabe. Ein Update, das an einer
+# Statusmeldung scheitert, waere die schlechtere Maschine.
+melden() {
+    local ergebnis="$1" zustand="${2:-}" antwort
+
+    antwort="$(curl -fsS -m 15 -X POST \
+        --cert "${AUSWEIS}/update.crt" --key "${AUSWEIS}/update.key" \
+        -H "Content-Type: application/json" \
+        -d "$(printf '{"kennung":"%s","name":"%s","profil":"%s","version":"%s","vorher":"%s","zustand":"%s","ergebnis":"%s"}' \
+            "$KENNUNG" "$KENNUNG" "$PROFIL" \
+            "$(cat "$STAND" 2>/dev/null || echo '')" \
+            "$(cat "$VORHER" 2>/dev/null || echo '')" \
+            "$zustand" "$ergebnis")" \
+        "https://${HJ_UPDATE_HOST}/melden" 2>/dev/null)" || {
+        sagen "Herzschlag an ${HJ_UPDATE_HOST} nicht durchgekommen - weiter im Ablauf."
+        printf ''
+        return 0
+    }
+    printf '%s' "$antwort"
+}
+
 MANIFEST="$(hole /release/aktuell || true)"
 [[ -n "$MANIFEST" ]] || fehler "${HJ_UPDATE_HOST} nicht erreichbar oder Passwort falsch."
 
@@ -119,6 +156,20 @@ REGISTRY="$(manifestwert registry)"
 [[ -n "$REGISTRY" ]] || fehler "Das Manifest nennt keine Registry."
 
 AKTUELL="$(cat "$STAND" 2>/dev/null || true)"
+
+# Herzschlag zu Beginn. Er steht hier und nicht erst am Ende, damit auch ein
+# Lauf, bei dem es nichts zu tun gibt, als Lebenszeichen zaehlt - sonst saehen
+# in der Uebersicht ausgerechnet die Knoten stumm aus, die schlicht aktuell
+# sind.
+#
+# Die Antwort traegt zurueck, ob in der Oberflaeche ein sofortiges Update
+# vorgemerkt wurde. Das ist der einzige Weg in diese Richtung: es geht keine
+# Verbindung vom Update-Server zu den Knoten, die stehen hinter fremdem NAT.
+ANTWORT="$(melden geprueft)"
+if printf '%s' "$ANTWORT" | grep -q '"update_angefordert":true'; then
+    sagen "Sofortiges Update ist vorgemerkt - ohne Warten auf eine Wiedergabepause."
+    SOFORT=1
+fi
 
 if [[ "$ZURUECK" -eq 1 ]]; then
     NEUSTE="$(cat "$VORHER" 2>/dev/null || true)"
@@ -244,6 +295,15 @@ if [[ "$zustand" == "running" ]]; then
 else
     sagen "WARNUNG: core steht auf '${zustand}' - docker logs ${KERN}"
     sagen "Rueckweg: bash ${BASH_SOURCE[0]} --zurueck"
+fi
+
+# Abschliessender Herzschlag - jetzt mit dem, was tatsaechlich herausgekommen
+# ist. Erst hier, weil vorher weder der neue Stand noch der Zustand des
+# Containers feststand.
+if [[ "$zustand" == "running" ]]; then
+    melden "aktualisiert auf ${NEUSTE}" "$zustand" >/dev/null
+else
+    melden "Start fehlgeschlagen - core steht auf '${zustand}'" "$zustand" >/dev/null
 fi
 
 # Aufgeraeumt wird erst nach dem erfolgreichen Start, und nur was aelter als

@@ -86,15 +86,25 @@ sicher, dass ein gültiger **Ausweis** `/knoten/` *nicht* öffnet und umgekehrt.
 ```
                     Caddy  (TLS, client_auth: verify_if_given)
                       |
-   /v2/*      ------> Forgejo-Registry      Ausweis nötig
-   /release/* ------> Volume "ausliefern"   Ausweis nötig
-   /tresor/*  ------> Volume "ausliefern"   Ausweis nötig + Tresor-Schlüssel
+                      |--- forward_auth ---> Updater :8080   Adresse freigeschaltet?
+                      |                      (nur im internen Docker-Netz)
+                      |
+   /v2/*      ------> Forgejo-Registry      Ausweis + Freigabe
+   /release/* ------> Volume "ausliefern"   Ausweis + Freigabe
+   /tresor/*  ------> Volume "ausliefern"   Ausweis + Freigabe + Tresor-Schlüssel
+   /melden    ------> Updater :8080         Ausweis + Freigabe
    /knoten/*  ------> Volume "ausliefern"   Passwort
+
+                             Updater :8081  Oberfläche, privates Netz
 ```
 
 `verify_if_given` statt `require_and_verify`: `/knoten/` muss ohne Ausweis
 erreichbar sein — ein frischer Knoten hat ja noch keinen. Der Zwang steht
-deshalb an den drei Pfaden, nicht am Anschluss.
+deshalb an den Pfaden, nicht am Anschluss.
+
+`/knoten/` ist auch der einzige Pfad **ohne** Adressprüfung, und zwar
+absichtlich: ein frisch aufgesetzter Rechner ist noch nicht freigeschaltet,
+und genau das Skript, das er dort holt, sagt ihm, dass er es werden muss.
 
 Forgejos Oberfläche und das Git lauschen nur auf `127.0.0.1`. Für die
 Verwaltung: `ssh -L 3000:127.0.0.1:3000`.
@@ -136,6 +146,99 @@ bash schluessel.sh zeigen      # Fingerabdrücke und Laufzeiten
 
 ---
 
+## Der Updater — Freigaben, Knoten, Protokoll
+
+Ein kleiner Spring-Boot-Dienst neben Caddy und Forgejo. Er macht zwei Dinge,
+die zusammengehören, weil beide auf denselben Bestand schauen:
+
+**1. Er ist das Tor.** Vor jedem Zugriff auf `/v2/`, `/release/`, `/tresor/`
+und `/melden` fragt Caddy per `forward_auth` beim Updater nach, ob diese
+Adresse freigeschaltet ist. Ein gültiger Ausweis reicht damit nicht mehr — es
+braucht Ausweis **und** freigeschaltete Adresse.
+
+Warum nicht Caddys eigenes `remote_ip`: das will die Liste in der
+Konfigurationsdatei stehen haben. Jede Freischaltung wäre eine Dateiänderung
+plus ein Neuladen des Webservers — womöglich während gerade ein Knoten zieht.
+Hier ist es eine Zeile in der Datenbank und **gilt sofort**.
+
+**2. Er ist die Übersicht.** Weil jeder Zugriff hier vorbeikommt und die Knoten
+nach jedem Update-Lauf ihren Stand melden, weiß der Dienst von selbst, wer
+wann da war und was er fährt.
+
+### Zwei Ports, und der Unterschied steht im Compose
+
+| | |
+|---|---|
+| **8080** Torwächter | Steht **nicht** unter `ports`. Erreichbar ausschließlich über das interne Docker-Netz, also durch Caddy. Kein Login davor — die Grenze ist das Netz. |
+| **8081** Oberfläche | Wird auf `HJ_PULT_BIND` gelegt, Vorgabe `127.0.0.1:8090`. Für Zugriff von unterwegs die Tailscale-Adresse dieses Hosts eintragen. |
+
+Die Trennung sitzt bewusst in der Compose-Datei und nicht nur in einer
+Pfadregel: eine fehlende Zeile fällt beim Lesen auf, eine falsche Pfadregel
+nicht. `PortTrennung.java` zieht dieselbe Grenze noch einmal in der Anwendung
+und antwortet am falschen Port mit 404.
+
+```bash
+ssh -L 8090:127.0.0.1:8090 root@<update-server>
+```
+
+### Was auf den Seiten steht
+
+- **Knoten** — laufendes Release, Rückweg, Containerzustand, wann zuletzt
+  gesehen, letzte Adresse. Oben die Frage, mit der man die Seite aufruft:
+  läuft überall dasselbe, und meldet sich noch jeder.
+- **Freigaben** — Adressen und Bereiche in CIDR-Schreibweise, wahlweise
+  befristet. Adressen, die es vergeblich versucht haben, lassen sich mit
+  einem Klick übernehmen; abtippen ist die Stelle, an der man sich vertut.
+- **Protokoll** — jeder Zugriff, erlaubte wie abgewiesene.
+
+### Einen neuen Knoten freischalten
+
+Die Reihenfolge ist umgekehrt zu dem, was man erwartet: **erst freischalten,
+dann installieren.** `knoten-aufsetzen.sh` holt den Tresor, also die
+Zugangsdaten — käme die Freischaltung danach, würde sie genau das nicht
+schützen, worauf es ankommt.
+
+1. Maschine anlegen, öffentliche Adresse notieren.
+2. Im Updater unter **Freigaben** eintragen.
+3. `aufsetzen.sh` laufen lassen.
+
+Läuft es doch in der falschen Reihenfolge, bricht das Skript nicht mit
+„Tresor nicht gefunden" ab, sondern nennt die eigene Adresse und sagt, wo sie
+einzutragen ist.
+
+### Sperren
+
+Eine Freigabe zu sperren wirkt sofort — der Zwischenspeicher des Torwächters
+wird bei jeder Änderung verworfen. Gesperrte Einträge bleiben stehen statt
+gelöscht zu werden: die Frage „wer war das nochmal und wann hatte der Zugang"
+stellt sich genau dann, wenn etwas passiert ist.
+
+### Grundfreigaben
+
+Beim allerersten Start legt der Updater `127.0.0.0/8`, `::1/128` und die
+privaten Bereiche an. Ohne das sperrte sich der Server bei der Einrichtung
+selbst aus: die Selbstprobe schiebt ein Testabbild durch Caddy, und
+`/etc/hosts` zeigt die eigene Adresse auf `127.0.0.1`. Aus dem Internet ist
+damit nichts erreichbar — diese Adressen werden dort nicht geroutet, und ein
+gültiger Ausweis wird zusätzlich verlangt.
+
+Anpassen über `hj.freigabe-start` bzw. die Umgebung.
+
+### Verhältnis zum Agenten
+
+`deploy/agent/hj-agent.sh` meldet jede Minute Zustand und Version an den
+**Controller** und holt sich von dort Ziel-Release und Shard-Aufteilung. Das
+bleibt, wie es ist. Der Herzschlag an den Update-Server läuft bewusst nur
+**einmal je Update-Lauf** und trägt etwas anderes: ob das Update selbst
+durchgelaufen ist und auf welchem Stand der Host danach steht. Beide benutzen
+dieselbe Kennung (`HJ_NODE_NAME`), damit nicht zwei Listen entstehen, die
+dasselbe meinen.
+
+Die Überschneidung ist real und gewollt begrenzt — siehe die offenen Punkte
+am Ende.
+
+---
+
 ## Ein Release veröffentlichen
 
 Wie bisher: `RELEASE` auf den gewünschten Stand bringen, Tag setzen, pushen.
@@ -165,10 +268,15 @@ Geheimnisspeicher. Ablauf:
 1. Update-Server aufsetzen, Tresor befüllen, ein Release veröffentlichen.
 2. Ein **letztes** Release über GitHub ausrollen — es enthält die neue
    `deploy/auto-update.sh`, die den Update-Server statt GitHub befragt.
-3. Auf jedem Host einmal `knoten-aufsetzen.sh` laufen lassen. Es erkennt eine
+3. Die Adressen aller bestehenden Hosts im Updater unter **Freigaben**
+   eintragen — **vor** Schritt 4. Ohne das kommen sie weder an den
+   Tresor noch an die Abbilder. Die privaten Bereiche stehen von
+   selbst drin, öffentliche Hetzner-Adressen nicht.
+4. Auf jedem Host einmal `knoten-aufsetzen.sh` laufen lassen. Es erkennt eine
    vorhandene `.env`, sichert sie und ergänzt nur die Werte aus dem Tresor —
    `HJ_SPOCK`, eigene Ports und Tailscale-Angaben bleiben stehen.
-4. Probe: `bash /opt/hoerjetzt/main/deploy/auto-update.sh --pruefen`
+5. Probe: `bash /opt/hoerjetzt/main/deploy/auto-update.sh --pruefen`
+   Danach sollte der Host in der Knotenübersicht auftauchen.
 
 Fehlt der Ausweis, bricht `auto-update.sh` mit genau dieser Anleitung ab statt
 stillschweigend nichts zu tun.
@@ -200,3 +308,27 @@ und den neuen auf die verbliebenen Hosts bringen. Die CA bleibt, der alte
 Ausweis gilt weiter — für echte Sperrung bräuchte es eine Sperrliste oder
 einen Ausweis je Knoten. Beides ist mit dieser CA jederzeit nachrüstbar; für
 den jetzigen Umfang wäre es Aufwand ohne Gegenwert.
+
+---
+
+## Offen
+
+**Der Ausweis ist noch für alle Knoten derselbe.** Die Adressfreigabe gibt
+jetzt den Widerruf, der vorher fehlte — aber sie hängt an der IP, und die
+wechselt, wenn eine Hetzner-Maschine neu aufgesetzt wird. Der nächste Schritt
+wäre ein Ausweis **je Knoten**, ausgestellt im Moment der Freischaltung: die
+CA steht, das ist ein Einzeiler in `schluessel.sh`. Dann hinge der Widerruf
+nicht mehr an der Adresse, und die Freigabeliste wäre die zweite Schicht
+statt der einzigen Reißleine.
+
+**Knotenübersicht und Controller überschneiden sich.** Der Controller kennt
+den Live-Zustand im Minutentakt, der Updater das Ergebnis des letzten
+Updates. Beides hat seinen Grund — der Update-Server muss auch dann
+auskunftsfähig sein, wenn die Steuer-Node steht. Ob das auf Dauer zwei
+Ansichten bleiben sollen, ist noch nicht entschieden.
+
+**„Update vormerken" wirkt erst beim nächsten Lauf** von `auto-update.sh`,
+also nachts um drei oder wenn der Agent es auslöst. Es geht keine Verbindung
+vom Update-Server zu den Knoten — die stehen hinter fremdem NAT. Soll es
+schneller gehen, ist der Weg über den Controller der richtige, nicht ein
+zweiter Melde-Timer.
