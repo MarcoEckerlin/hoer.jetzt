@@ -1,6 +1,7 @@
 import React from "react";
 import { Auswahl, Farbe, Feld, Mehrzeilig, Rollenwahl, Schalter, Text } from "../teile/felder.jsx";
 import EmbedEditor from "../teile/EmbedEditor.jsx";
+import Bildfeld from "../teile/Bildfeld.jsx";
 import { Modulseite, useModul } from "./rahmen.jsx";
 
 /**
@@ -77,7 +78,8 @@ export default function ReaktionsRollen({ guildId, konfig, neuLaden }) {
                         <Feld titel="Farbe" kind={<Farbe wert={p.accentColor} setzen={(x) => tafel(i, "accentColor", x)} />} />
                         <Feld
                             titel="Bild"
-                            kind={<Text wert={p.imageUrl} setzen={(x) => tafel(i, "imageUrl", x)} platzhalter="https://…" />}
+                            kind={<Bildfeld wert={p.imageUrl} setzen={(x) => tafel(i, "imageUrl", x)}
+                                        seitenverhaeltnis={16 / 9} zielbreite={1024} />}
                         />
                     </div>
 

@@ -3,13 +3,13 @@ import { api } from "../lib/api.js";
 import { MODULE } from "../module/verzeichnis.js";
 import Serversymbol from "../teile/Serversymbol.jsx";
 import Benutzerleiste from "../teile/Benutzerleiste.jsx";
-import { SYMBOLE } from "../teile/Symbole.jsx";
 
 /**
  * Das Dashboard, aufgebaut wie Discord selbst.
  *
- * <p>Drei Spalten, weil die Leute sie kennen: ganz links die Server als runde
- * Symbole, daneben die Liste dessen, was dieser Server hat, rechts der Inhalt.
+ * <p>Drei Spalten, weil die Leute sie kennen: ganz links die Server als
+ * quadratische Symbole, daneben die Liste dessen, was dieser Server hat,
+ * rechts der Inhalt.
  * Unten links die Person, die angemeldet ist - genau dort, wo sie in Discord
  * auch sitzt. Wer den Aufbau schon im Kopf hat, muss ihn hier nicht neu
  * lernen.</p>
@@ -28,9 +28,9 @@ export default function Dashboard({ server }) {
     const [fehler, setFehler] = useState(null);
     const [laedt, setLaedt] = useState(true);
     const [offen, setOffen] = useState(false);
-    // Einmal hier statt einmal in der Benutzerleiste und einmal fuer den
-    // Betriebsknopf: sonst fragen zwei Bausteine dasselbe ab, und der zweite
-    // zeichnet einen Sekundenbruchteil spaeter nach.
+    const [suche, setSuche] = useState("");
+    // Einmal hier und von hier weitergereicht: sonst fragen mehrere Bausteine
+    // dasselbe ab, und der zweite zeichnet einen Sekundenbruchteil spaeter nach.
     const [ich, setIch] = useState(null);
 
     useEffect(() => {
@@ -95,6 +95,11 @@ export default function Dashboard({ server }) {
 
     function gehe(neu) {
         window.location.hash = `#/server/${neu.guildId ?? guildId}/${neu.modul ?? modulId}`;
+        // Auf dem Telefon liegt die Schublade ueber dem Inhalt. Bliebe sie
+        // offen, waere die erste Sicht auf das gewaehlte Modul die Leiste,
+        // aus der man es gerade gewaehlt hat. Auf dem Rechner ist nichts
+        // zugeklappt, dort tut die Zeile nichts.
+        setOffen(false);
     }
 
     // Gruppen in der Reihenfolge ihres ersten Auftretens - so steht die
@@ -107,10 +112,46 @@ export default function Dashboard({ server }) {
         g.module.push(m);
     });
 
+    // Nach Name oder Kennung - wer die ID kopiert hat, findet den Server
+    // damit ebenso wie ueber den Namen.
+    const gefilterteServer = suche.trim()
+        ? server.filter((s) => (s.name || "").toLowerCase().includes(suche.trim().toLowerCase())
+            || s.id.includes(suche.trim()))
+        : server;
+
     return (
         <div className={`dashboard ${offen ? "ist-offen" : ""}`}>
+            {/* Nur sichtbar, solange die Schublade offen ist - und nur dort,
+                wo sie ueberhaupt eine ist (siehe .menuschirm im Stylesheet). */}
+            {offen && (
+                <button
+                    className="menuschirm"
+                    onClick={() => setOffen(false)}
+                    aria-label="Menü schließen"
+                />
+            )}
+
             <aside className="serverleiste">
-                {server.map((s) => (
+                {/*
+                  Suche wie in Discord: oben in der Leiste, nicht in einem
+                  Menue. Sie erscheint erst ab acht Servern - darunter ist die
+                  Liste kuerzer als das Suchfeld und man findet schneller mit
+                  den Augen.
+                */}
+                {server.length >= 8 && (
+                    <div className="serversuche">
+                        <input
+                            className="serversuche-feld"
+                            type="search"
+                            value={suche}
+                            onChange={(e) => setSuche(e.target.value)}
+                            placeholder="Suchen"
+                            aria-label="Server suchen"
+                        />
+                    </div>
+                )}
+
+                {gefilterteServer.map((s) => (
                     <button
                         key={s.id}
                         className={`serverknopf ${s.id === guildId ? "ist-aktiv" : ""}`}
@@ -124,25 +165,12 @@ export default function Dashboard({ server }) {
                 ))}
 
                 {/*
-                  Der Betriebsbereich lag bisher nur im aufklappbaren
-                  Benutzermenue unten links - man musste wissen, dass es ihn
-                  gibt. Hier steht er dort, wo Discord die Server-Verwaltung
-                  hat: unten in derselben Leiste, mit demselben Knopf.
-                  Sichtbar nur fuer Bot-Admins; das ist Bequemlichkeit, kein
-                  Schutz - der Bot prueft jeden Aufruf ohnehin einzeln.
+                  Hier stand der Betriebsbereich als zusaetzlicher Knopf. Er
+                  ist wieder weg: in der Serverleiste stehen Server, und ein
+                  Eintrag, der keiner ist, sortiert sich nur dazwischen.
+                  Erreichbar bleibt der Bereich ueber das Profilmenue unten
+                  links und ueber die Adresse /admin.
                 */}
-                {botAdmin && (
-                    <a
-                        className="serverknopf serverknopf-betrieb"
-                        href="/dashboard#/betrieb/verbund"
-                        onClick={() => window.setTimeout(() => window.location.reload(), 0)}
-                        title="Betrieb"
-                    >
-                        <span className="serverknopf-marke" />
-                        <span className="serverknopf-bild ist-leer">{SYMBOLE.verbund}</span>
-                        <span className="serverknopf-hinweis">Betrieb</span>
-                    </a>
-                )}
             </aside>
 
             <nav className="modulleiste">

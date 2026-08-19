@@ -28,6 +28,7 @@ export default function Knoten() {
     const [offen, setOffen] = useState({});
     const [protokoll, setProtokoll] = useState(null);
     const [anlegen, setAnlegen] = useState(null);
+    const [befehl, setBefehl] = useState(null);
 
     const laden = useCallback(async () => {
         try {
@@ -80,6 +81,71 @@ export default function Knoten() {
         }
     }
 
+    async function autoscaleSchalten(an) {
+        setBeschaeftigt("autoscale");
+        setMeldung(null);
+        try {
+            const antwort = await api("POST", "/api/admin/audio/autoscale", { enabled: an });
+            setMeldung({ art: "gut", text: antwort?.message || "Erledigt." });
+            await laden();
+        } catch (f) {
+            setMeldung({ art: "schlecht", text: f.message });
+        } finally {
+            setBeschaeftigt(null);
+        }
+    }
+
+    /**
+     * Holt den Installationsbefehl fuer einen Knoten auf fremder Hardware.
+     *
+     * <p>Er enthaelt die beiden Geheimnisse und die Adresse dieses Bots -
+     * deshalb wird er beim Bot erzeugt und nicht in der Oberflaeche
+     * zusammengebaut: dort laege das Lavalink-Passwort im Quelltext der Seite.</p>
+     */
+    async function befehlHolen(stufe) {
+        setBefehl({ text: "…", stufe });
+        try {
+            const antwort = await api("GET", `/api/admin/audio/nodes/befehl?stufe=${stufe}`);
+            setBefehl({ text: antwort?.befehl || "", hinweis: antwort?.hinweis, stufe });
+        } catch (f) {
+            setBefehl({ text: "", hinweis: f.message, stufe });
+        }
+    }
+
+    /**
+     * Entfernt einen Knoten.
+     *
+     * <p>Zwei Rueckfragen, nicht eine: die erste, weil ein Knoten mit laufender
+     * Wiedergabe verschwindet; die zweite nur bei Hetzner-Knoten, weil ein
+     * stehen gebliebener Server weiter Geld kostet und ein geloeschter nicht
+     * zurueckkommt.</p>
+     */
+    async function entfernen(k) {
+        if (!window.confirm(`Knoten "${k.name}" wirklich aus der Liste entfernen?`)) return;
+
+        let mitServer = false;
+        if (k.hetznerId) {
+            mitServer = window.confirm(
+                `Auch den Hetzner-Server ${k.hetznerId} löschen?\n\n`
+                + "OK = Server wird gelöscht und kostet nichts mehr.\n"
+                + "Abbrechen = nur der Eintrag geht weg, der Server läuft weiter.");
+        }
+
+        setBeschaeftigt("weg:" + k.name);
+        setMeldung(null);
+        try {
+            const antwort = await api(
+                "DELETE",
+                `/api/admin/audio/nodes/${encodeURIComponent(k.name)}?server=${mitServer}`);
+            setMeldung({ art: "gut", text: antwort?.message || "Entfernt." });
+            await laden();
+        } catch (f) {
+            setMeldung({ art: "schlecht", text: f.message });
+        } finally {
+            setBeschaeftigt(null);
+        }
+    }
+
     async function protokollZeigen(name) {
         setProtokoll({ name, text: "…" });
         try {
@@ -119,8 +185,11 @@ export default function Knoten() {
                     >
                         {beschaeftigt === "verteilen" ? "…" : "Neu verteilen"}
                     </button>
+                    <button className="knopf leise klein" onClick={() => befehlHolen("free")}>
+                        Manuell hinzufügen
+                    </button>
                     <button className="knopf klein" onClick={() => setAnlegen({ stufe: "premium", code: "" })}>
-                        Knoten anlegen
+                        Bei Hetzner anlegen
                     </button>
                 </div>
             </header>
@@ -132,7 +201,7 @@ export default function Knoten() {
                 </div>
             )}
 
-            <Autoscaling lage={autoscale} />
+            <Autoscaling lage={autoscale} schalten={autoscaleSchalten} beschaeftigt={beschaeftigt} />
             <Netz messungen={netz} beimMessen={netzMessen} />
 
             <section className="block">
@@ -142,6 +211,7 @@ export default function Knoten() {
                         <Knotenzeile
                             key={k.name}
                             k={k}
+                            entfernen={entfernen}
                             offen={!!offen[k.name]}
                             umschalten={() => setOffen({ ...offen, [k.name]: !offen[k.name] })}
                             beschaeftigt={beschaeftigt}
@@ -162,6 +232,44 @@ export default function Knoten() {
             {protokoll && (
                 <Schicht titel={`Protokoll — ${protokoll.name}`} schliessen={() => setProtokoll(null)}>
                     <pre className="protokoll">{protokoll.text}</pre>
+                </Schicht>
+            )}
+
+            {befehl && (
+                <Schicht titel="Knoten auf eigener Hardware" schliessen={() => setBefehl(null)}>
+                    <p className="leise">
+                        Läuft auf jedem Server mit Debian oder Ubuntu — Hetzner ist nicht nötig.
+                        Der Knoten meldet sich nach der Installation von selbst an und taucht dann
+                        in dieser Liste auf.
+                    </p>
+                    <div className="listenzeile">
+                        <button
+                            className={`knopf leise klein ${befehl.stufe === "free" ? "ist-an" : ""}`}
+                            onClick={() => befehlHolen("free")}
+                        >
+                            Standard
+                        </button>
+                        <button
+                            className={`knopf leise klein ${befehl.stufe === "premium" ? "ist-an" : ""}`}
+                            onClick={() => befehlHolen("premium")}
+                        >
+                            Premium
+                        </button>
+                    </div>
+                    <pre className="protokoll">{befehl.text}</pre>
+                    <div className="listenzeile">
+                        <button
+                            className="knopf klein"
+                            onClick={() => navigator.clipboard?.writeText(befehl.text)}
+                        >
+                            In die Zwischenablage
+                        </button>
+                    </div>
+                    {befehl.hinweis && <p className="feld-hilfe">{befehl.hinweis}</p>}
+                    <p className="feld-hilfe">
+                        Der Befehl enthält Zugangsdaten — nicht weitergeben und nicht in ein
+                        öffentliches Ticket kopieren.
+                    </p>
                 </Schicht>
             )}
 
@@ -216,9 +324,11 @@ export default function Knoten() {
 
 /* ------------------------------------------------------------------ Teile */
 
-function Autoscaling({ lage }) {
+function Autoscaling({ lage, schalten, beschaeftigt }) {
     if (!lage) return null;
 
+    // Ohne Token laesst sich nichts anlegen - dann waere der Schalter keine
+    // Entscheidung, sondern eine Falle. Er bleibt sichtbar, aber gesperrt.
     const aus = !lage.eingeschaltet || !lage.tokenVorhanden;
     return (
         <section className={`streifen ${aus ? "ist-aus" : ""}`}>
@@ -227,12 +337,22 @@ function Autoscaling({ lage }) {
                 <strong>Autoscaling</strong>
                 <span className="marke">{aus ? "aus" : `ab ${Math.round(lage.schwelle * 100)} %`}</span>
                 {!aus && <span className="marke">{lage.autoKnoten} / {lage.obergrenze} Knoten</span>}
+                <button
+                    className={`knopf leise klein ${lage.eingeschaltet ? "ist-an" : ""}`}
+                    disabled={!lage.tokenVorhanden || beschaeftigt !== null}
+                    title={lage.tokenVorhanden
+                        ? "Gilt für den ganzen Verbund, nicht nur diese Node."
+                        : "Ohne Hetzner-Token wirkungslos."}
+                    onClick={() => schalten(!lage.eingeschaltet)}
+                >
+                    {beschaeftigt === "autoscale" ? "…" : lage.eingeschaltet ? "Ausschalten" : "Einschalten"}
+                </button>
             </div>
             <p className="leise">
                 {!lage.tokenVorhanden
                     ? "Kein Hetzner-Token hinterlegt (HJ_HETZNER_TOKEN) — es werden keine Server erzeugt."
                     : !lage.eingeschaltet
-                        ? "Ausgeschaltet (HJ_AUTOSCALE=true schaltet ein)."
+                        ? "Ausgeschaltet. Vorhandene Knoten bleiben; es kommen keine neuen dazu."
                         : lage.meldung}
             </p>
         </section>
@@ -274,7 +394,7 @@ function Netz({ messungen, beimMessen }) {
     );
 }
 
-function Knotenzeile({ k, offen, umschalten, beschaeftigt, aktion, protokollZeigen }) {
+function Knotenzeile({ k, offen, umschalten, beschaeftigt, aktion, protokollZeigen, entfernen }) {
     const arbeitet = beschaeftigt !== null;
     const pfad = `/api/admin/audio/nodes/${encodeURIComponent(k.name)}`;
 
@@ -352,6 +472,21 @@ function Knotenzeile({ k, offen, umschalten, beschaeftigt, aktion, protokollZeig
                                 Protokoll
                             </button>
                         )}
+
+                        {/*
+                          Ganz rechts und optisch abgesetzt: die einzige Aktion
+                          hier, die nichts wiederherstellt.
+                        */}
+                        <button
+                            className="knopf leise klein ist-gefaehrlich"
+                            disabled={arbeitet}
+                            title={k.hetznerId
+                                ? "Entfernt den Eintrag - der Hetzner-Server wird auf Rueckfrage mitgeloescht."
+                                : "Entfernt den Eintrag aus der Liste."}
+                            onClick={() => entfernen(k)}
+                        >
+                            {beschaeftigt === "weg:" + k.name ? "…" : "Entfernen"}
+                        </button>
                     </div>
 
                     <dl className="paare">

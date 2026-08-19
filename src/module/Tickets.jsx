@@ -65,8 +65,10 @@ export default function Tickets({ guildId, konfig, neuLaden }) {
 
                     <div className="feldgitter">
                         <Feld
-                            titel="Kanal"
-                            hilfe={p.messageId ? "Steht bereits — wird beim Speichern dort geändert." : null}
+                            titel="Kanal *"
+                            hilfe={p.messageId
+                                ? "Steht bereits — wird beim Speichern dort geändert."
+                                : "Pflicht. Dorthin stellt der Bot die Nachricht mit dem Knopf."}
                             kind={
                                 <Auswahl
                                     wert={p.publishChannelId}
@@ -93,24 +95,14 @@ export default function Tickets({ guildId, konfig, neuLaden }) {
                             titel="Text"
                             kind={<Mehrzeilig wert={p.description} setzen={(x) => tafel(i, "description", x)} />}
                         />
-                        <Feld
-                            titel="Bedienung"
-                            hilfe="Ein Knopf ist schneller; eine Auswahlliste lohnt ab etwa vier Anliegen."
-                            kind={
-                                <select
-                                    className="eingabe"
-                                    value={p.interactionMode || "button"}
-                                    onChange={(ev) => tafel(i, "interactionMode", ev.target.value)}
-                                >
-                                    <option value="button">Knöpfe</option>
-                                    <option value="select">Auswahlliste</option>
-                                </select>
-                            }
-                        />
-                        <Feld
-                            titel="Text in der Auswahlliste"
-                            kind={<Text wert={p.placeholder} setzen={(x) => tafel(i, "placeholder", x)} platzhalter="Anliegen wählen…" />}
-                        />
+                        {/*
+                          Hier standen die Wahl zwischen Knopf und
+                          Auswahlliste und der Platzhaltertext der Liste.
+                          Beides ist weg: es gibt nur noch Knöpfe. Eine
+                          Einstellung mit genau einer möglichen Antwort ist
+                          keine Einstellung, sondern eine Frage, die man
+                          jedes Mal neu beantworten muss.
+                        */}
                         <Feld titel="Farbe" kind={<Farbe wert={p.accentColor} setzen={(x) => tafel(i, "accentColor", x)} />} />
                         <Feld
                             titel="Benachrichtigen"
@@ -127,7 +119,13 @@ export default function Tickets({ guildId, konfig, neuLaden }) {
                         <Feld
                             breit
                             titel="Erste Nachricht im Ticket"
-                            hilfe="Steht im neuen Kanal, bevor jemand vom Team antwortet."
+                            hilfe={
+                                <>
+                                    Steht im neuen Kanal, bevor jemand vom Team antwortet. Platzhalter:{" "}
+                                    <code>{"{user}"}</code> erwähnt die Person, <code>{"{username}"}</code>,{" "}
+                                    <code>{"{ticket}"}</code> das Anliegen, <code>{"{count}"}</code> die Nummer.
+                                </>
+                            }
                             kind={<Mehrzeilig wert={p.welcomeMessage} setzen={(x) => tafel(i, "welcomeMessage", x)} />}
                         />
                         <Feld
@@ -173,6 +171,7 @@ export default function Tickets({ guildId, konfig, neuLaden }) {
                                 <Feld
                                     breit
                                     titel="Beschreibung"
+                                    hilfe="Steht als Zeile unter dem Text der Tafel — auf dem Knopf ist dafür kein Platz."
                                     kind={<Text wert={o.description} setzen={(x) => option(i, j, "description", x)} />}
                                 />
                                 <Feld
@@ -236,9 +235,13 @@ export default function Tickets({ guildId, konfig, neuLaden }) {
                         ...e.panels,
                         {
                             id: null,
+                            // Beide ausdruecklich auf null: ohne sie waeren
+                            // die Auswahlfelder erst unkontrolliert und dann
+                            // kontrolliert - React warnt zu Recht davor.
+                            publishChannelId: null,
+                            categoryId: null,
                             title: "Support",
                             description: "",
-                            interactionMode: "button",
                             accentColor: "#5865F2",
                             allowClaim: true,
                             allowPause: false,

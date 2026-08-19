@@ -42,22 +42,48 @@ export default function App() {
         );
     }
 
-    const imPanel = window.location.pathname.startsWith("/dashboard");
+    const imAdmin = window.location.pathname.startsWith("/admin");
+    const imPanel = window.location.pathname.startsWith("/dashboard") || imAdmin;
     const angemeldet = zustand === "angemeldet";
 
-    // Der Betriebsbereich haengt an der Adresse, nicht an einem Zustand: so
-    // ueberlebt er ein F5 und ist verlinkbar wie jede Modulseite.
-    const betrieb = /^#\/betrieb(?:\/([a-z]+))?/.exec(window.location.hash || "");
-    if (imPanel && angemeldet && betrieb) {
+    /*
+     * Der Betriebsbereich haengt an der Adresse, nicht an einem Zustand: so
+     * ueberlebt er ein F5 und ist verlinkbar wie jede Modulseite.
+     *
+     * Zwei Wege fuehren hin, und das ist Absicht:
+     *   /admin[/seite]              - die Adresse, die man sich merkt
+     *   /dashboard#/betrieb/seite   - der Weg aus dem Panel heraus
+     * Der zweite bleibt bestehen, weil es Lesezeichen darauf gibt.
+     */
+    const ausHash = /^#\/betrieb(?:\/([a-z]+))?/.exec(window.location.hash || "");
+    const ausPfad = /^\/admin(?:\/([a-z]+))?\/?$/.exec(window.location.pathname);
+
+    if (imAdmin && !angemeldet) {
+        // Ohne Anmeldung gibt es hier nichts zu sehen - und der Bot laesse
+        // ohnehin keinen Aufruf durch. Zur Startseite, dort ist der Login.
+        window.location.replace("/");
+        return <div className="ladeschirm"><div className="puls" /></div>;
+    }
+
+    if (imPanel && angemeldet && (imAdmin || ausHash)) {
         return (
             <Betrieb
-                seite={betrieb[1]}
+                seite={imAdmin ? ausPfad?.[1] : ausHash[1]}
                 gehe={(ziel) => {
-                    window.location.hash = ziel === "zurueck" ? "" : `#/betrieb/${ziel}`;
-                    // Der Wechsel zwischen zwei Bereichen ist ein Seitenwechsel,
-                    // kein Zustandswechsel - ein Neuladen ist hier ehrlicher als
-                    // ein zweiter Wegweiser, der beide Baeume auseinanderhaelt.
-                    window.location.reload();
+                    if (ziel === "zurueck") {
+                        window.location.href = "/dashboard";
+                        return;
+                    }
+                    // Unter /admin traegt der Pfad den Ort, im Panel der Hash.
+                    // Ein Bereichswechsel ist ein Seitenwechsel, kein
+                    // Zustandswechsel - neu laden ist hier ehrlicher als ein
+                    // zweiter Wegweiser, der beide Baeume auseinanderhaelt.
+                    if (imAdmin) {
+                        window.location.href = `/admin/${ziel}`;
+                    } else {
+                        window.location.hash = `#/betrieb/${ziel}`;
+                        window.location.reload();
+                    }
                 }}
             />
         );

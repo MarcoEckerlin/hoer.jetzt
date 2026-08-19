@@ -1,6 +1,7 @@
 import React from "react";
 import { Auswahl, Farbe, Feld, Mehrzeilig, Rollenwahl, Schalter, Text } from "../teile/felder.jsx";
 import EmbedEditor from "../teile/EmbedEditor.jsx";
+import Bildfeld from "../teile/Bildfeld.jsx";
 import { Modulseite, useModul } from "./rahmen.jsx";
 
 /**
@@ -110,11 +111,13 @@ export default function Verify({ guildId, konfig, neuLaden }) {
                     <Feld titel="Farbe" kind={<Farbe wert={e.accentColor} setzen={(x) => m.setzeFeld("accentColor", x)} />} />
                     <Feld
                         titel="Bild"
-                        kind={<Text wert={e.imageUrl} setzen={(x) => m.setzeFeld("imageUrl", x)} platzhalter="https://…" />}
+                        kind={<Bildfeld wert={e.imageUrl} setzen={(x) => m.setzeFeld("imageUrl", x)}
+                                            seitenverhaeltnis={16 / 9} zielbreite={1024} />}
                     />
                     <Feld
                         titel="Kleines Bild"
-                        kind={<Text wert={e.thumbnailUrl} setzen={(x) => m.setzeFeld("thumbnailUrl", x)} platzhalter="https://…" />}
+                        kind={<Bildfeld wert={e.thumbnailUrl} setzen={(x) => m.setzeFeld("thumbnailUrl", x)}
+                                            seitenverhaeltnis={1} zielbreite={512} />}
                     />
                 </div>
 

@@ -27,8 +27,29 @@ function block(waehler) {
     return werte;
 }
 
-const dunkel = block(":root {");
-const hell = { ...dunkel, ...block(':root[data-theme="light"]') };
+// Eine Fassung statt zweier - siehe Kopf von stil.css.
+//
+// Die Namen der Oberflaeche zeigen auf die fuenf Designfarben
+// (--text: var(--tinte)), deshalb wird einmal aufgeloest, bevor gerechnet
+// wird. Ohne das faende der Pruefer ueberall "kein Hexwert" und meldete
+// stillschweigend nichts - eine Pruefung, die nie etwas findet, ist keine.
+function aufloesen(roh) {
+    const token = {};
+    for (const [name, wert] of Object.entries(roh)) {
+        let wo = wert;
+        for (let runde = 0; runde < 5 && wo.trim().startsWith("var("); runde++) {
+            const innen = wo.trim().slice(4, -1).trim();
+            if (!/^--[a-z0-9-]+$/.test(innen)) break;
+            wo = roh[innen] || wo;
+        }
+        token[name] = wo;
+    }
+    return token;
+}
+
+const rohHell = block(":root {");
+const rohDunkel = { ...rohHell, ...block(String.raw`:root[data-theme="dark"]`) };
+const schemata = [["hell", aufloesen(rohHell)], ["dunkel", aufloesen(rohDunkel)]];
 
 function rgb(wert) {
     const treffer = /^#([0-9a-f]{6})$/i.exec(wert.trim());
@@ -86,7 +107,7 @@ const GRENZE_GROSS = 3.0;
 
 let schlecht = 0;
 
-for (const [schema, token] of [["dunkel", dunkel], ["hell", hell]]) {
+for (const [schema, token] of schemata) {
     console.log("\n=== " + schema.toUpperCase());
     for (const [vorne, hinten, deckung, was] of paare) {
         const v = rgb(token[vorne]);
@@ -107,7 +128,57 @@ for (const [schema, token] of [["dunkel", dunkel], ["hell", hell]]) {
     }
 }
 
-console.log("\n" + (schlecht === 0
+/*
+ * Zweite Pruefung: feste Flaeche ohne feste Schrift.
+ *
+ * Die Rechnung oben prueft Token gegen Token. Einen Fall findet sie nicht,
+ * und der hat zugeschlagen: eine Regel setzt eine der fuenf Designfarben als
+ * Grund - die sind in beiden Schemata gleich - und laesst die Schriftfarbe
+ * offen. Geerbt wird dann die Seitenfarbe, und die wechselt mit dem Schema.
+ * Im hellen Schema faellt nichts auf, im dunklen stand Weiss auf Neongruen:
+ * gemessener Kontrast 1.00, also unlesbar.
+ *
+ * Die Regel dahinter ist einfach genug fuer eine Maschine: wer den Grund
+ * festnagelt, nagelt auch die Schrift fest.
+ */
+const FESTE_FLAECHE = /background\s*:\s*var\(--(acid|violett|orange|tinte|papier)\)/;
+const offen = [];
+for (const treffer of css.matchAll(/(?:^|\})\s*([^{}@]+?)\s*\{([^}]*)\}/gm)) {
+    const waehler = treffer[1];
+    const rumpf = treffer[2];
+    if (!FESTE_FLAECHE.test(rumpf)) continue;
+    if (/(?:^|;)\s*color\s*:/.test(rumpf)) continue;
+    offen.push(waehler.trim().replace(/\s+/g, " "));
+}
+
+// Regeln ohne eigenen Text - dort ist die Schriftfarbe belanglos.
+const OHNE_TEXT = /(:before|:after|^\.orbit|-marke\b|-punkt\b|^\.ampel|^\.puls|scroll-progress|brand-dot|visual-stage|^\.needle|^\.menu-button span|^\.eyebrow i|^\.play-button|^\.speaker-icon|^\.community-stat i|^\.timeline b i|nav-links a$)/;
+
+// Wer weiter unten eine Dunkel-Fassung bekommt, ist versorgt: dort steht die
+// Schriftfarbe dann ausdruecklich. Ohne diese Ausnahme meldete der Pruefer
+// jeden solchen Fall doppelt - und ein Pruefer, der bekannte Fehlalarme
+// ausgibt, wird nach der dritten Meldung nicht mehr gelesen.
+function hatDunkelfassung(waehler) {
+    const gesucht = ':root[data-theme="dark"] ' + waehler;
+    return css.includes(gesucht + " ") || css.includes(gesucht + "{");
+}
+
+// Das Theme-Praefix vor dem Vergleich abschneiden: ".timeline b i" steht in
+// der Liste der textlosen Regeln, ':root[data-theme="dark"] .timeline b i'
+// aber nicht - und es ist dieselbe Regel.
+const ohnePraefix = (w) => w.replace(/^:root\[data-theme="[a-z]+"\]\s*/, "");
+const echte = offen.filter((w) => !OHNE_TEXT.test(ohnePraefix(w)) && !hatDunkelfassung(w));
+
+console.log("\n=== FESTE FLAECHE OHNE FESTE SCHRIFT");
+if (echte.length === 0) {
+    console.log("  ok  keine.");
+} else {
+    for (const w of echte) console.log("  !! " + w);
+}
+
+const gesamt = schlecht + echte.length;
+console.log("\n" + (gesamt === 0
     ? "Alles ueber der Grenze."
-    : schlecht + " Kombination(en) unter der Grenze."));
-process.exit(schlecht === 0 ? 0 : 1);
+    : schlecht + " Kombination(en) unter der Grenze, "
+      + echte.length + " Regel(n) ohne eigene Schriftfarbe."));
+process.exit(gesamt === 0 ? 0 : 1);

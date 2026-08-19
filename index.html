@@ -3,6 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Ohne diese Zeile bleibt der Browser-Tab leer: public/favicon.svg
+         existierte laengst, aber Browser fragen von sich aus nur nach
+         /favicon.ico. Ist im Adminbereich ein Markenbild hinterlegt, tauscht
+         lib/marke.js den Verweis nach dem Laden aus. -->
+    <link id="seitensymbol" rel="icon" type="image/svg+xml" href="/favicon.svg">
     <title>hoer.jetzt — Musik auf deinem Discord</title>
     <meta name="description" content="Musikbot für Discord. Webradio, Warteschlange, Rollen, Tickets — bedienbar im Browser statt über zwanzig Befehle.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -17,9 +22,18 @@
        * waehlte, sass drueben wieder im Dunkeln.
        */
       (function () {
+        /*
+         * Schluessel und Werte muessen zu lib/farbschema.js passen.
+         *
+         * Hier stand "discordbot-theme" mit den Werten light/dark - ein Rest
+         * aus der alten Oberflaeche. Geschrieben wird laengst
+         * "hoerjetzt.farbschema" mit hell/dunkel. Folge: beim ersten Zeichnen
+         * galt immer die Vorgabe, und erst React ruckte das Schema zurecht -
+         * genau das Aufblitzen, das dieses Skript verhindern soll.
+         */
         var modus = "system";
-        try { modus = localStorage.getItem("discordbot-theme") || "system"; } catch (e) {}
-        var hell = modus === "light"
+        try { modus = localStorage.getItem("hoerjetzt.farbschema") || "system"; } catch (e) {}
+        var hell = modus === "hell"
           || (modus === "system" && window.matchMedia
               && window.matchMedia("(prefers-color-scheme: light)").matches);
         document.documentElement.setAttribute("data-theme", hell ? "light" : "dark");

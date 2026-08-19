@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { api } from "../lib/api.js";
 import Farbschema from "./Farbschema.jsx";
+import { api } from "../lib/api.js";
 
 /**
  * Wer angemeldet ist - unten links, wie in Discord.
@@ -46,7 +46,7 @@ export default function Benutzerleiste({ ich: mitgegeben }) {
                     {ich?.botAdmin && (
                         <a
                             className="benutzermenue-zeile"
-                            href="/dashboard#/betrieb/verbund"
+                            href="/admin"
                             onClick={() => window.setTimeout(() => window.location.reload(), 0)}
                         >
                             Betrieb

@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Auswahl, Farbe, Feld, Mehrzeilig, Text } from "./felder.jsx";
+import Bildfeld from "./Bildfeld.jsx";
 
 /**
  * Der Editor fuer eine eingebettete Nachricht - samt Vorschau.
@@ -90,12 +91,14 @@ export default function EmbedEditor({ embed, setzen, vorlagen, vorlageId, vorlag
                     <Feld
                         titel="Großes Bild"
                         hilfe="Steht unten, über der Fußzeile."
-                        kind={<Text wert={e.bildUrl} setzen={(v) => feld("bildUrl", v)} placeholder="https://…" />}
+                        kind={<Bildfeld wert={e.bildUrl} setzen={(v) => feld("bildUrl", v)}
+                                        seitenverhaeltnis={16 / 9} zielbreite={1024} />}
                     />
                     <Feld
                         titel="Kleines Bild"
                         hilfe="Rechts oben neben dem Titel."
-                        kind={<Text wert={e.thumbnailUrl} setzen={(v) => feld("thumbnailUrl", v)} placeholder="https://…" />}
+                        kind={<Bildfeld wert={e.thumbnailUrl} setzen={(v) => feld("thumbnailUrl", v)}
+                                        seitenverhaeltnis={1} zielbreite={512} />}
                     />
 
                     <Bilderliste
@@ -137,11 +140,13 @@ function Bilderliste({ bilder, setzen, hatHaupt }) {
             <label className="feld-titel">Weitere Bilder</label>
             {bilder.map((b, i) => (
                 <div className="listenzeile" key={i}>
-                    <input
-                        className="eingabe"
-                        value={b}
-                        placeholder="https://…"
-                        onChange={(ev) => setzen(bilder.map((x, j) => (j === i ? ev.target.value : x)))}
+                    {/* Dieselbe Behandlung wie das grosse Bild - Discord stellt
+                        die Zusatzbilder in derselben Galerie dar. */}
+                    <Bildfeld
+                        wert={b}
+                        setzen={(v) => setzen(bilder.map((x, j) => (j === i ? v : x)))}
+                        seitenverhaeltnis={16 / 9}
+                        zielbreite={1024}
                     />
                     <button className="knopf leise klein" onClick={() => setzen(bilder.filter((_, j) => j !== i))}>
                         Entfernen

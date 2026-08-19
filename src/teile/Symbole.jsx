@@ -50,7 +50,24 @@ export const SYMBOLE = {
     befehle: <Symbol kinder={<><rect x="2" y="4" width="20" height="16" rx="2" /><path d="m7 10 2.5 2.5L7 15M13 15h4" /></>} />,
     verbund: <Symbol kinder={<><circle cx="12" cy="5" r="2.5" /><circle cx="5" cy="18" r="2.5" /><circle cx="19" cy="18" r="2.5" /><path d="M10.5 7 6.5 15.5M13.5 7l4 8.5M7.5 18h9" /></>} />,
     knoten: <Symbol kinder={<><rect x="3" y="4" width="18" height="6" rx="1.5" /><rect x="3" y="14" width="18" height="6" rx="1.5" /><path d="M7 7h.01M7 17h.01" /></>} />,
-    werkzeug: <Symbol kinder={<><path d="M14.5 5.5a4 4 0 0 0 5.3 5.3l-8.3 8.3a2.5 2.5 0 0 1-3.6-3.6z" /><path d="m5 5 3 3" /></>} />
+    werkzeug: <Symbol kinder={<><path d="M14.5 5.5a4 4 0 0 0 5.3 5.3l-8.3 8.3a2.5 2.5 0 0 1-3.6-3.6z" /><path d="m5 5 3 3" /></>} />,
+    instanz: <Symbol kinder={<><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 10h18M7 14h4" /></>} />,
+    personen: <Symbol kinder={<><circle cx="9" cy="8" r="3.5" /><path d="M2.5 19a6.5 6.5 0 0 1 13 0" /><path d="M16.5 5.5a3.5 3.5 0 0 1 0 6.5M18 14.5a5.5 5.5 0 0 1 3.5 4.5" /></>} />,
+
+    // Fernbedienung. Play und Stopp sind gefuellt, weil sie als Flaeche
+    // gelesen werden - ein umrandetes Dreieck wirkt neben den uebrigen
+    // Strichsymbolen wie ein Platzhalter.
+    abspielen: <Symbol kinder={<path d="M7 4.5 19 12 7 19.5z" fill="currentColor" stroke="none" />} />,
+    pause: <Symbol kinder={<><rect x="6.5" y="4.5" width="4" height="15" rx="1" fill="currentColor" stroke="none" /><rect x="13.5" y="4.5" width="4" height="15" rx="1" fill="currentColor" stroke="none" /></>} />,
+    weiter: <Symbol kinder={<><path d="M6 5.5 15 12 6 18.5z" fill="currentColor" stroke="none" /><path d="M18 5v14" /></>} />,
+    stopp: <Symbol kinder={<rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none" />} />,
+    wiederholen: <Symbol kinder={<><path d="M4 9V8a3 3 0 0 1 3-3h10l-2.5-2.5M20 15v1a3 3 0 0 1-3 3H7l2.5 2.5" /></>} />,
+    bass: <Symbol kinder={<><path d="M4 12h2M9 12h2M14 12h2M19 12h1" /><path d="M5 7v10M10 4v16M15 8v8M20 10v4" /></>} />,
+    lautstaerke: <Symbol kinder={<><path d="M4 9.5h3L11 6v12l-4-3.5H4z" /><path d="M15 9.5a3.5 3.5 0 0 1 0 5M17.5 7a7 7 0 0 1 0 10" /></>} />,
+    nachOben: <Symbol kinder={<path d="M12 19V5M6 11l6-6 6 6" />} />,
+    entfernen: <Symbol kinder={<><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13" /><path d="M10 11v6M14 11v6" /></>} />,
+    suche: <Symbol kinder={<><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4.5 4.5" /></>} />,
+    warteschlange: <Symbol kinder={<><path d="M4 7h11M4 12h11M4 17h7" /><path d="M18 9v9" /><circle cx="16" cy="18" r="2" /></>} />
 };
 
 export default SYMBOLE;

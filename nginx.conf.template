@@ -44,6 +44,17 @@ server {
     listen 80;
     server_name _;
 
+    # Bild-Uploads duerfen bis 4 MB.
+    #
+    # Ohne diese Zeile gilt der nginx-Standard: 1 MB. Der Bot erlaubt 3 MB und
+    # meldet das auch so - abgewiesen haette aber nginx, vor dem Backend, mit
+    # einer HTML-Fehlerseite statt einer JSON-Meldung. Der Nutzer haette
+    # "maximal 3 MB" gelesen und waere bei 1,5 MB gescheitert.
+    #
+    # 4 MB, damit der Mehraufwand von multipart/form-data hineinpasst -
+    # derselbe Wert wie spring.servlet.multipart.max-request-size in Main.java.
+    client_max_body_size 4m;
+
     # Gebaute Dateien tragen einen Hash im Namen - die duerfen ewig liegen.
     location /assets/ {
         root /usr/share/nginx/html;
@@ -53,7 +64,11 @@ server {
     }
 
     # Alles, was core gehoert.
-    location ~ ^/(api|auth|login|logout|public|impressum|datenschutz|stats|invite|cookies)(/|$) {
+    # "media" gehoert seit dem Bild-Upload dazu: /media/{id} liefert core aus
+    # der Datenbank. Ohne den Eintrag fiel der Pfad in die letzte Regel und
+    # bekam die index.html der Oberflaeche zurueck - jedes hochgeladene Bild
+    # waere ein kaputtes Bild gewesen, obwohl es korrekt gespeichert war.
+    location ~ ^/(api|auth|login|logout|media|public|impressum|datenschutz|tos|nutzungsbedingungen|stats|invite|cookies)(/|$) {
         proxy_pass http://core;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
@@ -98,11 +113,26 @@ server {
     # Geschuetzt wird er jetzt dort, wo es zaehlt: der Bot prueft bei jedem
     # einzelnen Aufruf, ob die Sitzung Bot-Administrator ist. Die Oberflaeche
     # blendet den Bereich nur zusaetzlich aus.
-    location /admin {
+    # Die alte Verwaltungsoberflaeche. Bleibt erreichbar, ist aber nirgends
+    # mehr verlinkt - alles, was sie konnte, steht jetzt im Betriebsbereich.
+    # Exakter Treffer, damit sie /admin selbst nicht mehr an sich zieht.
+    location = /admin/klassisch {
         proxy_pass http://core;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-Proto $hj_proto;
         proxy_set_header X-Forwarded-Port $hj_port;
+    }
+
+    # /admin ist die Adresse, die alle im Kopf haben - und ab hier auch die,
+    # die in der Adresszeile stehen bleibt.
+    #
+    # Vorher stand hier ein Redirect nach /dashboard#/betrieb/..., und genau
+    # das war das Verteilte: ein Lesezeichen auf /admin landete woanders, als
+    # es hiess. Jetzt liefert nginx dieselbe Anwendung aus, und sie erkennt am
+    # Pfad, dass der Betriebsbereich gemeint ist.
+    location /admin {
+        root /usr/share/nginx/html;
+        try_files /index.html =404;
     }
 
     # Alles andere ist die React-Anwendung. Sie fuehrt ihre Wege selbst,

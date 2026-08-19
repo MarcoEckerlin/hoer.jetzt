@@ -1,35 +1,31 @@
-import React, { useEffect, useRef, useState } from "react";
-import { anwenden, gespeicherterModus, systemBeobachten } from "../lib/farbschema.js";
+import React, { useState } from "react";
+import { gewaehlt, setzen } from "../lib/farbschema.js";
 
 /**
- * Der Umschalter fuer das Farbschema.
+ * Der Umschalter fuer hell und dunkel.
  *
- * <p>Drei Knoepfe statt eines Umschalters mit zwei Zustaenden: „System" ist
- * eine eigene Aussage und nicht dasselbe wie „dunkel". Wer sein Betriebssystem
- * abends auf hell umstellt, will die Seite mitziehen sehen - mit einem
- * Zweifach-Schalter geht diese Auskunft verloren, sobald man einmal
- * angetippt hat.</p>
+ * <p>Drei Knoepfe statt eines Kippschalters: "System" ist eine eigene Wahl
+ * und nicht dasselbe wie "gerade zufaellig hell". Wer sie trifft, will, dass
+ * die Seite mitzieht, wenn das Geraet abends umschaltet - ein Kippschalter
+ * kann das nicht ausdruecken.</p>
  */
 export default function Farbschema({ klein }) {
-    const [modus, setModus] = useState(gespeicherterModus);
-    const jetzigen = useRef(modus);
-    jetzigen.current = modus;
+    const [wahl, setWahl] = useState(gewaehlt);
 
-    useEffect(() => {
-        anwenden(modus);
-    }, [modus]);
-
-    useEffect(() => systemBeobachten(() => jetzigen.current), []);
+    function waehlen(neu) {
+        setzen(neu);
+        setWahl(neu);
+    }
 
     return (
         <div className={`farbschema ${klein ? "ist-klein" : ""}`} role="group" aria-label="Farbschema">
-            {[["system", "System"], ["dark", "Dunkel"], ["light", "Hell"]].map(([wert, titel]) => (
+            {[["system", "System"], ["hell", "Hell"], ["dunkel", "Dunkel"]].map(([id, titel]) => (
                 <button
-                    key={wert}
+                    key={id}
                     type="button"
                     className="farbschema-knopf"
-                    aria-pressed={modus === wert}
-                    onClick={() => setModus(wert)}
+                    aria-pressed={wahl === id}
+                    onClick={() => waehlen(id)}
                 >
                     {titel}
                 </button>

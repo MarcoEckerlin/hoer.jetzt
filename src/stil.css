@@ -1,76 +1,137 @@
 /*
- * hoer.jetzt - Weboberflaeche
+ * hoer.jetzt - Farben, Schrift, Kanten
  *
- * Eigene Eigenschaften statt eines Rahmenwerks: die Oberflaeche hat ein
- * Dutzend Bausteine, kein Baukasten braucht dafuer 200 kB. Farben liegen
- * zentral, damit ein Schemawechsel nicht 40 Stellen anfasst.
+ * Eine Fassung, kein Hell/Dunkel mehr.
+ *
+ * Vorher gab es zwei vollstaendige Farbwelten und einen Umschalter. Das war
+ * doppelte Pflege bei jeder neuen Komponente und der Grund, warum die
+ * Oberflaeche an den Raendern auseinanderlief - eine Regel, die nur im dunklen
+ * Modus geprueft war, sah hell falsch aus und umgekehrt. Das neue Design ist
+ * eine bewusste Entscheidung fuer helles Papier mit harten Kanten; das haelt
+ * nur, wenn es nicht gleichzeitig auch dunkel sein soll.
  */
 
-:root {
-    color-scheme: dark;
-    --grund: #0b0d12;
-    --flaeche: #151821;
-    --flaeche-2: #1c2029;
-    --linie: #262b36;
-    --text: #e6e9ef;
-    --text-leise: #9aa3b2;
-    --akzent: #7ca9ff;
-    --akzent-2: #b98cff;
-    --gruen: #4ade80;
-    --rot: #f87171;
-    --warn: #fbbf24;
-    --gold: #f0c674;
-    --akzent-schrift: #0b0d12;
-    /*
-     * Wie stark ein Knopf auf Mauskontakt reagiert.
-     *
-     * Frueher stand in der Regel fest "filter: brightness(1.08)". Auf dunklem
-     * Grund heisst aufhellen "hervortreten" - im hellen Modus heisst es "in
-     * Richtung Weiss verschwinden", und genau so sah es dort auch aus. Der
-     * Faktor gehoert deshalb ins Farbschema und nicht in die Regel.
-     */
-    --hover-helligkeit: 1.12;
-    --schatten: 0 10px 30px rgba(0, 0, 0, 0.35);
-    --radius: 14px;
-    --schrift: "gg sans", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+@font-face {
+    font-family: "Space Grotesk";
+    font-style: normal;
+    font-weight: 300 700;
+    font-display: swap;
+    src: url("/schrift/space-grotesk-a57c9413.woff2") format("woff2");
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+        U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191,
+        U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
-/*
- * Heller Modus.
- *
- * Attribut und Speicherschluessel sind dieselben wie in der bisherigen
- * Ansicht - eine Wahl, zwei Oberflaechen.
- *
- * Der Akzent ist ein anderer Blauton als im dunklen Modus, und das muss er
- * sein: #7ca9ff kommt auf weissem Grund auf Kontrast 1.7 und waere als Schrift
- * unlesbar. Ein Wert fuer beide Modi geht bei einem hellen Akzent nicht auf.
- */
-:root[data-theme="light"] {
+@font-face {
+    font-family: "Space Grotesk";
+    font-style: normal;
+    font-weight: 300 700;
+    font-display: swap;
+    src: url("/schrift/space-grotesk-e911c2d9.woff2") format("woff2");
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+        U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+2113, U+A720-A7FF;
+}
+
+:root {
     color-scheme: light;
 
-    --grund: #f7f8fb;
-    --flaeche: #ffffff;
-    --flaeche-2: #f0f2f7;
-    --linie: #e2e6ee;
-    --text: #12151c;
-    --text-leise: #5c6472;
-    --akzent: #3868cd;
-    --akzent-2: #7c4bd0;
-    /* Etwas dunkler als der reine Signalton: auf der leicht grauen
-       Kartenflaeche (#f0f2f7) kam #15803d auf 4.48 und lag damit knapp unter
-       der Lesbarkeitsgrenze. Gemessen, nicht geschaetzt. */
-    --gruen: #137035;
-    --rot: #c92a2a;
-    /* #fbbf24 kommt auf weissem Grund auf Kontrast 1.7 und ist als Schrift
-       unlesbar - die Warnfarbe braucht im hellen Modus einen eigenen Ton. */
-    --warn: #92620a;
-    --gold: #8a6516;
+    /* Die fuenf Farben des Designs. */
+    --tinte: #10100f;
+    --papier: #f2efe7;
+    --acid: #d9ff43;
+    --violett: #7667ff;
+    --orange: #ff6b3d;
+
+    /*
+     * Die Namen der Oberflaeche zeigen auf diese fuenf.
+     *
+     * So bleibt jede Regel im Panel unveraendert - sie fragt weiter nach
+     * --flaeche und --linie und bekommt jetzt eben Papier und Tinte.
+     */
+    --grund: var(--papier);
+    --flaeche: #f8f6ef;
+    --flaeche-2: #eae6db;
+    --linie: var(--tinte);
+    --linie-leise: rgba(16, 16, 15, 0.18);
+    --text: var(--tinte);
+    --text-leise: #5f5d57;
+
+    /*
+     * Flaechenfarbe und Schriftfarbe sind nicht dasselbe.
+     *
+     * --violett und --orange sind im Entwurf grosse Flaechen, Schatten und
+     * Rahmen - dort funktionieren sie. Als Schrift auf Papier kommen sie auf
+     * 3.55 beziehungsweise 2.46 und sind unlesbar. Deshalb je eine
+     * abgedunkelte Fassung fuer Text und Links; die hellen bleiben den
+     * Flaechen vorbehalten. Nachgerechnet mit pruefen/kontrast-pruefen.cjs.
+     */
+    --akzent: #5f4fe0;
+    --akzent-2: #c4441c;
     --akzent-schrift: #ffffff;
-    /* Abdunkeln statt aufhellen - siehe oben. */
-    --hover-helligkeit: 0.94;
-    /* Im hellen Modus ein leiser Schatten: derselbe schwarze Schlagschatten
-       wirkt auf hellem Grund wie ein Fleck. */
-    --schatten: 0 8px 24px rgba(18, 21, 28, 0.12);
+
+    /* Signalfarben. Gegen Papier geprueft, nicht gegen Weiss - die Flaeche
+       ist #f2efe7 und schluckt etwas Kontrast. */
+    --gruen: #1c6b3f;
+    --rot: #c02a1c;
+    --warn: #8a6a12;
+    --gold: #8a6a12;
+
+    /*
+     * Der harte Schatten ist das Erkennungszeichen des Designs: kein Weichzeichner,
+     * sondern ein versetzter Block in Tinte. Deshalb keine Unschaerfe.
+     */
+    --schatten: 5px 5px 0 var(--tinte);
+    --schatten-klein: 3px 3px 0 var(--tinte);
+    --hover-helligkeit: 1;
+
+    /* Kanten sind eckig. Ein 14px-Radius auf einer Karte mit 1.5px-Rahmen
+       sieht nach Bootstrap aus, nicht nach diesem Design. */
+    --radius: 0px;
+    --radius-klein: 0px;
+
+    --schrift: "Space Grotesk", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+/* ==========================================================================
+   Dunkelfassung
+   --------------------------------------------------------------------------
+   Kein Umkehren der hellen Werte, sondern eine eigene Abstimmung: das Design
+   hat mit dem dunklen Abschnitt der Startseite bereits eine - dort steht
+   Papier auf Tinte, und der harte Versatzschatten ist violett statt schwarz.
+   Genau das ist hier die Vorlage. Ein schwarzer Schatten waere auf dunklem
+   Grund unsichtbar und das Erkennungszeichen des Designs damit weg.
+
+   Geschaltet wird ueber ein data-theme am <html>. Die Wahl "System" loest
+   das Skript beim Laden selbst auf und setzt ebenfalls einen festen Wert -
+   deshalb genuegt hier eine Regelmenge statt einer zusaetzlichen
+   Medienabfrage. Zwei Quellen fuer dieselbe Entscheidung waeren genau die
+   Stelle, an der spaeter die Haelfte umschaltet und die andere nicht:
+   die Startseite benutzt die Designfarben unmittelbar und kaeme in einer
+   Medienabfrage nie mit.
+   ========================================================================== */
+
+:root[data-theme="dark"] {
+    color-scheme: dark;
+
+    --grund: #14130f;
+    --flaeche: #1c1b16;
+    --flaeche-2: #262419;
+    --linie: #6b6965;
+    --linie-leise: rgba(242, 239, 231, 0.16);
+    --text: var(--papier);
+    --text-leise: #b5b1a7;
+
+    --akzent: #a99bff;
+    --akzent-2: #ff8f66;
+    --akzent-schrift: var(--tinte);
+
+    --gruen: #4ade80;
+    --rot: #f87171;
+    --warn: #f5c451;
+    --gold: #f5c451;
+
+    --schatten: 5px 5px 0 var(--violett);
+    --schatten-klein: 3px 3px 0 var(--violett);
 }
 
 * { box-sizing: border-box; }
@@ -397,8 +458,8 @@ a { color: inherit; text-decoration: none; }
     width: 48px;
     height: 48px;
     flex: 0 0 48px;
-    border: 0;
-    border-radius: 50%;
+    border-radius: 0;
+    border: 1.5px solid var(--linie);
     background: var(--flaeche);
     color: var(--text);
     font: inherit;
@@ -409,21 +470,48 @@ a { color: inherit; text-decoration: none; }
     display: flex;
     align-items: center;
     justify-content: center;
-    /* Discords Kennzeichen: aus dem Kreis wird beim Zeigen ein Quadrat mit
-       runden Ecken. Nur ueber border-radius, nicht ueber transform - eine
-       Skalierung liesse das Bild darin unscharf werden. */
-    transition: border-radius 0.15s ease, background 0.15s ease;
+    transition: box-shadow 0.15s ease, background 0.15s ease, transform 0.15s ease;
 }
 
+/*
+ * Quadratisch, nicht rund.
+ *
+ * Vorher war der Knopf ein Kreis (border-radius: 50%) und das Bild darin per
+ * object-fit: cover beschnitten. Bei einem quadratischen Serverlogo faellt das
+ * kaum auf; bei einem breiten Schriftzug schneidet der Kreis links und rechts
+ * die Haelfte weg - das Logo wirkt dann zusammengedrueckt, obwohl nichts
+ * verzerrt ist. Genau das war zweimal die falsche Faehrte.
+ *
+ * Quadratisch passt ausserdem zum Design: harte Kanten, versetzter Schatten,
+ * kein Radius. object-fit bleibt "contain" statt "cover" - lieber ein Rand
+ * neben dem Logo als ein abgeschnittenes Logo.
+ */
 .serverknopf img {
     width: 100%;
     height: 100%;
-    object-fit: cover;
-    border-radius: inherit;
+    object-fit: contain;
+    /*
+     * Die Flaeche des Knopfes, nicht Weiss.
+     *
+     * "contain" laesst Balken stehen, wo das Logo nicht quadratisch ist, und
+     * transparente Logos zeigen ohnehin durch. Ein fest weisses Feld war dafuer
+     * die falsche Antwort: im dunklen Schema leuchtete dann jede Kachel hell
+     * auf. Der Token traegt beide Schemata.
+     */
+    background: var(--flaeche);
 }
 
-.serverknopf:hover,
-.serverknopf.ist-aktiv { border-radius: 16px; background: var(--akzent); color: var(--akzent-schrift); }
+.serverknopf:hover {
+    background: var(--flaeche-2);
+    transform: translate(-1px, -1px);
+    box-shadow: var(--schatten-klein);
+}
+
+.serverknopf.ist-aktiv {
+    background: var(--acid);
+    color: var(--tinte);
+    box-shadow: var(--schatten-klein);
+}
 
 /* Der Strich links am aktiven Server. In Discord ist er die eigentliche
    Ortsangabe - die Farbe allein sagt es auf einem kleinen Bildschirm nicht. */
@@ -483,6 +571,22 @@ a { color: inherit; text-decoration: none; }
 }
 .notiz a { color: var(--akzent); text-decoration: underline; }
 .notiz-fehler { border-color: var(--rot); color: var(--rot); }
+
+/*
+ * Der Rhythmus der Modulseiten.
+ *
+ * Es gab keinen: .karte-flach hat weder Aussenabstand noch stand irgendwo eine
+ * Regel zwischen den Geschwistern. Zwei Karten stiessen also aneinander, und
+ * ein blanker Knopf wie "Tafel hinzufuegen" klebte am Rand der Karte darueber.
+ *
+ * Bewusst "* + *" statt gap am Behaelter: Modulseite reicht ihre Kinder als
+ * Fragment durch, und die Kinder sind allerlei - Karten, Knoepfe, Tabellen,
+ * Hinweise. Flex oder Grid am Elternteil haette deren Eigenhoehe angetastet.
+ * Aussenabstaende benachbarter Geschwister fallen ausserdem zusammen, deshalb
+ * bleibt der groessere Wert von .modulkopf (20px) unter der Ueberschrift
+ * stehen, statt sich mit diesem zu addieren.
+ */
+.dashboard-inhalt > * + * { margin-top: 16px; }
 
 .karte-flach {
     padding: 22px;
@@ -865,6 +969,133 @@ select.eingabe { appearance: none; cursor: pointer; }
 .zeitzeile { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-leise); margin-top: 4px; }
 .lautstaerke { margin-top: 16px; display: flex; flex-direction: column; gap: 6px; }
 .lautstaerke input[type="range"] { width: 100%; max-width: 320px; accent-color: var(--akzent); }
+.lautstaerke .feld-titel { display: flex; align-items: center; gap: 8px; }
+
+/* Symbol und Text in einem Knopf. Ohne den Abstand kleben sie aneinander,
+   ohne flex:none schrumpft das SVG in einer engen Reihe. */
+.knopf .symbol { flex: none; margin-right: 8px; }
+.knopf.klein .symbol { margin-right: 0; }
+
+/*
+ * Der Spieler mit dem Cover als Hintergrund.
+ *
+ * Das Bild liegt abgedunkelt unter dem Inhalt, nicht als Schmuck: es
+ * beantwortet auf einen Blick, ob wirklich der gemeinte Titel laeuft. Der
+ * Verlauf darueber ist kein Effekt, sondern Bedingung - ein helles Cover
+ * haette sonst hellen Text auf hellem Grund. isolation:isolate haelt beide
+ * Schichten in diesem Kasten, sonst legt sich der Verlauf ueber Nachbarn.
+ */
+.spieler { position: relative; overflow: hidden; isolation: isolate; }
+.spieler-inhalt { position: relative; z-index: 1; }
+
+.spieler-grund {
+    position: absolute;
+    inset: 0;
+    background-size: cover;
+    background-position: center;
+    filter: blur(28px) saturate(1.2);
+    transform: scale(1.15);
+    opacity: 0.22;
+    z-index: 0;
+}
+
+/* Gegen helles Papier wirkt dieselbe Deckkraft staerker als gegen
+   Dunkelgrau - deshalb zurueckhaltend. Eine Fassung genuegt jetzt. */
+.spieler-grund { opacity: 0.12; }
+
+/* Ueber das Bild ein Verlauf in der Kartenfarbe: unten deckend, damit
+   Knoepfe und Regler ihren gewohnten Kontrast behalten. */
+.spieler.hat-titel .spieler-grund::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to bottom, transparent, var(--flaeche) 85%);
+}
+
+/* Trefferliste der Vorschau. Bewusst nicht ".vorschau" - so heisst bereits
+   die Embed-Vorschau in den Vorlagen. */
+.trefferliste {
+    margin-top: 14px;
+    border: 1px solid var(--linie);
+    border-radius: 10px;
+    padding: 10px;
+    background: var(--flaeche-2);
+}
+
+.trefferliste-kopf {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 6px;
+}
+
+.trefferzeile {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    text-align: left;
+    padding: 7px 8px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    cursor: pointer;
+}
+
+.trefferzeile:hover { border-color: var(--akzent); background: var(--flaeche); }
+.trefferzeile:disabled { color: var(--text-leise); cursor: default; }
+.trefferzeile-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.trefferzeile-text strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.warteliste-zeile {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 0;
+    border-top: 1px solid var(--linie);
+}
+
+.warteliste-zeile:first-of-type { border-top: 0; }
+.warteliste-nummer { width: 22px; text-align: right; color: var(--text-leise); font-size: 13px; flex: none; }
+
+/* Kleines Cover in Listen. flex:none, sonst quetscht die Flexbox das Bild. */
+.minicover {
+    width: 38px;
+    height: 38px;
+    flex: none;
+    border-radius: 0;
+    object-fit: contain;
+    background: var(--flaeche);
+    border: 1px solid var(--linie);
+}
+
+.minicover.ist-leer,
+.cover.ist-leer {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-leise);
+    background: var(--flaeche-2);
+    border: 1px solid var(--linie);
+}
+
+/* Die Technikkarte klappt auf - ihr Kopf ist deshalb ein Knopf und braucht
+   die Standardgestaltung eines Knopfes wieder abgeraeumt. */
+button.technik-kopf {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    padding: 0;
+    cursor: pointer;
+    text-align: left;
+}
+button.technik-kopf:hover .kachel-titel { color: var(--text); }
+.karte-flach h2 .symbol { margin-right: 8px; vertical-align: -2px; }
 
 /* ------------------------------------------------------------ Tabellen */
 
@@ -902,21 +1133,18 @@ select.eingabe { appearance: none; cursor: pointer; }
     50% { transform: scale(1); opacity: 1; }
 }
 
+/*
+ * Hier standen einmal Regeln, die .modulleiste bei 900px in eine umgebrochene
+ * Zeile verwandelten - aus der Zeit, bevor es die Schublade weiter unten gab.
+ * Beide Bloecke galten gleichzeitig: der spaetere machte die Leiste fest und
+ * schob sie aus dem Bild, waehrend von hier noch "width:100%",
+ * "flex-direction:row" und "order:3" mitliefen. Herausgekommen ist eine
+ * Schublade, die quer statt laengs stand. Zwei Antworten auf dieselbe Frage
+ * sind eine zu viel - die Schublade gewinnt, diese Regeln sind weg.
+ */
 @media (max-width: 900px) {
-    .dashboard { flex-wrap: wrap; }
-    .modulleiste {
-        width: 100%;
-        flex: 1 1 100%;
-        flex-direction: row;
-        flex-wrap: wrap;
-        border-right: 0;
-        border-bottom: 1px solid var(--linie);
-        order: 3;
-    }
-    .modulleiste-kopf { flex: 1 1 100%; padding-bottom: 6px; }
     .modulknopf { width: auto; }
     .modulknopf.leise { margin-top: 0; }
-    .dashboard-inhalt { flex: 1 1 100%; order: 4; padding: 20px 16px 40px; }
     .tabelle .zeile { grid-template-columns: 1.4fr 1fr; }
     .tabelle .kopfzeile { display: none; }
     .vorlagenliste { width: 100%; flex: 1 1 100%; flex-direction: row; flex-wrap: wrap; }
@@ -928,10 +1156,10 @@ select.eingabe { appearance: none; cursor: pointer; }
 
 .sender {
     display: flex;
-    flex-direction: column;
-    gap: 2px;
+    align-items: center;
+    gap: 12px;
     text-align: left;
-    padding: 14px 16px;
+    padding: 12px 14px;
     border: 1px solid var(--linie);
     border-radius: 10px;
     background: var(--flaeche-2);
@@ -940,6 +1168,12 @@ select.eingabe { appearance: none; cursor: pointer; }
     cursor: pointer;
 }
 
+/* min-width:0 ist hier keine Schoenheitskorrektur: ohne sie waechst eine
+   Flexbox mit langem Text ueber ihre Spalte hinaus, statt zu kuerzen. */
+.sender-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.sender-text strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sender-text .leise { font-size: 12px; min-height: 16px; }
+
 .sender:hover { border-color: var(--akzent); }
 .sender.ist-an { border-color: var(--gruen); }
 /* Auch hier keine opacity mehr - 0.55 kam im hellen Modus auf Kontrast 2.34.
@@ -947,37 +1181,44 @@ select.eingabe { appearance: none; cursor: pointer; }
    sonst raet man beim Suchen. */
 .sender:disabled { color: var(--text-leise); border-style: dashed; cursor: default; }
 
-/* Umschalter fuer das Farbschema. */
-.farbschema {
-    display: flex;
-    gap: 2px;
-    padding: 3px;
-    border-radius: 999px;
-    background: var(--flaeche-2);
+/* Senderlogo. flex:none, weil ein <img> in einer Flexbox sonst gestaucht wird -
+   derselbe Fehler wie bei den Serversymbolen. display:flex bekommt nur die
+   Ersatzdarstellung, ein echtes Bild verliert damit sein Seitenverhaeltnis. */
+.senderbild {
+    width: 40px;
+    height: 40px;
+    flex: none;
+    border-radius: 8px;
+    object-fit: cover;
+    background: var(--flaeche);
     border: 1px solid var(--linie);
 }
 
-.farbschema-knopf {
-    border: 0;
-    background: transparent;
-    color: var(--text-leise);
-    font: inherit;
+.senderbild.ist-leer {
+    display: flex;
+    align-items: center;
+    justify-content: center;
     font-size: 13px;
-    padding: 5px 13px;
-    border-radius: 999px;
-    cursor: pointer;
-}
-
-.farbschema-knopf:hover { color: var(--text); }
-
-.farbschema-knopf[aria-pressed="true"] {
-    background: var(--akzent);
-    color: var(--akzent-schrift);
     font-weight: 600;
+    color: var(--text-leise);
 }
 
-.farbschema.ist-klein { margin: 8px 4px 0; }
-.farbschema.ist-klein .farbschema-knopf { padding: 4px 9px; font-size: 12px; }
+.listenzeile-kopf { align-items: flex-start; justify-content: space-between; margin-top: 0; }
+.listenzeile-kopf h2 { margin: 0 0 2px; }
+.listenzeile-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1 1 220px; }
+.listenzeile-text .einfarbig { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Ein Formular innerhalb einer Karte. Abgesetzt, damit erkennbar bleibt,
+   dass es zu genau einem Eintrag gehoert und nicht zur ganzen Liste. */
+.karte-eingebettet {
+    margin-top: 12px;
+    padding: 16px;
+    border: 1px solid var(--linie);
+    border-radius: 10px;
+    background: var(--flaeche-2);
+}
+
+
 
 /* ------------------------------------------------------------ Benutzerbereich
 
@@ -1058,7 +1299,6 @@ select.eingabe { appearance: none; cursor: pointer; }
 .benutzermenue-zeile:hover { background: var(--flaeche-2); color: var(--text); }
 .benutzermenue-zeile.ist-warnung { color: var(--rot); }
 .benutzermenue-zeile.ist-warnung:hover { background: color-mix(in srgb, var(--rot) 12%, transparent); }
-.benutzermenue .farbschema { margin: 2px 2px 6px; }
 
 /* ------------------------------------------------------------ Uebersicht */
 
@@ -1067,12 +1307,10 @@ select.eingabe { appearance: none; cursor: pointer; }
 .serverkopf-bild {
     width: 64px;
     height: 64px;
-    border-radius: 18px;
-    object-fit: cover;
+    border-radius: 0;
+    border: 1.5px solid var(--linie);
+    object-fit: contain;
     flex: 0 0 64px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
     background: var(--akzent);
     color: var(--akzent-schrift);
     font-size: 26px;
@@ -1154,7 +1392,17 @@ select.eingabe { appearance: none; cursor: pointer; }
         bottom: 0;
         left: 72px;
         z-index: 40;
-        transform: translateX(-110%);
+        /*
+         * Die eigene Breite UND der Abstand von links.
+         *
+         * Vorher stand hier translateX(-110%). Prozente beziehen sich beim
+         * Verschieben allein auf die Breite des Elements - das "left: 72px"
+         * bleibt davon unberuehrt. Die Leiste blieb deshalb geschlossen mit
+         * gut 40 Pixeln im Bild stehen: ein Streifen ueber der Serverleiste,
+         * den man fuer einen Rand hielt. Gemessen bei 375px: rechte Kante bei
+         * +42 statt bei 0.
+         */
+        transform: translateX(calc(-100% - 72px));
         transition: transform 0.18s ease;
         box-shadow: var(--schatten);
     }
@@ -1162,6 +1410,86 @@ select.eingabe { appearance: none; cursor: pointer; }
     .dashboard.ist-offen .modulleiste { transform: translateX(0); }
     .dashboard-inhalt { padding: 18px 16px 50px; }
     .serverkopf-bild { width: 48px; height: 48px; flex-basis: 48px; font-size: 20px; }
+
+    /* Der Schirm hinter der Schublade.
+       Ohne ihn bleibt als einziger Weg zurueck der Menueknopf - der liegt aber
+       unter der offenen Schublade. Auf dem Telefon ist "daneben tippen" die
+       Geste, die jeder zuerst versucht. */
+    .menuschirm {
+        position: fixed;
+        inset: 0;
+        z-index: 35;
+        border: 0;
+        padding: 0;
+        background: color-mix(in srgb, var(--grund) 55%, transparent);
+        cursor: pointer;
+    }
+}
+
+/* ===========================================================================
+ * Telefone
+ *
+ * Bis hierher war die kleinste Stufe 900px - also Tablet. Auf 375px blieben
+ * davon zwei Probleme stehen, die sich nicht von selbst geben:
+ *
+ * 1. Die Serverleiste belegte feste 72px. Auf einem Telefon ist das ein
+ *    Fuenftel der Breite, dauerhaft, fuer eine Liste, die man selten braucht.
+ * 2. "height: 100vh" ist auf Mobilbrowsern nicht die sichtbare Hoehe: die
+ *    Adresszeile zaehlt mit. Der untere Rand des Panels lag damit hinter der
+ *    Browserleiste - genau dort, wo die Benutzerleiste sitzt.
+ *
+ * Antwort auf beides: Serverleiste und Modulleiste fahren gemeinsam als eine
+ * Schublade ein, der Inhalt bekommt die volle Breite, und die Hoehe kommt von
+ * dvh. Zwei getrennte Schubladen waeren ein Griff mehr fuer denselben Weg.
+ * =========================================================================== */
+@media (max-width: 560px) {
+    .dashboard {
+        /* 100vh bleibt als Rueckfall fuer Browser ohne dvh stehen. */
+        height: 100vh;
+        height: 100dvh;
+    }
+
+    .serverleiste {
+        position: fixed;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        z-index: 41;
+        border-right: 1px solid var(--linie);
+        transform: translateX(-110%);
+        transition: transform 0.18s ease;
+    }
+
+    .dashboard.ist-offen .serverleiste { transform: translateX(0); }
+
+    /* Beide Leisten fahren zusammen ein und stossen aneinander. */
+    .modulleiste { width: calc(100vw - 72px); flex-basis: calc(100vw - 72px); }
+
+    .dashboard-inhalt { padding: 14px 14px 48px; }
+
+    /* Der Menueknopf ist auf dem Telefon der einzige Weg in die Schublade -
+       also gross genug zum Treffen, nicht nur gross genug zum Sehen. */
+    .menuknopf { padding: 10px 14px; font-size: 15px; }
+
+    .kopfleiste { gap: 14px; padding: 12px 16px; }
+
+    /* Ein Dialog, der auf 375px noch 20px Rand haelt, verschenkt zehn Prozent
+       der Breite an nichts. */
+    .schicht { padding: 0; }
+    .schicht-fenster {
+        width: 100%;
+        max-height: 100dvh;
+        height: 100dvh;
+        border: 0;
+        border-radius: 0;
+    }
+
+    /* Zwei Spalten auf 375px sind zwei zu schmale Spalten. */
+    .feldgitter { grid-template-columns: 1fr; }
+    .tabelle .zeile { grid-template-columns: 1fr; gap: 4px; }
+
+    /* Knoepfe am Zeilenende brechen um, statt sich gegenseitig zu quetschen. */
+    .listenzeile > .knopf { flex: 1 1 auto; }
 }
 
 /* ------------------------------------------------------------ Technik-Karte
@@ -1334,6 +1662,146 @@ select.eingabe { appearance: none; cursor: pointer; }
     gap: 14px;
 }
 
+/* --- Bildfeld: Adresse, Vorschau, Upload --------------------------------- */
+
+.bildfeld { display: flex; flex-direction: column; gap: 6px; }
+
+/* Das Textfeld nimmt den Rest: die Adresse ist der lange Teil, die Knoepfe
+   haben eine feste Breite. */
+.bildfeld-zeile { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.bildfeld-zeile .eingabe { flex: 1 1 180px; min-width: 0; }
+.bildfeld-zeile .knopf { flex: none; }
+
+.bildfeld-vorschau {
+    width: 44px;
+    flex: none;
+    object-fit: cover;
+    border: 1px solid var(--linie);
+    border-radius: 6px;
+    background: var(--flaeche-2);
+}
+
+/* display:flex nur auf der Ersatzdarstellung - auf einem <img> nimmt es ihm
+   die Eigengroesse und staucht das Motiv. Dieselbe Falle wie bei den
+   Serversymbolen. */
+.bildfeld-vorschau.ist-leer {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-leise);
+    font-size: 18px;
+}
+
+.bildfeld-vorschau.ist-rund { border-radius: 50%; }
+
+.feld-hilfe.ist-fehler { color: var(--rot); }
+
+/* --- Zuschnitt ----------------------------------------------------------- */
+
+.schicht-fenster.ist-schmal { width: min(420px, 100%); }
+
+.zuschnitt-rahmen {
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+    background: var(--flaeche-2);
+    border: 1px solid var(--linie);
+    border-radius: var(--radius);
+    /* grab/grabbing statt default: der Rahmen ist zum Ziehen da, und das soll
+       man sehen, bevor man es ausprobiert. */
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+}
+
+.zuschnitt-rahmen:active { cursor: grabbing; }
+.zuschnitt-rahmen.ist-rund { border-radius: 50%; }
+
+.zuschnitt-rahmen img {
+    position: absolute;
+    top: 0;
+    left: 0;
+    max-width: none;
+    transform-origin: 0 0;
+    pointer-events: none;
+}
+
+.zuschnitt-regler { width: 100%; accent-color: var(--akzent); }
+
+/* --- Statistiken je Server ----------------------------------------------- */
+
+.serverstatistik {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--linie);
+}
+
+/* auto-fit statt fester Spaltenzahl: die Kacheln stehen in einer
+   aufgeklappten Zeile, deren Breite von der Modulleiste daneben abhaengt. */
+.statgitter {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 10px;
+}
+
+.statkachel {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 12px 14px;
+    background: var(--flaeche-2);
+    border: 1px solid var(--linie);
+    border-radius: var(--radius);
+}
+
+.statkachel-titel {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--text-leise);
+}
+
+/* tabular-nums, damit die Zahlen in den Kacheln untereinander stehen und
+   beim Aufklappen des naechsten Servers nicht springen. */
+.statkachel strong { font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.statkachel .leise { font-size: 11px; }
+
+.statbalken-block { display: flex; flex-direction: column; gap: 6px; }
+
+.statbalken {
+    display: flex;
+    height: 10px;
+    border: 1px solid var(--linie);
+    border-radius: 999px;
+    overflow: hidden;
+    background: var(--flaeche-2);
+}
+
+.statbalken span { display: block; height: 100%; }
+
+/*
+ * Die drei Farben stehen fest und wechseln nicht mit dem Schema - sonst
+ * bedeutete dieselbe Farbe hell und dunkel etwas anderes. Schrift steht hier
+ * keine drauf, deshalb braucht es dazu keine Schriftfarbe.
+ */
+.statbalken .ist-musik, .statbalken-schrift i.ist-musik { background: var(--akzent); }
+.statbalken .ist-radio, .statbalken-schrift i.ist-radio { background: var(--gruen); }
+.statbalken .ist-ai,    .statbalken-schrift i.ist-ai    { background: var(--akzent-2); }
+
+.statbalken-schrift {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    font-size: 12px;
+    color: var(--text-leise);
+}
+
+.statbalken-schrift span { display: inline-flex; align-items: center; gap: 6px; }
+.statbalken-schrift i { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+
 /* Auf schmalen Fenstern rutschen die Zahlen unter den Namen, statt ihn auf
    zwei Zeichen zusammenzuquetschen. */
 @media (max-width: 860px) {
@@ -1425,33 +1893,369 @@ select.eingabe { appearance: none; cursor: pointer; }
     justify-content: center;
 }
 
-/* Der Betriebszugang unten in der Serverleiste. Bewusst abgesetzt: er fuehrt
-   aus der Serversicht heraus und ist kein weiterer Server. */
-.serverknopf-betrieb {
-    margin-top: 6px;
-    border-top: 1px solid var(--linie);
-    padding-top: 14px;
-    border-radius: 50%;
-    color: var(--text-leise);
-}
-.serverknopf-betrieb::before {
-    /* Der Trennstrich gehoert ueber den Knopf, nicht an ihn - sonst wandert
-       er beim Zeigen mit der Ecke mit. */
-    content: "";
-    position: absolute;
-    top: -8px;
-    left: 8px;
-    right: 8px;
-    height: 1px;
-    background: var(--linie);
-}
-.serverknopf-betrieb .serverknopf-bild { font-size: 20px; }
-.serverknopf-betrieb:hover { color: var(--akzent-schrift); }
 
+/*
+ * Zentriert wird nur die Ersatzdarstellung - nie das Bild selbst.
+ *
+ * display:flex auf einem <img> nimmt ihm die Eigengroesse: der Browser
+ * behandelt es als Behaelter, und das Motiv wird gestaucht. Genau das war
+ * zweimal die Ursache fuer zusammengedrueckte Server-Symbole - beim zweiten
+ * Mal an dieser Klasse. Wer eine neue Symbolgroesse anlegt: object-fit auf
+ * das Bild, display:flex ausschliesslich auf .ist-leer.
+ */
 .serverkopf-bild.ist-leer,
-.serverknopf-bild.ist-leer {
+.serverknopf-bild.ist-leer,
+.minicover.ist-leer {
+    display: flex;
+    align-items: center;
+    justify-content: center;
     background: var(--flaeche-2);
     color: var(--text);
     font-weight: 650;
     letter-spacing: .02em;
 }
+
+/* Der TOTP-Schluessel beim Einrichten. Gross und in Gruppen, weil er von Hand
+   in eine Authenticator-App getippt wird - und genau einmal angezeigt wird. */
+.geheimnis {
+    font-size: 18px;
+    letter-spacing: 1px;
+    word-spacing: 4px;
+    background: var(--flaeche);
+    border: 1px solid var(--linie);
+    border-radius: 8px;
+    padding: 12px 14px;
+    user-select: all;
+}
+
+.umbrechen { overflow-wrap: anywhere; }
+
+/* ==========================================================================
+   Startseite
+   --------------------------------------------------------------------------
+   Uebernommen aus dem Entwurf und an die Wirklichkeit angepasst. Die Namen
+   der Farben zeigen auf dieselben Tokens wie das Panel (--tinte, --papier,
+   --acid, --violett, --orange), damit beide Bereiche eine Oberflaeche sind
+   und nicht zwei.
+
+   Die Regeln stehen bewusst unveraendert im Original-Stil (kompakt, viele
+   Kurzformen): sie stammen aus dem Entwurf und lassen sich so gegen ihn
+   vergleichen, wenn er sich weiterentwickelt.
+   ========================================================================== */
+.site-shell { min-height:100vh; overflow:hidden; }
+.scroll-progress{position:fixed;z-index:100;left:0;top:0;width:100%;height:4px;background:var(--acid);transform:scaleX(var(--page-progress,0));transform-origin:left center;pointer-events:none;box-shadow:0 1px 0 var(--tinte)}
+[data-parallax]{translate:0 var(--parallax-y,0);will-change:translate}
+.nav-wrap { height:90px; padding:0 5.5vw; display:grid; grid-template-columns:1fr auto 1fr; align-items:center; border-bottom:1.5px solid var(--tinte); position:relative; z-index:20; background:rgba(242,239,231,.88); backdrop-filter:blur(14px); }
+.brand { font-size:29px; font-weight:800; letter-spacing:-2px; display:flex; align-items:center; gap:2px; width:max-content; }
+.brand-dot { width:9px; height:9px; background:var(--orange); border-radius:50%; align-self:flex-start; margin-top:4px; }
+.brand-pulse { font-size:8px; color:var(--violett); margin-left:3px; }
+.logo-link{display:block;width:100px;height:64px;position:relative;transition:transform .22s cubic-bezier(.2,.8,.2,1)}.logo-link:hover{transform:rotate(-2deg) scale(1.04)}.logo-crop{position:absolute;inset:0;overflow:hidden;display:block}.logo-crop img{position:absolute;width:130px;height:130px;max-width:none;left:-16px;top:-32px;display:block}.footer-logo{width:83px;height:53px}.footer-logo .logo-crop img{width:108px;height:108px;left:-13px;top:-26px}
+.nav-links { display:flex; gap:42px; font-size:14px; font-weight:650; }
+.nav-links a { position:relative; }
+.nav-links a:after { content:""; position:absolute; left:0; right:100%; bottom:-7px; height:2px; background:var(--violett); transition:.25s; }
+.nav-links a:hover:after { right:0; }
+/* Die dritte Grid-Spalte: Umschalter, Panel-Knopf und Menuetaste teilen sie
+   sich. Auf dem Handy faellt der Knopf weg und die Menuetaste kommt dazu -
+   die Spalte bleibt dieselbe, deshalb verrutscht dort nichts mehr. */
+.nav-rechts { justify-self:end; display:flex; align-items:center; gap:14px; }
+.nav-cta { background:var(--tinte); color:white; border:1px solid var(--tinte); padding:13px 18px; font-size:13px; font-weight:700; box-shadow:4px 4px 0 var(--violett); transition:.2s; }
+.nav-cta:hover { transform:translate(-2px,-2px); box-shadow:7px 7px 0 var(--violett); }
+.menu-button { display:none; background:none; border:0; padding:12px; }
+.menu-button span { display:block; width:23px; height:2px; background:var(--tinte); margin:5px; }
+
+.hero { min-height:calc(100vh - 126px); display:grid; grid-template-columns:1.03fr .97fr; padding:7vh 5.5vw 6vh; position:relative; isolation:isolate; }
+.noise { position:absolute; inset:0; opacity:.17; z-index:-1; background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.28'/%3E%3C/svg%3E"); }
+.orbit { position:absolute; border:1px solid rgba(16,16,15,.16); border-radius:50%; z-index:-1; }
+.orbit-one { width:53vw; height:53vw; right:-15vw; top:-19vw; }
+.orbit-two { width:36vw; height:36vw; left:25vw; bottom:-26vw; }
+.hero-copy { display:flex; flex-direction:column; justify-content:center; align-items:flex-start; position:relative; z-index:2; }
+.eyebrow { display:flex; align-items:center; gap:10px; font-size:12px; letter-spacing:1.8px; text-transform:uppercase; font-weight:700; margin-bottom:22px; }
+.eyebrow i { width:22px; height:22px; background:var(--acid); border:1px solid var(--tinte); border-radius:50%; box-shadow:3px 3px 0 var(--tinte); position:relative; }
+.eyebrow i:after { content:""; position:absolute; width:5px; height:5px; background:var(--tinte); border-radius:50%; left:8px; top:8px; }
+h1 { margin:0; font-size:clamp(62px,8.4vw,142px); line-height:.79; letter-spacing:-.078em; font-weight:800; }
+h1 span { color:var(--violett); -webkit-text-stroke:1.5px var(--tinte); text-shadow:5px 5px 0 var(--tinte); }
+.hero-copy>p { max-width:545px; font-size:clamp(16px,1.25vw,20px); line-height:1.5; margin:34px 0 27px; }
+/* Umbruch erlaubt: seit "Bot hinzufuegen" dazugekommen ist, stehen hier drei
+   Elemente statt zweier. Auf mittleren Breiten passen sie nicht mehr in eine
+   Zeile - ohne wrap waeren sie stattdessen gestaucht worden. */
+.hero-actions { display:flex; align-items:center; flex-wrap:wrap; gap:16px 22px; }
+/* Schriftfarbe ausdruecklich, nicht geerbt.
+   Der Grund ist Neon und bleibt in beiden Schemata Neon - die geerbte
+   Seitenfarbe wechselt aber mit dem Schema. Im Dunkelmodus stand damit
+   Weiss auf Neongruen: gemessener Kontrast 1.00, also unlesbar. Wo die
+   Flaeche fest ist, muss es die Schrift auch sein. */
+.primary-button { color:var(--tinte); border:1.5px solid var(--tinte); padding:17px 21px; background:var(--acid); box-shadow:5px 5px 0 var(--tinte); font-size:13px; font-weight:800; cursor:pointer; transition:.18s; }
+.primary-button:hover { transform:translate(-3px,-3px); box-shadow:8px 8px 0 var(--tinte); }
+
+/*
+ * Der zweite Knopf im Hero: "Bot hinzufuegen".
+ *
+ * Gleiche Form wie der erste, andere Farbe - damit man sieht, dass es zwei
+ * Wege sind und nicht ein Knopf mit Beiwerk. Papier als Grund und Tinte als
+ * Schrift stehen beide fest, also gilt das Paar in hell wie dunkel; der
+ * Schatten in Violett trennt ihn vom Neon des Nachbarn.
+ *
+ * Kein --flaeche o.ae.: das wechselt mit dem Schema, waehrend der Knopf
+ * daneben es nicht tut. Zwei Knoepfe nebeneinander, von denen einer die
+ * Farbe wechselt und der andere nicht, sehen nach einem Fehler aus.
+ */
+.secondary-button { color:var(--tinte); border:1.5px solid var(--tinte); padding:17px 21px; background:var(--papier); box-shadow:5px 5px 0 var(--violett); font-size:13px; font-weight:800; cursor:pointer; transition:.18s; }
+.secondary-button:hover { transform:translate(-3px,-3px); box-shadow:8px 8px 0 var(--violett); }
+.text-link { font-size:14px; font-weight:700; border-bottom:1px solid var(--tinte); padding:8px 0; }
+.trust-row { display:flex; align-items:center; gap:15px; margin-top:42px; }
+.avatars { display:flex; }
+/* Auch hier: feste Flaeche, also feste Schrift. Die Varianten mit
+   dunklem Grund setzen ihr Weiss weiter unten selbst. */
+.avatars b { color:var(--tinte); width:36px; height:36px; border-radius:50%; border:1.5px solid var(--tinte); display:grid; place-items:center; font-size:9px; margin-left:-7px; background:var(--orange); }
+.avatars b:nth-child(2){background:var(--violett);color:white}.avatars b:nth-child(3){background:var(--acid)}.avatars b:nth-child(4){background:var(--tinte);color:white}.avatars b:first-child{margin:0}
+.trust-row p { margin:0; font-size:11px; line-height:1.5; }
+
+.visual-stage { min-height:610px; position:relative; display:grid; place-items:center; }
+.visual-stage:before { content:""; position:absolute; width:min(38vw,560px); height:min(38vw,560px); border-radius:50%; background:var(--orange); border:1.5px solid var(--tinte); box-shadow:13px 13px 0 var(--tinte); }
+.player-card { width:min(380px,76%); padding:17px; border:1.5px solid var(--tinte); background:#f8f6ef; box-shadow:11px 11px 0 rgba(16,16,15,.97); transform:rotate(2.2deg); position:relative; z-index:3; transition:.35s cubic-bezier(.2,.8,.2,1); }
+.player-card:hover { transform:rotate(0deg) translateY(-5px); }
+.player-head { display:flex; justify-content:space-between; align-items:center; font-size:9px; letter-spacing:1.3px; font-weight:800; margin-bottom:12px; }
+.player-head b { display:flex; align-items:center; gap:6px; }.player-head i { width:6px;height:6px;background:#42c66b;border-radius:50%;box-shadow:0 0 0 3px rgba(66,198,107,.2);animation:radioPulse 1.8s ease-out infinite}
+.cover-art { height:255px; background:#1a1934; border:1.5px solid var(--tinte); position:relative; overflow:hidden; display:flex; flex-direction:column; justify-content:flex-end; padding:19px; color:white; }
+.cover-grid { position:absolute; inset:-30px; background-image:linear-gradient(rgba(255,255,255,.12) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.12) 1px,transparent 1px);background-size:30px 30px;transform:perspective(220px) rotateX(55deg) scale(1.5);transform-origin:bottom;animation:gridDrift 7s linear infinite; }
+.cover-sun { position:absolute;width:180px;height:180px;border-radius:50%;background:linear-gradient(var(--acid) 0 45%,var(--orange) 45% 52%,var(--violett) 52%);top:27px;right:-28px;mix-blend-mode:screen;animation:sunFloat 5s ease-in-out infinite; }
+.cover-art span { font-size:28px;font-weight:800;line-height:.86;letter-spacing:-1.8px;position:relative;text-shadow:2px 2px 0 var(--tinte); }.cover-art small{position:relative;margin-top:8px;font-size:9px;letter-spacing:2px}
+.track-meta { display:flex;justify-content:space-between;align-items:center;margin:14px 2px 7px}.track-meta>div{display:flex;flex-direction:column}.track-meta strong{font-size:14px}.track-meta>div span{font-size:9px;color:#777;margin-top:3px}.favorite-button{width:32px;height:32px;border:0;background:none;cursor:pointer;display:grid;place-items:center;padding:0;color:var(--tinte)}.heart-glyph{font-family:Arial,sans-serif;font-size:25px;line-height:1;display:block;transition:transform .18s,color .18s}.favorite-button:hover .heart-glyph{transform:scale(1.12)}.favorite-button:active .heart-glyph{transform:scale(.88)}.favorite-button.is-favorite .heart-glyph{color:var(--orange);animation:heartPop .42s cubic-bezier(.2,1.6,.4,1)}@keyframes heartPop{0%{transform:scale(.55)}55%{transform:scale(1.35)}100%{transform:scale(1)}}
+.waveform { height:36px;display:flex;align-items:center;gap:3px;margin:8px 2px}.waveform i{flex:1;background:var(--violett);min-height:4px}.waveform.is-playing i{animation:pulse .8s ease-in-out infinite alternate}
+@keyframes pulse{to{height:18%!important}}
+.timeline{display:grid;grid-template-columns:28px 1fr 28px;gap:7px;align-items:center;font-size:8px}.timeline>b{height:3px;background:#d9d6cf}.timeline b i{display:block;height:100%;background:var(--tinte)}
+.controls { display:flex;justify-content:center;align-items:center;gap:28px;margin:12px 0 9px}.controls button{border:0;background:none;cursor:pointer;font-weight:800;display:grid;place-items:center}.skip-button{width:27px;height:27px;transition:transform .2s}.skip-button:hover{transform:scale(1.15)}.skip-button:active{transform:scale(.9)}
+.skip-icon{width:13px;height:14px;position:relative;display:block}.skip-icon:before{content:"";position:absolute;inset:1px 2px 1px 3px;background:var(--tinte);clip-path:polygon(0 0,100% 50%,0 100%)}.skip-icon:after{content:"";position:absolute;width:2px;height:14px;background:var(--tinte);right:0;top:0}.previous .skip-icon{transform:scaleX(-1)}
+.play-button{width:47px;height:47px!important;border-radius:50%!important;background:var(--acid)!important;border:1.5px solid var(--tinte)!important;box-shadow:3px 3px 0 var(--tinte);position:relative;transition:transform .18s,box-shadow .18s}.play-button:hover{transform:translate(-1px,-1px);box-shadow:5px 5px 0 var(--tinte)}.play-button:active{transform:translate(2px,2px) scale(.96);box-shadow:1px 1px 0 var(--tinte)}
+.play-state-icon{width:15px;height:17px;display:block;position:relative}.play-button.paused .play-state-icon:before{content:"";position:absolute;inset:0 0 0 2px;background:var(--tinte);clip-path:polygon(0 0,100% 50%,0 100%)}.play-button.playing .play-state-icon:before,.play-button.playing .play-state-icon:after{content:"";position:absolute;width:4px;height:17px;top:0;background:var(--tinte);border-radius:1px}.play-button.playing .play-state-icon:before{left:2px}.play-button.playing .play-state-icon:after{right:2px}
+.volume{display:grid;grid-template-columns:18px 1fr 32px;gap:7px;align-items:center;font-size:8px}.volume input{accent-color:var(--violett);width:100%}.speaker-icon{width:9px;height:10px;background:var(--tinte);display:block;position:relative;margin-left:2px;clip-path:polygon(0 30%,35% 30%,78% 0,78% 100%,35% 70%,0 70%)}.speaker-icon:after{content:"";position:absolute;width:7px;height:7px;border:1.5px solid var(--tinte);border-left:0;border-bottom:0;border-radius:50%;right:-5px;top:1px;transform:rotate(45deg)}
+/* Gleicher Fall wie beim Knopf. .sticker-bottom setzt weiter unten
+   ausdruecklich Weiss auf Violett - das bleibt, es ist gewollt. */
+.sticker { color:var(--tinte); position:absolute; z-index:5; border:1.5px solid var(--tinte); background:var(--acid); box-shadow:5px 5px 0 var(--tinte); font-weight:900; line-height:.88; padding:13px; transform:rotate(-8deg); }
+.sticker span{font-size:10px}.sticker-top{top:11%;right:5%;font-size:26px;animation:stickerWiggle 5s ease-in-out infinite}.sticker-bottom{bottom:10%;left:1%;background:var(--violett);color:white;font-size:14px;transform:rotate(7deg);animation:stickerWiggleAlt 6s ease-in-out infinite}
+.floating-note{position:absolute;z-index:4;font-weight:900;font-size:54px;color:var(--acid);text-shadow:3px 3px 0 var(--tinte);animation:float 3s ease-in-out infinite}.note-one{right:1%;bottom:25%;transform:rotate(12deg)}.note-two{left:3%;top:23%;animation-delay:-1.5s}
+@keyframes float{50%{translate:0 -15px;rotate:8deg}}
+@keyframes radioPulse{0%{box-shadow:0 0 0 0 rgba(66,198,107,.45)}70%{box-shadow:0 0 0 6px rgba(66,198,107,0)}100%{box-shadow:0 0 0 0 rgba(66,198,107,0)}}
+@keyframes gridDrift{to{background-position:0 30px,30px 0}}
+@keyframes sunFloat{50%{transform:translate(-8px,8px) rotate(3deg)}}
+@keyframes stickerWiggle{0%,100%{transform:rotate(-8deg)}50%{transform:rotate(-4deg) translateY(-7px)}}
+@keyframes stickerWiggleAlt{0%,100%{transform:rotate(7deg)}50%{transform:rotate(10deg) translateY(6px)}}
+.ticker { height:43px;background:var(--tinte);color:var(--acid);display:flex;align-items:center;overflow:hidden;border-top:1px solid var(--tinte);font-size:12px;font-weight:800;letter-spacing:2px;white-space:nowrap}.ticker div{animation:ticker 20s linear infinite}@keyframes ticker{to{transform:translateX(-50%)}}
+
+.features-section { padding:120px 5.5vw; }
+.section-kicker { font-size:11px; font-weight:800; letter-spacing:2px; margin-bottom:25px; }
+.section-kicker.light { color:var(--acid); }
+.section-heading { display:grid; grid-template-columns:1.3fr .7fr; gap:8vw; align-items:end; margin-bottom:70px; }
+h2 { margin:0; font-size:clamp(52px,7.6vw,118px); line-height:.82; letter-spacing:-.07em; font-weight:800; }
+h2 em { color:var(--orange); font-style:normal; -webkit-text-stroke:1px var(--tinte); }
+.section-heading>p,.mix-copy>p { font-size:17px; line-height:1.55; max-width:490px; margin:0; }
+.feature-grid { display:grid; grid-template-columns:repeat(3,1fr); border-top:1.5px solid var(--tinte); border-left:1.5px solid var(--tinte); }
+.feature-card { min-height:370px; padding:26px; border-right:1.5px solid var(--tinte); border-bottom:1.5px solid var(--tinte); display:flex; flex-direction:column; position:relative; transition:background .25s,transform .65s cubic-bezier(.2,.8,.2,1),box-shadow .25s,opacity .55s; }
+.feature-card:hover { background:white; transform:translateY(-7px); box-shadow:0 8px 0 var(--tinte); }
+.feature-card.featured { background:var(--acid); }
+.feature-no { font-size:10px; font-weight:800; }
+.feature-icon { margin:auto 0 35px; font-size:72px; font-weight:300; line-height:1; }
+.feature-card h3 { font-size:25px; letter-spacing:-1px; margin:0 0 10px; }
+.feature-card p { font-size:14px; line-height:1.5; margin:0 0 26px; max-width:330px; }
+.feature-card b { border-top:1px solid var(--tinte); padding-top:12px; font-size:9px; letter-spacing:1.6px; }
+
+.mix-section { min-height:830px; background:var(--tinte); color:var(--papier); display:grid; grid-template-columns:1fr 1fr; align-items:center; padding:90px 5.5vw; overflow:hidden; }
+.mix-art { min-height:610px; position:relative; display:grid; place-items:center; }
+/* Huelle: traegt Groesse, Rand und Schatten - und dreht sich nicht. */
+.mix-disc-huelle { width:min(38vw,520px); aspect-ratio:1; border-radius:50%; display:grid; place-items:center; box-shadow:0 0 0 22px #171717, 28px 28px 0 var(--violett); }
+/* Platte: dreht sich in der Huelle. Der Schatten bleibt damit stehen, wie es
+   ein Schatten tut - vorher lief er im Kreis um die Platte herum. */
+.mix-disc { width:100%; height:100%; border-radius:50%; background:repeating-radial-gradient(circle, #171717 0 3px,#2d2d2d 4px 5px); display:grid; place-items:center; border:2px solid #555; transition:.45s; animation:spinDisc 18s linear infinite; }
+.mix-disc:before { content:""; position:absolute; width:44%; height:44%; border-radius:50%; background:var(--violett); border:1px solid var(--papier); }
+.mix-disc span { position:relative; z-index:2; text-align:center; font-size:34px; line-height:.8; font-weight:800; color:var(--tinte); transform:rotate(-10deg); }
+.mix-disc small { font-size:9px; letter-spacing:1px; }
+.genre-lo-fi:before{background:var(--acid)}.genre-hip-hop:before{background:var(--orange)}.genre-indie:before{background:#ff89bb}
+@keyframes spinDisc{to{rotate:360deg}}
+.needle { position:absolute; width:12px; height:320px; background:var(--papier); top:30px; right:11%; transform:rotate(24deg); transform-origin:top; border:2px solid var(--tinte); box-shadow:7px 4px 0 var(--orange); }
+.needle:before { content:""; position:absolute; width:70px; height:70px; background:var(--orange); border-radius:50%; top:-22px; left:-31px; border:5px solid var(--papier); }
+.needle:after { content:""; position:absolute; width:32px; height:50px; background:var(--acid); bottom:-35px; left:-10px; }
+.mix-copy { padding-left:8vw; }
+.mix-copy h2 em { color:var(--acid); -webkit-text-stroke:1px var(--papier); }
+.mix-copy>p { color:#c8c5bd; margin:32px 0; }
+.genre-tabs { display:flex; flex-wrap:wrap; gap:8px; }
+.genre-tabs button { background:transparent; border:1px solid #6b6965; color:var(--papier); padding:11px 14px; cursor:pointer; font-size:10px; letter-spacing:1px; }
+.genre-tabs button.active,.genre-tabs button:hover { background:var(--acid); color:var(--tinte); border-color:var(--acid); }
+.live-mix { margin-top:36px; padding-top:17px; border-top:1px solid #555; display:grid; grid-template-columns:12px 1fr auto; gap:10px; align-items:center; font-size:9px; letter-spacing:1px; }
+.live-mix i { width:8px; height:8px; background:#4de27b; border-radius:50%; box-shadow:0 0 0 5px rgba(77,226,123,.15); }
+.live-mix b { color:var(--acid); }
+
+.reveal{opacity:0;transform:translateY(42px);transition:opacity .75s ease,transform .85s cubic-bezier(.2,.8,.2,1)}.reveal.is-visible{opacity:1;transform:translateY(0)}
+.reveal .section-kicker,.reveal h2,.reveal .section-heading>p,.reveal .mix-copy>p,.reveal .genre-tabs,.reveal .live-mix{opacity:0;transform:translateY(30px);transition:opacity .65s ease,transform .75s cubic-bezier(.2,.8,.2,1)}.reveal.is-visible .section-kicker{opacity:1;transform:none;transition-delay:.08s}.reveal.is-visible h2{opacity:1;transform:none;transition-delay:.16s}.reveal.is-visible .section-heading>p,.reveal.is-visible .mix-copy>p{opacity:1;transform:none;transition-delay:.26s}.reveal.is-visible .genre-tabs{opacity:1;transform:none;transition-delay:.34s}.reveal.is-visible .live-mix{opacity:1;transform:none;transition-delay:.42s}
+.features-section .feature-card{opacity:0;transform:translateY(55px) rotate(1.5deg)}.features-section.is-visible .feature-card{opacity:1;transform:none}.features-section.is-visible .feature-card:nth-child(1){transition-delay:.16s}.features-section.is-visible .feature-card:nth-child(2){transition-delay:.28s}.features-section.is-visible .feature-card:nth-child(3){transition-delay:.4s}.features-section.is-visible .feature-card:hover{transform:translateY(-7px)}
+.mix-section .mix-art{opacity:0;scale:.88;rotate:-4deg;transition:opacity .75s ease,scale .95s cubic-bezier(.2,.9,.2,1),rotate .95s cubic-bezier(.2,.9,.2,1)}.mix-section.is-visible .mix-art{opacity:1;scale:1;rotate:0deg;transition-delay:.12s}.community-section .community-copy{opacity:0;transform:translateX(-45px);transition:opacity .75s ease,transform .85s cubic-bezier(.2,.8,.2,1)}.community-section .community-stat{opacity:0;transform:translateX(35px);transition:opacity .65s ease,transform .75s cubic-bezier(.2,.8,.2,1)}.community-section.is-visible .community-copy,.community-section.is-visible .community-stat{opacity:1;transform:none}.community-section.is-visible .community-stat{transition-delay:.28s}
+.hero-copy>*{opacity:0;animation:heroRise .7s ease forwards}.hero-copy>*:nth-child(1){animation-delay:.08s}.hero-copy>*:nth-child(2){animation-delay:.16s}.hero-copy>*:nth-child(3){animation-delay:.25s}.hero-copy>*:nth-child(4){animation-delay:.34s}.hero-copy>*:nth-child(5){animation-delay:.43s}.visual-stage{opacity:0;animation:heroStage .9s .22s cubic-bezier(.2,.8,.2,1) forwards}
+@keyframes heroRise{from{opacity:0;transform:translateY(25px)}to{opacity:1;transform:translateY(0)}}@keyframes heroStage{from{opacity:0;transform:translate(35px,18px) rotate(2deg)}to{opacity:1;transform:none}}
+
+.community-section { min-height:720px; background:var(--orange); color:var(--papier); position:relative; padding:115px 5.5vw; display:grid; grid-template-columns:1fr 250px; align-items:center; overflow:hidden; }
+.community-section:before { content:""; position:absolute; width:55vw; height:55vw; border:1px solid rgba(255,255,255,.3); border-radius:50%; right:-25vw; top:-10vw; box-shadow:0 0 0 100px rgba(255,255,255,.05),0 0 0 200px rgba(255,255,255,.04); }
+.community-stars { position:absolute; top:55px; right:7%; font-size:30px; color:var(--acid); transform:rotate(-7deg); }
+.community-copy { position:relative; z-index:2; max-width:890px; }
+.community-copy h2 { font-size:clamp(60px,9vw,145px); }
+.community-copy h2 em { color:var(--acid); -webkit-text-stroke:1px var(--tinte); text-shadow:5px 5px 0 var(--tinte); }
+.community-copy p { max-width:560px; font-size:17px; line-height:1.5; margin:35px 0; color:#fff6ed; }
+.invite-big { display:inline-flex; gap:50px; align-items:center; color:var(--tinte); background:var(--acid); border:1.5px solid var(--tinte); box-shadow:7px 7px 0 var(--tinte); padding:20px 25px; font-size:13px; font-weight:800; transition:.2s; }
+.invite-big:hover { transform:translate(-3px,-3px); box-shadow:10px 10px 0 var(--tinte); }
+.community-stat { position:relative; z-index:2; display:flex; flex-direction:column; border-left:1px solid rgba(255,255,255,.5); padding-left:30px; }
+.community-stat strong { font-size:60px; line-height:1; }
+.community-stat span { font-size:11px; text-transform:uppercase; letter-spacing:1px; }
+.community-stat i { width:12px; height:12px; background:var(--acid); border-radius:50%; margin-top:24px; box-shadow:0 0 0 7px rgba(217,255,67,.2); }
+footer { background:var(--papier); padding:50px 5.5vw; display:grid; grid-template-columns:.8fr 1.5fr 1.3fr auto; gap:30px; align-items:center; border-top:1.5px solid var(--tinte); font-size:11px; }
+.footer-brand { font-size:25px; }
+footer>p { margin:0; color:#65635e; }
+footer>div { display:flex; gap:25px; font-weight:700; }
+footer>span { color:#777; }
+
+@media(max-width:900px){.nav-wrap{grid-template-columns:1fr auto;height:72px}.nav-links{display:none;position:absolute;top:72px;left:0;right:0;background:var(--papier);border-bottom:1.5px solid var(--tinte);padding:25px;flex-direction:column;gap:22px}.nav-links.open{display:flex}.nav-cta{display:none}.menu-button{display:block}.hero{grid-template-columns:1fr;padding-top:7vh}.hero-copy{align-items:flex-start}.visual-stage{min-height:650px;margin-top:25px}.visual-stage:before{width:510px;height:510px}.player-card{width:360px}.ticker{height:39px}.section-heading{grid-template-columns:1fr;gap:28px}.feature-grid{grid-template-columns:1fr}.feature-card{min-height:300px}.mix-section{grid-template-columns:1fr}.mix-art{min-height:550px}.mix-disc-huelle{width:450px}.mix-copy{padding:40px 0}.community-section{grid-template-columns:1fr}.community-stat{margin-top:70px;border-left:0;border-top:1px solid rgba(255,255,255,.5);padding:25px 0 0}footer{grid-template-columns:1fr 1fr}}
+@media(max-width:520px){.nav-wrap{padding:0 20px}.hero{padding:50px 20px 40px}.eyebrow{font-size:10px}h1{font-size:58px}.hero-copy>p{font-size:15px;margin-top:28px}.hero-actions{align-items:flex-start;flex-direction:column;gap:12px}.trust-row{margin-top:30px}.visual-stage{min-height:560px}.visual-stage:before{width:390px;height:390px}.player-card{width:290px;padding:12px}.cover-art{height:190px}.sticker-top{right:-8%;top:10%;font-size:20px}.sticker-bottom{left:-5%;bottom:9%}.floating-note{font-size:40px}.features-section{padding:80px 20px}.feature-card{padding:22px}.mix-section{padding:75px 20px}.mix-art{min-height:400px}.mix-disc-huelle{width:300px;box-shadow:0 0 0 14px #171717,15px 15px 0 var(--violett)}.needle{height:220px;right:3%;top:25px}.community-section{padding:90px 20px}.community-copy h2{font-size:61px}.invite-big{gap:18px;padding:17px}.community-stat strong{font-size:50px}footer{padding:40px 20px;grid-template-columns:1fr}footer>div{flex-wrap:wrap}}
+@media(max-width:900px){.legal-hero{grid-template-columns:1fr;gap:35px}.legal-intro{margin:0}.legal-content{grid-template-columns:1fr}.legal-content aside{position:relative;top:0;max-width:360px}.legal-footer{grid-template-columns:auto 1fr auto}}
+@media(max-width:520px){.legal-nav{height:72px;padding:0 20px}.back-link{font-size:10px}.legal-hero{min-height:430px;padding:65px 20px 48px}.legal-hero h1{font-size:88px}.legal-orbit{width:300px;height:300px;right:-180px}.legal-intro{font-size:15px}.legal-content{padding:65px 20px 90px;gap:55px}.legal-sections article{grid-template-columns:38px 1fr;gap:10px;padding:30px 0}.legal-sections h2{font-size:25px}.legal-sections p,.legal-sections address{font-size:13px}.legal-footer{padding:28px 20px;grid-template-columns:auto 1fr}.legal-footer>p{display:none}.legal-footer>span:last-child{align-self:center}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important}.reveal,.reveal *{transition:none!important}.reveal{opacity:1!important;transform:none!important}.reveal *{opacity:1!important;transform:none!important;scale:1!important;rotate:0deg!important}[data-parallax]{translate:none!important}.scroll-progress{display:none}}
+
+/* Serversuche ganz oben in der Leiste - wie in Discord. */
+.serversuche { width: 48px; flex: none; margin-bottom: 4px; }
+
+.serversuche-feld {
+    width: 100%;
+    padding: 7px 6px;
+    border: 1.5px solid var(--linie);
+    background: var(--flaeche);
+    color: var(--text);
+    font-size: 11px;
+    text-align: center;
+}
+
+.serversuche-feld::placeholder { color: var(--text-leise); }
+/* Schriftfarbe mit dem Grund festnageln: --text ist im Dunkelmodus hell,
+   auf Neongruen also unlesbar. Der Grund wechselt nicht mit, die Schrift
+   darf es dann auch nicht. */
+.serversuche-feld:focus { outline: 0; background: var(--acid); color: var(--tinte); }
+/* Das eingebaute Kreuz von type="search" hat auf 48px keinen Platz. */
+.serversuche-feld::-webkit-search-cancel-button { display: none; }
+
+/* ==========================================================================
+   Startseite in der Dunkelfassung
+   --------------------------------------------------------------------------
+   Die Startseite benutzt die Designfarben unmittelbar (var(--tinte) als
+   Rahmen, var(--papier) als Flaeche) statt der benannten Tokens. Das ist im
+   Entwurf richtig - dort gibt es nur eine Fassung - heisst hier aber, dass
+   sie eigene Regeln braucht.
+
+   Ein pauschaler Tausch von --tinte und --papier waere kuerzer und falsch:
+   der Mix-Abschnitt und der Community-Abschnitt sind schon in der hellen
+   Fassung dunkel beziehungsweise farbig. Sie umzudrehen ergaebe Acid-Schrift
+   auf hellem Grund - Kontrast 1.3 und damit unlesbar. Sie bleiben deshalb,
+   wie sie sind, und wirken in der Dunkelfassung als ruhige Bloecke statt als
+   Kontrastbruch.
+   ========================================================================== */
+
+:root[data-theme="dark"] .site-shell,
+:root[data-theme="dark"] footer { background: var(--grund); color: var(--text); }
+
+:root[data-theme="dark"] .nav-wrap {
+    background: rgba(20, 19, 15, .88);
+    border-bottom-color: var(--linie);
+}
+
+/*
+ * Das aufgeklappte Menue auf dem Telefon.
+ *
+ * Es bekommt unterhalb von 900px eine eigene Flaeche in --papier, damit es
+ * sich vom Inhalt darunter abhebt. Die Schrift kam dabei von der Seite - im
+ * Dunkelmodus also hell auf hell. Ergebnis: ein Menue, das sich oeffnet und
+ * leer aussieht. Nur auf dem Telefon zu sehen, und nur im dunklen Schema,
+ * deshalb faellt es beim Klicken am Rechner nie auf.
+ */
+:root[data-theme="dark"] .nav-links {
+    background: var(--grund);
+    border-bottom-color: var(--linie);
+}
+
+:root[data-theme="dark"] .nav-cta { background: var(--acid); color: var(--tinte); border-color: var(--acid); }
+:root[data-theme="dark"] .menu-button span { background: var(--text); }
+
+/* Die Ringe im Hintergrund waren dunkle Linien auf Papier. */
+:root[data-theme="dark"] .orbit { border-color: rgba(242, 239, 231, .18); }
+:root[data-theme="dark"] .noise { opacity: .09; }
+
+:root[data-theme="dark"] h1 span { -webkit-text-stroke-color: var(--papier); text-shadow: 5px 5px 0 var(--papier); }
+:root[data-theme="dark"] h2 em { -webkit-text-stroke-color: var(--papier); }
+
+:root[data-theme="dark"] .eyebrow i { border-color: var(--papier); box-shadow: 3px 3px 0 var(--papier); }
+:root[data-theme="dark"] .eyebrow i:after { background: var(--tinte); }
+
+:root[data-theme="dark"] .primary-button { box-shadow: 5px 5px 0 var(--papier); border-color: var(--papier); }
+:root[data-theme="dark"] .primary-button:hover { box-shadow: 8px 8px 0 var(--papier); }
+:root[data-theme="dark"] .text-link { border-bottom-color: var(--text); }
+
+:root[data-theme="dark"] .avatars b { border-color: var(--papier); }
+
+/* Die Plattenhuelle: heller Rahmen statt dunklem, Inhalt bleibt. */
+:root[data-theme="dark"] .player-card {
+    background: var(--flaeche);
+    border-color: var(--papier);
+    box-shadow: 11px 11px 0 var(--violett);
+}
+:root[data-theme="dark"] .cover-art { border-color: var(--papier); }
+:root[data-theme="dark"] .track-meta > div span { color: var(--text-leise); }
+:root[data-theme="dark"] .timeline > b { background: #46443c; }
+:root[data-theme="dark"] .timeline b i { background: var(--acid); }
+:root[data-theme="dark"] .favorite-button { color: var(--text); }
+
+:root[data-theme="dark"] .sticker { border-color: var(--papier); box-shadow: 5px 5px 0 var(--papier); }
+:root[data-theme="dark"] .floating-note { text-shadow: 3px 3px 0 var(--papier); }
+
+/* Der Laufschriftbalken war Tinte auf Papier - jetzt Acid auf Tinte, damit
+   er sich weiterhin vom Grund abhebt. */
+:root[data-theme="dark"] .ticker { background: var(--acid); color: var(--tinte); border-top-color: var(--linie); }
+
+:root[data-theme="dark"] .feature-grid { border-top-color: var(--linie); border-left-color: var(--linie); }
+:root[data-theme="dark"] .feature-card { border-right-color: var(--linie); border-bottom-color: var(--linie); }
+:root[data-theme="dark"] .feature-card:hover { background: var(--flaeche-2); box-shadow: 0 8px 0 var(--violett); }
+:root[data-theme="dark"] .feature-card.featured { background: var(--acid); color: var(--tinte); }
+:root[data-theme="dark"] .feature-card.featured b { border-top-color: var(--tinte); }
+:root[data-theme="dark"] .feature-card b { border-top-color: var(--linie); }
+
+/* Mix- und Community-Abschnitt bleiben unveraendert: sie sind bereits
+   eigene Farbraeume und tragen in beiden Fassungen. */
+
+:root[data-theme="dark"] footer { border-top-color: var(--linie); }
+:root[data-theme="dark"] footer > p { color: var(--text-leise); }
+:root[data-theme="dark"] footer > span { color: var(--text-leise); }
+
+/* Umschalter fuer das Farbschema. */
+.farbschema {
+    display: flex;
+    gap: 0;
+    border: 1.5px solid var(--linie);
+    background: var(--flaeche);
+    width: max-content;
+}
+
+.farbschema-knopf {
+    border: 0;
+    border-right: 1.5px solid var(--linie);
+    background: transparent;
+    color: var(--text-leise);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 6px 12px;
+    cursor: pointer;
+}
+
+.farbschema-knopf:last-child { border-right: 0; }
+.farbschema-knopf:hover { color: var(--text); background: var(--flaeche-2); }
+
+.farbschema-knopf[aria-pressed="true"] {
+    background: var(--acid);
+    color: var(--tinte);
+}
+
+.farbschema.ist-klein .farbschema-knopf { padding: 4px 9px; font-size: 11px; }
+.benutzermenue .farbschema { margin: 4px 2px 8px; width: auto; }
+.benutzermenue .farbschema-knopf { flex: 1; text-align: center; }

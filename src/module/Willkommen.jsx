@@ -1,6 +1,7 @@
 import React from "react";
 import { Auswahl, Feld, Mehrzeilig, Rollenwahl, Schalter, Text } from "../teile/felder.jsx";
 import EmbedEditor from "../teile/EmbedEditor.jsx";
+import Bildfeld from "../teile/Bildfeld.jsx";
 import { Modulseite, useModul } from "./rahmen.jsx";
 
 /** Begruessung fuer neue Mitglieder: Nachricht, Kanal, Rollen. */
@@ -98,14 +99,18 @@ export default function Willkommen({ guildId, konfig, neuLaden }) {
                 />
                 {e.sendImage && (
                     <div className="feldgitter">
+                        {/* 1024x360 laut Hilfetext unten - genau dieses
+                            Verhaeltnis bekommt auch der Ausschnitt, damit die
+                            Angabe nicht nur ein Wunsch bleibt. */}
                         <Feld
                             titel="Hintergrundbild"
                             hilfe="Am besten 1024×360. Leer lassen nimmt den Standard."
                             kind={
-                                <Text
+                                <Bildfeld
                                     wert={e.backgroundImageUrl}
                                     setzen={(v) => m.setzeFeld("backgroundImageUrl", v)}
-                                    platzhalter="https://…"
+                                    seitenverhaeltnis={1024 / 360}
+                                    zielbreite={1024}
                                 />
                             }
                         />
