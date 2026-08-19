@@ -153,8 +153,13 @@ info "${UMGEBUNG} (0600)"
 # Gegenprobe: liest Compose die Datei so, wie sie gemeint ist? Ein falsch
 # maskierter Hash faellt sonst erst auf, wenn niemand sich anmelden kann.
 cd "$HIER"
+# "docker compose config" maskiert Dollarzeichen in seiner Ausgabe wieder -
+# die Ausgabe soll sich erneut einlesen lassen. Ein Hash, der richtig
+# ankommt, erscheint dort deshalb als "$$2a$$14$$...". Ohne das
+# Zuruecknehmen verglichen man die maskierte Form mit der unmaskierten und
+# haelt genau den Fall fuer kaputt, der stimmt.
 GELESEN="$(docker compose config 2>/dev/null | grep -m1 'HJ_VERWALTER_HASH:' \
-    | sed 's/.*HJ_VERWALTER_HASH: *//' | tr -d '"' || true)"
+    | sed 's/.*HJ_VERWALTER_HASH: *//' | tr -d '"' | sed 's/\$\$/$/g' || true)"
 if [[ "$GELESEN" == "$HJ_VERWALTER_HASH" ]]; then
     info "Compose liest den Hash unveraendert."
 else
