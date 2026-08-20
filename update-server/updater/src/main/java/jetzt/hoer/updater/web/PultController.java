@@ -21,7 +21,6 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.List;
 
 /**
@@ -44,6 +43,17 @@ public class PultController {
     private final VerwaltungDaten protokoll;
     private final Knotenverwaltung verwaltung;
     private final Zugang zugang;
+    /**
+     * Die Zone, in der die Datumsfelder dieser Oberflaeche gemeint sind.
+     *
+     * Wer hier ein Ablaufdatum eintippt, meint seinen Tag - nicht den in
+     * Greenwich. Fest verdrahtet und nicht aus der Systemzone gelesen: die
+     * haengt davon ab, wie der Container gestartet wurde, und ein Zugang, der
+     * je nach TZ-Variable zwei Stunden laenger gilt, ist keine gute Idee.
+     */
+    private static final java.time.ZoneId HIESIGE_ZONE =
+            java.time.ZoneId.of("Europe/Berlin");
+
     /** Der oeffentliche Name - fuer den Aufsetz-Einzeiler auf der Knotenseite. */
     private final String updateHost;
 
@@ -375,8 +385,19 @@ public class PultController {
 
             Instant ablauf = null;
             if (!laeuftAb.isBlank()) {
+                // Ende des gewaehlten Tages in DEUTSCHER Zeit, nicht in UTC.
+                //
+                // Hier tippt ein Mensch ein Datum, und er meint seinen Tag.
+                // "gilt bis 25.08." heisst: am 26. um 00:00 Uhr ist Schluss,
+                // Berliner Zeit.
+                //
+                // Vorher stand hier atStartOfDay(ZoneOffset.UTC). Im Sommer
+                // liegt Deutschland zwei Stunden davor, die Freigabe galt also
+                // bis 02:00 Uhr am Folgetag. Zwei Stunden zu lang - und bei
+                // einer Zugangsfreigabe ist "zu lang" die falsche Richtung,
+                // in die man sich irrt.
                 ablauf = LocalDate.parse(laeuftAb.trim())
-                        .plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+                        .plusDays(1).atStartOfDay(HIESIGE_ZONE).toInstant();
             }
 
             freigaben.anlegen(normal, name.trim(), notiz.trim(), ablauf);
