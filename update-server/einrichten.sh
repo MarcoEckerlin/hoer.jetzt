@@ -447,8 +447,21 @@ cat <<ENDE
       Updater           ${HJ_ADMIN} / $(if $PW_PULT_VORGEGEBEN; then
                             printf '%s' "<das beim Aufruf angegebene Passwort>"
                         else printf '%s' "$PW_PULT"; fi)
-                        http://${HJ_PULT_BIND}:${HJ_PULT_PORT}/
                         Freigaben, Knoten, Verwalten, Zugriffsprotokoll.
+
+                        Die Oberflaeche lauscht auf ${HJ_PULT_BIND}:${HJ_PULT_PORT} -
+                        also NUR auf diesem Host. Vom eigenen Rechner aus
+                        fuehrt der Weg ueber einen Tunnel:
+
+                          ssh -L ${HJ_PULT_PORT}:${HJ_PULT_BIND}:${HJ_PULT_PORT} root@$(hostname -I 2>/dev/null | awk '{print $1}')
+
+                        Danach im Browser:  http://127.0.0.1:${HJ_PULT_PORT}/
+
+                        Das ist Absicht und keine fehlende Einstellung:
+                        dahinter liegen Freigaben, Tresor und die
+                        Release-Steuerung. Wer diesen Port veroeffentlicht,
+                        macht das Verwalter-Passwort zur einzigen Huerde
+                        zwischen dem Internet und der gesamten Infrastruktur.
 
                         Vorgegebene Passwoerter werden hier nicht wiederholt -
                         sie stehen schon dort, wo sie hergekommen sind, und
