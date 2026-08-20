@@ -144,6 +144,36 @@ if ! docker compose -f "$COMPOSE" up -d --build; then
        docker compose -f ${COMPOSE} logs --tail 40"
 fi
 
+# ------------------------------------------------------------ Caddy neu laden
+
+# Das Caddyfile ist ein Bind-Mount, kein Abbildinhalt.
+#
+# Der Container sieht die geaenderte Datei sofort - Caddy liest sie aber nur
+# beim Start. "docker compose up -d" startet den Dienst nicht neu, weil sich
+# an seiner Definition nichts geaendert hat. Ergebnis: der Quellstand ist neu,
+# die laufende Konfiguration alt, und niemand sieht einen Unterschied.
+#
+# Genau das ist passiert: ein frisch ergaenzter Pfad (/bootstrap) blieb nach
+# dem Update auf 404, weil Caddy noch die Fassung von vorher fuhr.
+#
+# "reload" statt "restart": kein Verbindungsabbruch, und eine unbrauchbare
+# Konfiguration wird abgelehnt - die alte laeuft dann weiter, statt dass der
+# Dienst in eine Neustartschleife faellt.
+sagen "Caddy-Konfiguration neu laden"
+if docker compose -f "$COMPOSE" exec -T caddy \
+        caddy validate --adapter caddyfile --config /etc/caddy/Caddyfile >/dev/null 2>&1; then
+    if docker compose -f "$COMPOSE" exec -T caddy \
+            caddy reload --config /etc/caddy/Caddyfile >/dev/null 2>&1; then
+        sagen "  uebernommen."
+    else
+        warnen "Neuladen fehlgeschlagen - Caddy wird neu gestartet."
+        docker compose -f "$COMPOSE" restart caddy >/dev/null 2>&1 || true
+    fi
+else
+    warnen "Das Caddyfile ist unbrauchbar - die laufende Konfiguration bleibt."
+    warnen "  docker compose -f ${COMPOSE} exec caddy caddy validate --adapter caddyfile --config /etc/caddy/Caddyfile"
+fi
+
 # ------------------------------------------------------------ Werkzeug
 
 # bootstrap.sh und das Deploy-Buendel mitziehen.
