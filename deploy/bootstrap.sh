@@ -36,6 +36,10 @@ set -euo pipefail
 ROLLE=""
 ZWEIG="main"
 UPDATE_HOST="${HJ_UPDATE_HOST:-repository.hoer.jetzt}"
+# Kennung und Token werden mitgelesen UND durchgereicht: hier oeffnen sie den
+# Download, beim Installer die Anmeldung. Zwei Verwendungen, ein Wert.
+KENNUNG=""
+TOKEN=""
 DURCHREICHEN=()
 
 while [[ $# -gt 0 ]]; do
@@ -43,6 +47,10 @@ while [[ $# -gt 0 ]]; do
         --rolle)       ROLLE="${2:?Rolle angeben}"; shift 2 ;;
         --zweig)       ZWEIG="${2:?Zweig angeben}"; shift 2 ;;
         --update-host) UPDATE_HOST="${2:?Adresse angeben}"; shift 2 ;;
+        --kennung)     KENNUNG="${2:?Kennung angeben}"
+                       DURCHREICHEN+=(--kennung "$KENNUNG"); shift 2 ;;
+        --token)       TOKEN="${2:?Token angeben}"
+                       DURCHREICHEN+=(--token "$TOKEN"); shift 2 ;;
         *)             DURCHREICHEN+=("$1"); shift ;;
     esac
 done
@@ -112,11 +120,34 @@ mkdir -p "${ARBEIT}"
 sagen "Deploy-Stand holen (${ZWEIG})"
 
 # Ueber /knoten/ - der einzige Bereich, den ein noch nicht freigeschalteter
-# Rechner erreicht. Das Aufsetz-Passwort fragt curl selbst ab, damit es nicht
-# in der Shell-Historie landet; das "-u knoten" ohne Doppelpunkt ist Absicht.
-if ! curl -fsSL -u knoten "https://${UPDATE_HOST}/knoten/${ZWEIG}.tar.gz" \
+# Rechner erreicht.
+#
+# Womit angemeldet wird, haengt davon ab, was mitgegeben wurde:
+#
+#   --kennung + --token   der Aufsetz-Token des Knotens. Gilt zwei Stunden,
+#                         gehoert genau diesem Knoten, ist einzeln
+#                         widerrufbar. Damit laeuft das Aufsetzen ohne
+#                         Rueckfrage durch - der Sinn des Einzeilers.
+#
+#   sonst                 das globale Aufsetz-Passwort, von curl selbst
+#                         abgefragt. Das "-u knoten" ohne Doppelpunkt ist
+#                         Absicht: so landet es nicht in der Historie.
+#
+# Der Token wird beim Holen NICHT verbraucht - die Anmeldung kommt erst
+# spaeter, und ein Aufsetzlauf holt mehrere Dateien.
+if [[ -n "$KENNUNG" && -n "$TOKEN" ]]; then
+    ANMELDUNG=(-u "${KENNUNG}:${TOKEN}")
+    sagen "Anmeldung ueber den Aufsetz-Token von ${KENNUNG}."
+else
+    ANMELDUNG=(-u knoten)
+    sagen "Kein Token angegeben - das Aufsetz-Passwort wird abgefragt."
+fi
+
+if ! curl -fsSL "${ANMELDUNG[@]}" "https://${UPDATE_HOST}/knoten/${ZWEIG}.tar.gz" \
         -o "${ARBEIT}/deploy.tar.gz"; then
-    fehler "Deploy-Stand nicht abrufbar von ${UPDATE_HOST}."
+    fehler "Deploy-Stand nicht abrufbar von ${UPDATE_HOST}.
+       Stimmt der Token noch? Er gilt zwei Stunden und nur einmal zum Anmelden.
+       Unter 'Verwalten' laesst sich ein neuer erzeugen."
 fi
 
 tar -C "${ARBEIT}" -xzf "${ARBEIT}/deploy.tar.gz"

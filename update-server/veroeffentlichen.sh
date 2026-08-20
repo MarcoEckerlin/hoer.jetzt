@@ -145,6 +145,12 @@ done
 
 # Das Installationsskript liegt einzeln daneben, nicht im Paket: es wird
 # geholt, bevor es ein Paket gibt - das ist ja gerade seine Aufgabe.
+# Das Bootstrap-Skript liegt einzeln daneben, wie aufsetzen.sh: es wird
+# geholt, bevor es ein Paket gibt. Caddy liefert es unter /bootstrap aus.
+aus_schreiben "knoten/bootstrap.sh" < "${QUELLEN}/main/deploy/bootstrap.sh" \
+    || fail "bootstrap.sh liess sich nicht ablegen."
+info "bootstrap.sh"
+
 aus_schreiben "knoten/aufsetzen.sh" < "${QUELLEN}/main/deploy/knoten-aufsetzen.sh" \
     || fail "aufsetzen.sh liess sich nicht ablegen."
 info "aufsetzen.sh"

@@ -44,12 +44,16 @@ public class PultController {
     private final VerwaltungDaten protokoll;
     private final Knotenverwaltung verwaltung;
     private final Zugang zugang;
+    /** Der oeffentliche Name - fuer den Aufsetz-Einzeiler auf der Knotenseite. */
+    private final String updateHost;
 
     public PultController(FreigabeDaten freigaben, KnotenDaten knoten,
                           ZugriffDaten zugriffe, Torwaechter torwaechter,
                           AusweisDaten ausweise, AnmeldungDaten anmeldungen,
                           VerwaltungDaten protokoll, Knotenverwaltung verwaltung,
-                          Zugang zugang) {
+                          Zugang zugang,
+                          @org.springframework.beans.factory.annotation.Value("${hj.update-host:repository.hoer.jetzt}") String updateHost) {
+        this.updateHost = updateHost;
         this.freigaben = freigaben;
         this.knoten = knoten;
         this.zugriffe = zugriffe;
@@ -204,6 +208,8 @@ public class PultController {
         try {
             hinweis.addFlashAttribute("neuerToken", verwaltung.neuerToken(kennung, name(wer)));
             hinweis.addFlashAttribute("neueKennung", kennung);
+            hinweis.addFlashAttribute("updateHost", updateHost);
+            hinweis.addFlashAttribute("neueRolle", "node");
         } catch (IllegalArgumentException falsch) {
             hinweis.addFlashAttribute("fehler", falsch.getMessage());
         }

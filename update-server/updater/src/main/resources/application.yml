@@ -10,6 +10,13 @@ server:
   forward-headers-strategy: none
 
 hj:
+  # Der oeffentliche Name dieses Servers.
+  #
+  # Nur fuer die Anzeige: die Knotenseite baut daraus den Aufsetz-Einzeiler.
+  # Ohne ihn stuende dort ein Platzhalter, und wer ihn kopiert, bekaeme einen
+  # Befehl, der nirgendwohin zeigt.
+  update-host: ${HJ_UPDATE_HOST:repository.hoer.jetzt}
+
   # Wessen Weiterleitungs-Koepfen geglaubt wird.
   #
   # Die echte Adresse eines Aufrufers steht hinter einem Proxy nicht in der

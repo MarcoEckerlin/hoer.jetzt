@@ -132,6 +132,29 @@ public class Knotenverwaltung {
      * @return das Geheimnis im Klartext, genau einmal
      */
     @Transactional
+    /**
+     * Gilt dieser Aufsetz-Token - ohne ihn zu verbrauchen?
+     *
+     * <p>Fuer den Download unter {@code /knoten/}. Bis dahin oeffnete den nur
+     * das globale Aufsetz-Passwort, und ein Einzeiler zum Aufsetzen haette
+     * damit zwei Geheimnisse gebraucht: eines zum Holen, eines zum Anmelden.
+     * Auf der Knotenseite steht aber nur der Token.</p>
+     *
+     * <p>Der Token ist die bessere Wahl von beiden: er gilt zwei Stunden,
+     * gehoert genau einem Knoten und laesst sich einzeln widerrufen. Das
+     * globale Passwort gilt, bis jemand es tauscht.</p>
+     *
+     * <p><b>Nicht verbrauchen.</b> Ein Aufsetzlauf holt mehrere Dateien, und
+     * die Anmeldung kommt erst danach. Wuerde schon der erste Download den
+     * Token entwerten, koennte sich der Knoten nie anmelden.</p>
+     */
+    public boolean aufsetzTokenGueltig(String kennung, String token) {
+        if (kennung == null || kennung.isBlank() || token == null || token.isBlank()) {
+            return false;
+        }
+        return anmeldungen.gueltige(kennung, Zugang.hashen(token)).isPresent();
+    }
+
     public Optional<String> anmelden(String kennung, String token,
                                      Selbstauskunft auskunft, String ip) {
         Optional<String> anmeldungId = anmeldungen.gueltige(kennung, Zugang.hashen(token));

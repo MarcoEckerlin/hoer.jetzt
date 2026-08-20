@@ -137,9 +137,23 @@ public class TorController {
     public ResponseEntity<String> pruefenKnoten(
             @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String anmeldung) {
 
+        // Zwei Wege herein, und der zweite ist der bessere.
+        //
+        //   knoten:<Aufsetz-Passwort>   global, gilt bis jemand es tauscht
+        //   <kennung>:<Aufsetz-Token>   zwei Stunden, ein Knoten, widerrufbar
+        //
+        // Der Token kam dazu, damit ein Aufsetz-Einzeiler mit EINEM Geheimnis
+        // auskommt. Vorher brauchte er zwei - eines zum Holen, eines zum
+        // Anmelden -, und auf der Knotenseite steht nur der Token.
         if (zugang.aufsetzPasswort(anmeldung)) {
             return ResponseEntity.noContent().build();
         }
+
+        Zugang.Anmeldedaten daten = zugang.anmeldedaten(anmeldung);
+        if (daten != null && verwaltung.aufsetzTokenGueltig(daten.benutzer(), daten.passwort())) {
+            return ResponseEntity.noContent().build();
+        }
+
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .header(HttpHeaders.WWW_AUTHENTICATE, FORDERE_ANMELDUNG)
                 .body("Passwort fehlt oder stimmt nicht.\n");

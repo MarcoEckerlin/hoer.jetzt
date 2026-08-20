@@ -146,6 +146,9 @@ services:
       # ohne diese Liste koennte bei offenem Port jeder seine Adresse selbst
       # bestimmen und die Freigabe waere wirkungslos.
       HJ_PROXY_VERTRAUEN: ${HJ_PROXY_VERTRAUEN:-127.0.0.1/32,::1/128,172.16.0.0/12,10.0.0.0/8,192.168.0.0/16}
+      # Der oeffentliche Name - nur fuer die Anzeige: die Knotenseite baut
+      # daraus den Aufsetz-Einzeiler.
+      HJ_UPDATE_HOST: ${HJ_UPDATE_HOST:?Kein oeffentlicher Name - einrichten.sh laufen lassen}
       HJ_PROTOKOLL_TAGE: ${HJ_PROTOKOLL_TAGE:-21}
       HJ_DATEN: /daten
       # Wo die Tresor-Klartexte liegen. Der Updater liest sie und richtet sie

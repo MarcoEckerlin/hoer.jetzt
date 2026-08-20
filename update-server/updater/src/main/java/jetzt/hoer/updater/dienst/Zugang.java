@@ -146,6 +146,18 @@ public class Zugang {
     }
 
     /**
+     * Die Anmeldedaten zerlegt - fuer Aufrufer, die selbst entscheiden wollen.
+     *
+     * <p>Gebraucht fuer den Aufsetz-Token: er steht als Passwort im Kopf, die
+     * Kennung des Knotens als Benutzername. Beides zusammen prueft
+     * {@code Knotenverwaltung}, nicht diese Klasse - hier liegt nur das
+     * Zerlegen.</p>
+     */
+    public Anmeldedaten anmeldedaten(String kopf) {
+        return zerlegen(kopf);
+    }
+
+    /**
      * Nach jeder Aenderung an Knoten, Modulen oder Faehigkeiten aufzurufen.
      * Ohne das wirkte eine Sperre erst nach Ablauf der Haltbarkeit - und genau
      * in dem Moment, in dem man einen Knoten sperrt, will man nicht warten.
@@ -178,7 +190,7 @@ public class Zugang {
         }
     }
 
-    private record Anmeldedaten(String benutzer, String passwort) {
+    public record Anmeldedaten(String benutzer, String passwort) {
     }
 
     private static Anmeldedaten zerlegen(String kopf) {

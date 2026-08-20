@@ -18,7 +18,21 @@
             Gilt zwei Stunden und genau einmal. <strong>Wird nicht noch einmal
             angezeigt</strong> &ndash; hier steht nur der Hash in der Datenbank.
         </p>
-        <pre th:text="'bash aufsetzen.sh --kennung ' + ${neueKennung} + ' --token ' + ${neuerToken}"></pre>
+
+        <!--
+          Ein Befehl, ein Geheimnis, nichts vorher herunterladen.
+          Der Token oeffnet sowohl den Download unter /knoten/ als auch die
+          Anmeldung - deshalb genuegt er allein. Frueher stand hier
+          "bash aufsetzen.sh ...", was voraussetzte, dass die Datei schon da
+          ist, und das Aufsetz-Passwort brauchte es zusaetzlich.
+        -->
+        <p class="klein">Auf dem neuen Rechner als root ausfuehren:</p>
+        <pre class="befehl" th:text="'curl -fsSL https://' + ${updateHost}
+             + '/bootstrap | bash -s -- --rolle ' + ${neueRolle}
+             + ' --kennung ' + ${neueKennung}
+             + ' --token ' + ${neuerToken}
+             + (${neueModule} != null and !${neueModule}.isEmpty()
+                ? ' --modules ' + ${neueModule} : '')"></pre>
     </div>
 
     <div class="einmalig" th:if="${neuesGeheimnis}">

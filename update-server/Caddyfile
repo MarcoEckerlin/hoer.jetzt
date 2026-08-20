@@ -206,6 +206,23 @@
 	# Adresspruefung. Das ist Absicht: ein frisch aufgesetzter Rechner ist
 	# noch nicht freigeschaltet, und genau das Skript, das er hier holt,
 	# sagt ihm, dass er es werden muss.
+	# ------------------------------------------------------------ Bootstrap
+	#
+	# Der Einstiegspunkt fuer das vollautomatische Aufsetzen. Ohne Passwort,
+	# und das ist Absicht: hier steht nur ein Skript, das anschliessend nach
+	# Kennung und Token fragt - beides bekommt es als Argument mitgegeben.
+	#
+	# Was jemand ohne Zugangsdaten damit anfangen kann: das Skript lesen. Es
+	# enthaelt keine Geheimnisse, und ohne gueltigen Token holt es nichts.
+	# Die Alternative waere ein Passwort im Einzeiler gewesen - dann stuende
+	# es in der Shell-Historie jedes Knotens.
+	handle /bootstrap {
+		root * /srv/ausliefern
+		rewrite * /knoten/bootstrap.sh
+		file_server
+		header Content-Type "text/x-shellscript; charset=utf-8"
+	}
+
 	handle /knoten/* {
 		route {
 			forward_auth updater:8080 {
