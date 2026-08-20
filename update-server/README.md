@@ -198,6 +198,24 @@ NPM bricht sonst mittendrin ab — mit einer Meldung, die nach einem Fehler in
 der Registry aussieht.
 
 
+
+### Diesen Server aktualisieren
+
+```bash
+bash /opt/hoerjetzt/main/update-server/update.sh
+```
+
+Holt den Stand von GitHub, baut den Updater neu, startet die Dienste und
+prüft danach, ob alle laufen. `.env`, Volumes und Passwörter bleiben
+unangetastet.
+
+Vorher nachsehen, was kommt: `update.sh --pruefen`. Es zeigt die Commits, die
+dazukämen, und ändert nichts.
+
+Dieser Server ist der einzige, der seinen Stand von **GitHub** holt statt von
+sich selbst — er ist ja die Bezugsquelle für alle anderen. Die Knoten
+aktualisieren sich über `auto-update.sh` von hier.
+
 ### Passwort der Oberfläche vergessen
 
 ```bash
