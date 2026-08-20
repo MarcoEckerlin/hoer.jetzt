@@ -51,13 +51,22 @@ if [[ -z "${HJ_UMGEZOGEN:-}" ]]; then
     fi
 fi
 
-HIER="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# Nach dem Umzug liegt das Skript in /tmp - die Compose-Datei findet sich dann
-# nur noch ueber ARBEIT, nicht mehr relativ zum Skript.
+# Wo die Compose-Datei liegt - falls sie noch liegt.
+#
+# Ist /opt/hoerjetzt schon geloescht, gibt es sie nicht mehr. Die Volumes
+# leben dann trotzdem weiter: "docker compose down" braucht die Datei, und
+# ohne sie bleiben sie als Waisen stehen. Genau das passiert, wenn jemand
+# zuerst rm -rf /opt/hoerjetzt macht und danach neu installiert - der frische
+# Stack findet die alten Daten vor und wundert sich.
+#
+# Deshalb ist der Projektname hier fest verdrahtet und wird NICHT aus dem
+# Verzeichnis abgeleitet. Nach einem Umzug nach /tmp hiesse er sonst "tmp",
+# und der Filter fände nichts.
+HIER="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || echo /tmp)"
+PROJEKT="update-server"
 QUELL="${ARBEIT}/main/update-server"
 [[ -f "${QUELL}/docker-compose.yml" ]] || QUELL="$HIER"
 COMPOSE="${QUELL}/docker-compose.yml"
-PROJEKT="$(basename "$QUELL")"
 
 echo
 echo "  ================================================================"
@@ -72,14 +81,30 @@ echo
 # Erst zeigen, was da ist. Eine Warnung ueber Unsichtbares liest sich wie eine
 # Formalie und wird entsprechend gelesen.
 echo "  Volumes dieses Projekts:"
-gefunden=0
-while read -r vol; do
-    [[ -z "$vol" ]] && continue
-    printf '    %s\n' "$vol"
-    gefunden=1
-done < <(docker volume ls -q \
-         --filter "label=com.docker.compose.project=${PROJEKT}" 2>/dev/null || true)
-[[ "$gefunden" -eq 0 ]] && echo "    (keine gefunden - der Stack lief hier wohl nie)"
+# Das abschliessende "true" ist nicht kosmetisch.
+#
+# Die Schleife endet mit "docker volume inspect", und das schlaegt beim
+# letzten nicht vorhandenen Volume fehl. Der Block gaebe damit 1 zurueck,
+# pipefail reichte das durch die ganze Pipeline, und set -e beendete das
+# Skript - noch VOR dem Loeschen. Der Anwender saehe die Liste und daechte,
+# es sei erledigt.
+{
+    docker volume ls -q --filter "label=com.docker.compose.project=${PROJEKT}" 2>/dev/null || true
+    # Ueber den Namen nachfassen: Volumes aus aelteren Compose-Fassungen
+    # tragen das Label nicht zwingend, der Name traegt es immer.
+    for name in ausliefern caddy-daten caddy-konfig forgejo-daten runner-daten updater-daten; do
+        if docker volume inspect "${PROJEKT}_${name}" >/dev/null 2>&1; then
+            echo "${PROJEKT}_${name}"
+        fi
+    done
+    true
+} | sort -u | while read -r vol; do
+    if [[ -n "$vol" ]]; then printf '    %s\n' "$vol"; fi
+done || true
+
+if ! docker volume ls -q 2>/dev/null | grep -q "^${PROJEKT}_"; then
+    echo "    (keine gefunden - der Stack lief hier wohl nie)"
+fi
 
 echo
 echo "  Unwiderruflich weg:"
@@ -99,9 +124,11 @@ if $MASCHINE; then
     printf '    %-32s %s\n' "Abbilder des Stacks" "hoerjetzt/*, forgejo, caddy, postgres, redis"
     printf '    %-32s %s\n' "Registry-Anmeldung" "auths auf 127.0.0.1 in config.json"
     printf '    %-32s %s\n' "insecure-registries" "/etc/docker/daemon.json"
+    # ls gibt 2 zurueck, wenn nichts passt - und pipefail reicht das
+    # durch die Ersetzung nach aussen, wo set -e das Skript beendet.
+    # Genau der Normalfall auf einer Maschine ohne diese Timer.
     zeitgeber="$(ls /etc/systemd/system/hj-*.timer \
-                    /etc/systemd/system/hoerjetzt-*.timer 2>/dev/null | wc -l)"
-    [[ "$zeitgeber" -gt 0 ]] && printf '    %-32s %s\n' "systemd-Timer" "${zeitgeber} gefunden"
+                    /etc/systemd/system/hoerjetzt-*.timer 2>/dev/null | wc -l || true)"
 fi
 
 echo
@@ -121,12 +148,53 @@ fi
 
 echo
 echo "  Container und Volumes..."
-# --remove-orphans faengt Container aus aelteren Fassungen der Compose-Datei
-# ab - etwa den alten "ai-radio", der nach der Umbenennung sonst weiterlaeuft
-# und seinen Port belegt haelt.
 if [[ -f "$COMPOSE" ]]; then
+    # --remove-orphans faengt Container aus aelteren Fassungen der
+    # Compose-Datei ab - etwa den alten "ai-radio", der nach der Umbenennung
+    # sonst weiterlaeuft und seinen Port belegt haelt.
     docker compose -f "$COMPOSE" down --volumes --remove-orphans 2>/dev/null || true
+else
+    echo "    Keine Compose-Datei - Container und Volumes direkt entfernen."
 fi
+
+# Zweiter Durchgang, immer.
+#
+# Ohne Compose-Datei kommt "compose down" gar nicht erst zum Zug, und die
+# Volumes blieben als Waisen stehen. Das ist der haeufige Fall: erst
+# rm -rf /opt/hoerjetzt, dann neu installieren - und der frische Stack findet
+# die alten Daten vor. Forgejo hat sein Konto dann schon, das Anlegen
+# scheitert, und die Meldung deutet auf alles Moegliche ausser die Ursache.
+#
+# Auch nach einem erfolgreichen "compose down" schadet der Durchgang nicht:
+# was weg ist, wird nicht noch einmal geloescht.
+for c in $(docker ps -aq --filter "label=com.docker.compose.project=${PROJEKT}" 2>/dev/null); do
+    docker rm -f "$c" >/dev/null 2>&1 || true
+done
+
+entfernt=0
+schon=" "
+weg_damit() {
+    local v="$1"
+    case "$schon" in *" ${v} "*) return 0 ;; esac
+    if docker volume rm -f "$v" >/dev/null 2>&1; then
+        echo "    ${v}"
+        schon="${schon}${v} "
+        entfernt=$((entfernt+1))
+    fi
+}
+
+for v in $(docker volume ls -q --filter "label=com.docker.compose.project=${PROJEKT}" 2>/dev/null || true); do
+    weg_damit "$v"
+done
+
+# Nachfassen ueber den Namen. Volumes aus aelteren Compose-Fassungen tragen
+# das Projekt-Label nicht zwingend - der Name traegt es immer.
+for name in ausliefern caddy-daten caddy-konfig forgejo-daten runner-daten updater-daten; do
+    weg_damit "${PROJEKT}_${name}"
+done
+
+if [[ "$entfernt" -eq 0 ]]; then echo "    (keine gefunden)"; fi
+
 rm -f "${QUELL}/.env" 2>/dev/null || true
 
 if ! $MASCHINE; then
@@ -247,7 +315,6 @@ echo "   Der Host ist zurueckgesetzt."
 echo
 echo "   Weiter wie auf einer frischen Maschine:"
 echo
-echo "     curl -fsSL https://raw.githubusercontent.com/MarcoEckerlin/\\"
-echo "hoer.jetzt/main/deploy/install-update-server.sh | bash"
+echo "     curl -fsSL https://raw.githubusercontent.com/MarcoEckerlin/hoer.jetzt/main/deploy/install-update-server.sh | bash"
 echo "  ----------------------------------------------------------------"
 echo
