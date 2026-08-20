@@ -79,7 +79,17 @@ fehler() { printf '[update-server] FEHLER: %s\n' "$*" >&2; exit 1; }
 #     erhaelt die Dateideskriptoren, ein zweiter Leseversuch faende nichts.
 # ---------------------------------------------------------------------------
 if [[ -z "${HJ_UMGEZOGEN:-}" ]]; then
-    EIGEN="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || true)"
+    # ${BASH_SOURCE[0]:-} und nicht ${BASH_SOURCE[0]}.
+    #
+    # Bei "curl ... | bash" kommt das Skript von der Standardeingabe und hat
+    # gar keinen Dateinamen - BASH_SOURCE ist dann leer, und "set -u" macht
+    # daraus einen Abbruch mit "unbound variable". Das traf ausgerechnet den
+    # Hauptweg aus der Anleitung, waehrend der Aufruf aus einer Datei heraus
+    # fehlerfrei lief.
+    #
+    # Ohne Dateinamen gibt es auch nichts umzuziehen: das Skript liegt dann
+    # nicht im Baum, den es gleich ueberschreibt.
+    EIGEN="$(readlink -f "${BASH_SOURCE[0]:-}" 2>/dev/null || true)"
     if [[ -n "$EIGEN" && "$EIGEN" == "${ARBEIT}/"* ]]; then
         KOPIE="$(mktemp)"
         cp "$EIGEN" "$KOPIE"
@@ -117,7 +127,15 @@ while [[ $# -gt 0 ]]; do
             PASSWORT_UNSICHER=true
             shift 2
             ;;
-        -h|--help) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help)
+            # $0 ist bei "curl | bash" die bash-Binaerdatei, nicht dieses
+            # Skript - dann gibt es keinen Hilfetext zu lesen.
+            if [[ -r "${BASH_SOURCE[0]:-}" ]]; then
+                sed -n '2,12p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+            else
+                echo "install-update-server.sh - siehe README im Repository."
+            fi
+            exit 0 ;;
         *) fehler "Unbekannte Angabe: $1" ;;
     esac
 done

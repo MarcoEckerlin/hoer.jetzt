@@ -37,6 +37,20 @@
 
 set -euo pipefail
 
+# Dieses Skript laedt Nachbardateien und braucht deshalb einen Dateinamen.
+#
+# Bei "curl ... | bash" gibt es den nicht - BASH_SOURCE ist leer, und "set -u"
+# brach hier mit "unbound variable" ab. Das ist die richtige Entscheidung mit
+# der falschen Meldung: der Weg funktioniert wirklich nicht, aber der Grund
+# stand nirgends. Wer ihn sah, suchte den Fehler im Skript.
+if [[ -z "${BASH_SOURCE[0]:-}" ]]; then
+    echo "Dieses Skript laedt Dateien aus seinem eigenen Verzeichnis und" >&2
+    echo "kann nicht ueber eine Pipe laufen. Erst herunterladen:" >&2
+    echo >&2
+    echo "  curl -fsSLu knoten https://<update-server>/knoten/aufsetzen.sh -o a.sh" >&2
+    echo "  bash a.sh" >&2
+    exit 1
+fi
 HIER="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ARBEIT="${ARBEIT:-/opt/hoerjetzt}"
 UMGEBUNG="${ARBEIT}/.env"

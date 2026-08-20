@@ -42,7 +42,7 @@ done
 # Verzeichnis weg - und bash liest sein Skript waehrend der Ausfuehrung
 # haeppchenweise nach. Also zuerst in eine Kopie ausserhalb umziehen.
 if [[ -z "${HJ_UMGEZOGEN:-}" ]]; then
-    EIGEN="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || true)"
+    EIGEN="$(readlink -f "${BASH_SOURCE[0]:-}" 2>/dev/null || true)"
     if [[ -n "$EIGEN" && "$EIGEN" == "${ARBEIT}/"* ]]; then
         KOPIE="$(mktemp)"
         cp "$EIGEN" "$KOPIE"
