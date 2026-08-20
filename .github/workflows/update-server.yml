@@ -150,6 +150,29 @@ jobs:
           find deploy update-server -name "*.sh" -print0 \
             | xargs -0 shellcheck -S error --external-sources || exit 1
 
+
+      # Caddy prueft seine eigene Konfiguration - "bash -n" kann das nicht.
+      #
+      # Anlass: der Baustein (zugang) stand im Site-Block statt auf oberster
+      # Ebene. Caddy kennt Snippets nur ausserhalb einer Site, hielt
+      # "import zugang" also fuer einen Dateinamen und startete gar nicht:
+      #
+      #   File to import not found: zugang, at /etc/caddy/Caddyfile:88
+      #
+      # Der Container lief in einer Neustartschleife, nichts lauschte auf dem
+      # Port, und der Proxy davor meldete 502. Gesucht wurde daraufhin an der
+      # Weiterleitung - die Ursache war eine Einrueckungsebene in dieser Datei.
+      #
+      # Die Umgebungswerte sind nur Platzhalter, damit die Pruefung durchlaeuft.
+      - name: Caddyfile validieren
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -e HJ_PORT_INTERN=8091 \
+            -v "${PWD}/update-server/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            caddy:2-alpine caddy validate --adapter caddyfile --config /etc/caddy/Caddyfile
+          echo "Caddyfile ok."
+
   compose:
     name: Compose-Dateien pruefen
     runs-on: ubuntu-latest

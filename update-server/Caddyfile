@@ -43,6 +43,28 @@
 	auto_https off
 }
 
+# Die Pruefung als wiederverwendbarer Baustein. 2xx heisst durchlassen, alles
+# andere geht unveraendert an den Aufrufer zurueck.
+#
+# WICHTIG: auf oberster Ebene, nicht im Site-Block.
+#
+# Caddy kennt Snippets nur ausserhalb einer Site. Stand die Definition im
+# Block - wie hier bis zum 20.08.2026 -, hielt Caddy "import zugang" fuer
+# einen Dateinamen und starte gar nicht erst:
+#
+#   Error: adapting config using caddyfile:
+#          File to import not found: zugang, at /etc/caddy/Caddyfile:88
+#
+# Der Container lief dabei in einer Neustartschleife, und weil nichts auf dem
+# Port lauschte, meldete der Proxy davor 502 - was nach einem Problem der
+# Weiterleitung aussieht statt nach einem Tippfehler in dieser Datei.
+(zugang) {
+	forward_auth updater:8080 {
+		uri /intern/pruefen
+		copy_headers X-Knoten
+	}
+}
+
 :{$HJ_PORT_INTERN} {
 	encode zstd gzip
 
@@ -69,14 +91,6 @@
 	# das man nur mit Blick auf beide findet.
 	request_header -X-Knoten
 
-	# Die Pruefung als wiederverwendbarer Baustein. 2xx heisst durchlassen,
-	# alles andere geht unveraendert an den Aufrufer zurueck.
-	(zugang) {
-		forward_auth updater:8080 {
-			uri /intern/pruefen
-			copy_headers X-Knoten
-		}
-	}
 
 	# ------------------------------------------------------------- Registry
 	#
