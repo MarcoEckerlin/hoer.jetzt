@@ -128,11 +128,35 @@ HJ_LAVALINK_PASSWORD=${HJ_LAVALINK_PASSWORD}"
 
 if [[ "$PROFIL" == "voll" ]]; then
     step "Datenbank"
-    frage  HJ_DB_HOST     "Adresse"   "127.0.0.1"
-    frage  HJ_DB_PORT     "Port"      "3306"
+    info "Die Datenbank laeuft als Container IM Stack des Knotens."
+    info "Die Adresse ist deshalb der Dienstname aus der Compose-Datei und"
+    info "keine IP: 'postgres'. Docker loest ihn im internen Netz auf."
+    info ""
+    info "127.0.0.1 waere falsch - das ist im Container der Container selbst."
+    info "Nur wer eine Datenbank ausserhalb des Stacks betreibt, traegt hier"
+    info "deren Adresse ein."
+    frage  HJ_DB_HOST     "Adresse"   "postgres"
+    frage  HJ_DB_PORT     "Port"      "5432"
     frage  HJ_DB_NAME     "Datenbank" "discordbot"
     frage  HJ_DB_USER     "Benutzer"  "discordbot"
     geheim HJ_DB_PASSWORD "Passwort"
+
+    # Die beiden haeufigsten Verwechslungen abfangen.
+    #
+    # Beide ergeben einen Knoten, der seine Datenbank nicht findet - und die
+    # Meldung im Log zeigt dann auf die Datenbank, nicht auf den Tresor. Bis
+    # jemand darauf kommt, vergeht Zeit, und der Wert steckt inzwischen in der
+    # .env jedes Knotens, der ihn geholt hat.
+    if [[ "$HJ_DB_HOST" == "127.0.0.1" || "$HJ_DB_HOST" == "localhost" ]]; then
+        warn "127.0.0.1 zeigt im Container auf den Container selbst."
+        warn "Fuer die Datenbank im Stack ist 'postgres' richtig."
+        ja "Trotzdem so eintragen?" n || fail "Abgebrochen - noch einmal starten."
+    fi
+    if [[ "$HJ_DB_PORT" == "3306" ]]; then
+        warn "3306 ist der Port von MariaDB. Der Stack faehrt PostgreSQL auf 5432."
+        warn "Der Wert stammt vermutlich noch aus der Zeit vor der Umstellung."
+        ja "Trotzdem 3306 eintragen?" n || fail "Abgebrochen - noch einmal starten."
+    fi
 
     step "Discord"
     geheim HJ_BOT_TOKEN             "Bot-Token"
