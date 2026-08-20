@@ -237,7 +237,20 @@ for m in $MODULE; do
         rm -f "$teil"
         gut "Profil ${profil}"
     else
-        fehler "Tresor ${profil} nicht zu holen. Im Updater: Modul zugeteilt? Adresse frei?"
+        # Zwei Ursachen, und die Meldung darf sie nicht vermengen:
+        #
+        #   - der Abruf scheiterte (Modul nicht zugeteilt, Adresse gesperrt)
+        #   - er klappte, aber im Tresor stehen keine Werte
+        #
+        # Im zweiten Fall hat tresor_pruefen die fehlenden Schluessel bereits
+        # einzeln genannt. Hier steht nur noch, dass es daran lag.
+        fehler "Tresor-Profil '${profil}' unbrauchbar.
+
+       Entweder ist es leer - dann auf dem Update-Server:
+           bash update-server/tresor.sh fuellen ${profil}
+
+       Oder der Abruf wurde abgewiesen. Dann im Updater nachsehen:
+           ist dem Knoten das Modul zugeteilt, und ist seine Adresse frei?"
     fi
 done
 

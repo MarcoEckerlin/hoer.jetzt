@@ -249,6 +249,58 @@ tresor_holen() {
         return 1
     fi
     sagen "Tresor ${profil} uebernommen."
+
+    # Ist auch etwas drin?
+    #
+    # Ein leerer oder halb gefuellter Tresor faellt sonst erst beim Starten
+    # auf - und dann als Wand aus Compose-Meldungen:
+    #
+    #   error while interpolating services.core.environment.HJ_BOT_TOKEN:
+    #   required variable HJ_BOT_TOKEN is missing a value
+    #
+    # Die zeigen auf die Compose-Datei, obwohl dort nichts fehlt. Die Ursache
+    # liegt auf dem Update-Server: dort ist "tresor.sh fuellen" nie gelaufen.
+    # Zwischen der Meldung und der Ursache liegen zwei Maschinen.
+    tresor_pruefen "$profil" "$ziel"
+}
+
+# Welche Werte ein Profil mitbringen muss, damit der Stack startet.
+#
+# Abgeleitet aus den ${VAR:?...}-Angaben der Compose-Dateien - dort steht,
+# was ohne Wert zum Abbruch fuehrt.
+tresor_pruefen() {
+    local profil="$1" datei="$2" noetig="" fehlend=""
+
+    case "$profil" in
+        voll|core)
+            noetig="HJ_BOT_TOKEN HJ_DB_PASSWORD HJ_DISCORD_CLIENT_ID
+                    HJ_DISCORD_CLIENT_SECRET HJ_LAVALINK_PASSWORD HJ_WEB_BASE_URL" ;;
+        lavalink)
+            noetig="HJ_LAVALINK_PASSWORD" ;;
+        controller)
+            noetig="HJ_BOT_TOKEN HJ_DB_PASSWORD HJ_DISCORD_CLIENT_ID
+                    HJ_DISCORD_CLIENT_SECRET HJ_LAVALINK_PASSWORD HJ_WEB_BASE_URL" ;;
+        *)  return 0 ;;
+    esac
+
+    for schluessel in $noetig; do
+        # Vorhanden UND nicht leer. "HJ_BOT_TOKEN=" ist so gut wie gar nichts.
+        if ! grep -qE "^${schluessel}=.+" "$datei" 2>/dev/null; then
+            fehlend="${fehlend} ${schluessel}"
+        fi
+    done
+
+    if [[ -n "$fehlend" ]]; then
+        warnen "Im Tresor-Profil '${profil}' fehlen Werte:"
+        for f in $fehlend; do warnen "    ${f}"; done
+        warnen ""
+        warnen "Auf dem Update-Server nachholen:"
+        warnen "    bash update-server/tresor.sh fuellen ${profil}"
+        warnen ""
+        warnen "Danach hier erneut:  bash install-node.sh --modules <liste>"
+        return 1
+    fi
+    return 0
 }
 
 # --------------------------------------------------------------- Zustand
