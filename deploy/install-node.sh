@@ -198,6 +198,22 @@ else
     gut "angemeldet als ${KENNUNG}"
 fi
 
+# Woher die Abbilder kommen.
+#
+# Der Registry-Pfad ist der Update-Server plus Organisation - dieselbe
+# Adresse, an der sich der Knoten gerade angemeldet hat.
+#
+# Ohne diese Zeile fiel der Hauptstack auf ghcr.io/marcoeckerlin/hoerjetzt
+# zurueck. Das ist nicht unsere Registry: der Pull endete in "denied", und
+# Compose versuchte daraufhin, die Abbilder aus dem Quellbaum zu BAUEN -
+# den es auf einem Knoten nicht gibt:
+#
+#   unable to prepare context: path "/opt/hoerjetzt/core" not found
+#
+# Drei Meldungen, drei Irrwege, eine fehlende Variable. Die Compose-Dateien
+# verlangen sie jetzt ausdruecklich, statt still auf etwas Fremdes zu zeigen.
+umgebung_setzen HJ_REGISTRY "${HJ_UPDATE_HOST}/hoerjetzt" || true
+
 # ------------------------------------------- 4. Schluessel hinterlegen
 
 schritt "Oeffentlichen Schluessel hinterlegen"
@@ -268,6 +284,28 @@ if [[ -d /etc/systemd/system ]]; then
     systemctl daemon-reload 2>/dev/null || true
     systemctl enable --now hj-agent.timer 2>/dev/null || true
     gut "Agent laeuft im Minutentakt"
+fi
+
+# Gibt es ueberhaupt ein Release?
+#
+# Ohne veroeffentlichte Abbilder gibt es nichts zu ziehen. Der Versuch endet
+# in einer Kette irrefuehrender Meldungen - "denied", dann "unable to prepare
+# context" -, weil Compose nach dem gescheiterten Pull versucht, aus dem
+# Quellbaum zu bauen. Den gibt es auf einem Knoten nicht, und das ist auch
+# richtig so: er soll Abbilder bekommen, keinen Quellcode.
+MANIFEST="$(us_holen "/release/aktuell" 2>/dev/null || true)"
+if [[ -z "$MANIFEST" || "$MANIFEST" == *"noch nichts veroeffentlicht"* ]]; then
+    fehler "Auf dem Update-Server ist noch kein Release veroeffentlicht.
+
+       Ohne Abbilder kann dieser Knoten nichts starten. Auf dem
+       Update-Server nachholen:
+
+           bash update-server/veroeffentlichen.sh <version>
+
+       Der Knoten ist bereits angemeldet und eingetragen - nach dem
+       Veroeffentlichen genuegt hier:
+
+           bash install-node.sh --modules ${MODULE// /,}"
 fi
 
 dienste=""
