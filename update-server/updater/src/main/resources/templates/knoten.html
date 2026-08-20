@@ -209,6 +209,16 @@
                 <form th:action="@{'/knoten/' + ${k.kennung} + '/geheimnis'}" method="post">
                     <button type="submit" class="schlicht">Geheimnis tauschen</button>
                 </form>
+
+                <!--
+                  Entfernen gehoert hierher, nicht nur in die Uebersicht.
+                  Wer einen Knoten anlegt, legt ihn hier an - und wer sich
+                  vertippt hat, sucht den Weg zurueck an derselben Stelle.
+                -->
+                <form th:action="@{'/knoten/' + ${k.kennung} + '/loeschen'}" method="post"
+                      onsubmit="return confirm('Knoten entfernen? Ausweis, Module und offene Token gehen mit - er kommt nicht von selbst zurueck.');">
+                    <button type="submit" class="gefahr">entfernen</button>
+                </form>
             </td>
         </tr>
         </tbody>

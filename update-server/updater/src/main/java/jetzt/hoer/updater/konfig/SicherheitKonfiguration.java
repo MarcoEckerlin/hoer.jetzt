@@ -53,7 +53,50 @@ public class SicherheitKonfiguration {
                 User.withUsername(name).password(hash).roles("VERWALTER").build());
     }
 
+    /**
+     * Eigene Kette fuer die Maschinen-Schnittstelle - ohne Anmeldung.
+     *
+     * <h2>Warum permitAll allein nicht genuegte</h2>
+     *
+     * {@code /intern/**} stand in der Hauptkette als {@code permitAll()}. Das
+     * regelt die <em>Autorisierung</em> - aber {@code httpBasic} laeuft davor
+     * und versucht jede mitgeschickte Anmeldung zu pruefen.
+     *
+     * <p>Ein Knoten schickt genau das mit: {@code controller-1} und seinen
+     * Aufsetz-Token. Spring versuchte daraufhin, {@code controller-1} als
+     * Benutzer der Oberflaeche anzumelden, fand ihn nicht - und antwortete
+     * mit 401, bevor der Torwaechter ueberhaupt gefragt wurde.</p>
+     *
+     * <pre>
+     *   curl: (22) The requested URL returned error: 401
+     * </pre>
+     *
+     * <p>Das sah nach einem falschen Token aus und war keiner. Wer danach
+     * sucht, erzeugt einen neuen Token und bekommt denselben Fehler.</p>
+     *
+     * <p>Diese Kette greift zuerst ({@code @Order}) und bringt gar keine
+     * Anmeldeverfahren mit. Wer hier durchdarf, entscheidet allein der
+     * {@code TorController} anhand von Passwort, Token und Adresse - und der
+     * Port ist ohnehin nur im Docker-Netz erreichbar, dafuer sorgt
+     * {@link PortTrennung}.</p>
+     */
     @Bean
+    @org.springframework.core.annotation.Order(1)
+    public SecurityFilterChain interneKette(HttpSecurity http) throws Exception {
+        http
+            .securityMatcher(PortTrennung.INTERN + "**")
+            .authorizeHttpRequests(regeln -> regeln.anyRequest().permitAll())
+            .csrf(schutz -> schutz.disable())
+            // Ausdruecklich keine: sonst faengt der Basic-Filter die Anmeldung
+            // des Knotens ab und weist sie zurueck.
+            .httpBasic(basic -> basic.disable())
+            .formLogin(formular -> formular.disable())
+            .anonymous(Customizer.withDefaults());
+        return http.build();
+    }
+
+    @Bean
+    @org.springframework.core.annotation.Order(2)
     public SecurityFilterChain kette(HttpSecurity http) throws Exception {
         http
             .authorizeHttpRequests(regeln -> regeln
