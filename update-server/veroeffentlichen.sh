@@ -30,6 +30,17 @@ HIER="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 QUELLEN="${QUELLEN:-$(cd "${HIER}/../.." && pwd)}"
 KOMPONENTEN=(core ai-radio lavalink web)
 
+# Nur ein Modul bauen - gesetzt von hoer-update.sh.
+#
+# Gebaut und geschoben wird dann allein dieses Abbild. Das Manifest bleibt
+# trotzdem vollstaendig: die uebrigen Zeilen behalten ihren bisherigen Wert,
+# sonst stuende ein Knoten mit anderen Modulen ploetzlich ohne Stand da und
+# auto-update.sh braeche mit "Das Manifest nennt keinen Stand fuer ..." ab.
+ALLE_KOMPONENTEN=("${KOMPONENTEN[@]}")
+if [[ -n "${HJ_NUR_MODUL:-}" ]]; then
+    KOMPONENTEN=("$HJ_NUR_MODUL")
+fi
+
 NUR_MANIFEST=0
 VERSION=""
 for argument in "$@"; do
@@ -87,9 +98,18 @@ info "$(printf '%-12s %s' "Quellen" "$QUELLEN")"
 # ------------------------------------------------------------------ 2  Bauen
 
 if [[ "$NUR_MANIFEST" -eq 0 ]]; then
-    for teil in "${KOMPONENTEN[@]}"; do
-        [[ -f "${QUELLEN}/${teil}/Dockerfile" ]] \
-            || fail "${QUELLEN}/${teil}/Dockerfile fehlt."
+    for teil in "${ALLE_KOMPONENTEN[@]}"; do
+        gebaut=false
+        for k in "${KOMPONENTEN[@]}"; do [[ "$k" == "$teil" ]] && gebaut=true; done
+        if $gebaut; then
+            printf '%s=%s\n' "$teil" "$VERSION"
+        else
+            # Nicht gebaut - den bisherigen Stand uebernehmen. Steht keiner
+            # da, bleibt die Zeile weg; auto-update.sh sagt dann deutlich,
+            # dass das Manifest keinen Stand fuer dieses Modul nennt.
+            alt="$(printf '%s' "$VORHERIGES" | grep "^${teil}=" | cut -d= -f2- || true)"
+            [[ -n "$alt" ]] && printf '%s=%s\n' "$teil" "$alt"
+        fi
     done
 
     for teil in "${KOMPONENTEN[@]}"; do
@@ -203,16 +223,53 @@ info "Bundle vollstaendig geprueft."
 # Erst jetzt. Ab diesem Augenblick holen sich die Knoten das neue Release.
 
 step "Manifest umschalten"
+
+# Das bisherige Manifest lesen, bevor es ueberschrieben wird.
+#
+# Wird nur ein Modul gebaut, uebernehmen die uebrigen Zeilen ihren alten
+# Wert. Ohne das verloere ein Knoten mit anderen Modulen seinen Stand.
+VORHERIGES="$(aus_lesen "release/aktuell" 2>/dev/null || true)"
+
+# Abbild-Digests einsammeln.
+#
+# Ein Tag ist eine Beschriftung und kein Nachweis: "core:2026.08.21.01" kann
+# morgen auf ein anderes Abbild zeigen, ohne dass sich der Name aendert. Der
+# Digest ist der Hash des Abbilds selbst - zieht ein Knoten danach, bekommt er
+# genau das, was hier veroeffentlicht wurde, oder gar nichts.
+#
+# Damit erfuellt Abschnitt 37 seinen Zweck ohne eigene Signaturkette: Docker
+# prueft den Digest beim Ziehen selbst und bricht bei Abweichung ab.
+DIGESTS=""
+for teil in "${KOMPONENTEN[@]}"; do
+    d="$(docker image inspect --format '{{index .RepoDigests 0}}' \
+         "${REGISTRY_PUSH}/${teil}:${VERSION}" 2>/dev/null || true)"
+    # Nur der Hash-Teil, ohne den Registry-Namen davor: der unterscheidet
+    # sich zwischen Push-Adresse (127.0.0.1) und Zugriffsadresse.
+    d="${d##*@}"
+    if [[ "$d" == sha256:* ]]; then
+        DIGESTS="${DIGESTS}${teil}_digest=${d}
+"
+        info "$(printf '%-10s %s' "$teil" "${d:0:23}...")"
+    else
+        warn "Kein Digest fuer ${teil} - der Knoten kann es nicht pruefen."
+    fi
+done
+
 {
     printf '# hoer.jetzt - welches Release gerade gilt.\n'
     printf '# Geschrieben von veroeffentlichen.sh am %s.\n' "$(date '+%Y-%m-%d %H:%M:%S')"
     printf '#\n'
     printf '# Zeilen bitte nicht umsortieren - auto-update.sh liest sie mit grep.\n'
+    printf '#\n'
+    printf '# Die *_digest-Zeilen sind der Nachweis. Ein Tag ist nur eine\n'
+    printf '# Beschriftung; der Digest ist der Hash des Abbilds. Zieht ein Knoten\n'
+    printf '# danach, bekommt er genau dieses Abbild - oder gar keines.\n'
     printf 'version=%s\n' "$VERSION"
     printf 'registry=%s\n' "$REGISTRY"
     for teil in "${KOMPONENTEN[@]}"; do
         printf '%s=%s\n' "$teil" "$VERSION"
     done
+    printf '%s' "$DIGESTS"
 } | aus_schreiben "release/aktuell" || fail "Manifest liess sich nicht schreiben."
 
 info "release/aktuell zeigt auf ${VERSION}"

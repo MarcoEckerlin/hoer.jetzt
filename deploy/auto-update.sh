@@ -273,6 +273,58 @@ if ! docker compose "${COMPOSE[@]}" pull >>"$PROTOKOLL" 2>&1; then
     fehler "Abbilder liessen sich nicht laden - alter Stand laeuft weiter. Siehe ${PROTOKOLL}."
 fi
 
+# ------------------------------------------------------------------ Nachweis
+#
+# Abschnitt 37: ein beschaedigtes oder vertauschtes Abbild darf nicht laufen.
+#
+# Ein Tag ist eine Beschriftung. "core:2026.08.21.01" kann morgen auf ein
+# anderes Abbild zeigen, ohne dass sich der Name aendert - versehentlich beim
+# Ueberschreiben, oder absichtlich. Der Digest ist der Hash des Abbilds
+# selbst; er kann nicht auf etwas anderes zeigen.
+#
+# Geprueft wird NACH dem Ziehen und VOR dem Starten. Stimmt etwas nicht,
+# laeuft der alte Stand weiter - er wurde noch nicht angefasst.
+#
+# Nennt das Manifest keine Digests, wird nicht geprueft. Ein Update zu
+# verweigern waere hier die schlechtere Wahl: der Knoten stuende auf einem
+# alten Stand fest, und Stillstand ist auch keine Sicherheit. Es steht aber
+# im Protokoll, damit es nicht unbemerkt bleibt.
+abweichung=""
+geprueft=0
+for teil in core ai-radio lavalink web; do
+    soll="$(manifestwert "${teil}_digest")"
+    [[ "$soll" == sha256:* ]] || continue
+
+    marke="$(manifestwert "$teil")"
+    ist="$(docker image inspect --format '{{range .RepoDigests}}{{.}} {{end}}' \
+           "${REGISTRY}/${teil}:${marke}" 2>/dev/null || true)"
+
+    # RepoDigests kann mehrere Eintraege haben, wenn dasselbe Abbild unter
+    # mehreren Registries bekannt ist. Es genuegt, wenn einer passt.
+    if [[ "$ist" == *"@${soll}"* ]]; then
+        geprueft=$((geprueft + 1))
+    else
+        abweichung="${abweichung}
+       ${teil}: erwartet ${soll}
+                 gefunden ${ist:-<keiner>}"
+    fi
+done
+
+if [[ -n "$abweichung" ]]; then
+    fehler "Ein Abbild stimmt nicht mit dem Manifest ueberein - nichts gestartet.${abweichung}
+
+       Der alte Stand laeuft unveraendert weiter. Entweder wurde ein Tag im
+       Verzeichnis ueberschrieben, oder das Manifest passt nicht zu den
+       veroeffentlichten Abbildern. Auf dem Update-Server neu
+       veroeffentlichen."
+fi
+
+if [[ "$geprueft" -gt 0 ]]; then
+    sagen "Abbilder gegen das Manifest geprueft (${geprueft})."
+else
+    sagen "Das Manifest nennt keine Digests - Abbilder ungeprueft uebernommen."
+fi
+
 if ! docker compose "${COMPOSE[@]}" up -d >>"$PROTOKOLL" 2>&1; then
     fehler "Start fehlgeschlagen - siehe ${PROTOKOLL}."
 fi

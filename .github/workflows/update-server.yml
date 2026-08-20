@@ -257,22 +257,46 @@ jobs:
       #
       # Beide Listen stehen im Repository. Sie gegeneinander zu halten kostet
       # nichts.
-      - name: Deckt der Tresor die Pflichtwerte ab?
+      # Wird jeder Pflichtwert irgendwo gesetzt?
+      #
+      # Die Compose-Datei markiert Pflichtwerte mit ${VAR:?...}. Fehlt einer,
+      # laeuft das Aufsetzen bis zum Start durch und endet dann in
+      #
+      #   error while interpolating services.core.environment.HJ_WEB_BASE_URL:
+      #   required variable HJ_WEB_BASE_URL is missing a value
+      #
+      # Die Meldung zeigt auf die Compose-Datei, obwohl dort nichts fehlt.
+      # Genau so ist HJ_WEB_BASE_URL durchgerutscht: nirgends abgefragt,
+      # nirgends bemerkt, bis ein Knoten nicht startete.
+      #
+      # Drei Quellen sind zulaessig, und sie haben verschiedene Aufgaben:
+      #
+      #   tresor.sh        Zugangsdaten, die alle Knoten eines Profils teilen
+      #   install-node.sh  was der Knoten ueber sich selbst weiss
+      #   auto-update.sh   was aus dem Release kommt (Registry, Marken)
+      #
+      # Der Rechner ist es egal, woher der Wert kommt - fehlen darf er
+      # nirgends.
+      - name: Wird jeder Pflichtwert gesetzt?
         run: |
           set -uo pipefail
           fehler=0
           for v in $(grep -oE '\$\{HJ_[A-Z_]+:\?' deploy/docker/docker-compose.yml \
                      | sed 's/\${//;s/:?//' | sort -u); do
-              if grep -q "^${v}=\${${v}}" update-server/tresor.sh; then
-                  printf 'ok    %s\n' "$v"
+              quelle=""
+              grep -q "^${v}=\${${v}}" update-server/tresor.sh && quelle="tresor.sh"
+              grep -q "umgebung_setzen ${v}" deploy/install-node.sh && quelle="${quelle:+$quelle, }install-node.sh"
+              grep -qE "printf '${v}=%s" deploy/auto-update.sh && quelle="${quelle:+$quelle, }auto-update.sh"
+              if [ -n "$quelle" ]; then
+                  printf 'ok    %-26s %s\n' "$v" "$quelle"
               else
-                  printf 'FEHL  %s wird von tresor.sh nicht geschrieben\n' "$v"
+                  printf 'FEHL  %-26s wird nirgends gesetzt\n' "$v"
                   fehler=1
               fi
           done
           if [ "$fehler" -ne 0 ]; then
               echo
-              echo "Ein Knoten mit diesem Tresor startet nicht - er bekommt den Wert nie."
+              echo "Ein Knoten mit diesem Stand startet nicht - er bekommt den Wert nie."
           fi
           exit "$fehler"
 

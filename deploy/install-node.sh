@@ -94,13 +94,23 @@ module_aufloesen() {
         [[ "$m" == "ai-radio" ]] && m="ki-radio"
         case "$m" in
             core|lavalink|ki-radio) ergebnis="${ergebnis} ${m}" ;;
+            agent)
+                # "Nur der Agent" - ein Host unter Verwaltung, der (noch)
+                # nichts betreibt. Kein eigenes Modul in der Liste, sondern
+                # die leere Liste: der Agent gehoert ohnehin immer dazu.
+                #
+                # Das ist der erste Schritt der Migration aus Abschnitt 69:
+                # einen bestehenden Server aufnehmen, ohne an seinen
+                # laufenden Diensten etwas zu aendern. Module lassen sich
+                # danach im Updater zuschalten.
+                ;;
             controller)
                 # Der Controller ist der Core-Stapel in einer anderen Rolle -
                 # kein eigenes Programm. Siehe Kollision K2.
                 ergebnis="${ergebnis} core"
                 umgebung_setzen HJ_ROLLE controller || true
                 ;;
-            *) fehler "Unbekanntes Modul: ${m} (moeglich: core, lavalink, ki-radio, controller)" ;;
+            *) fehler "Unbekanntes Modul: ${m} (moeglich: core, lavalink, ki-radio, controller, agent)" ;;
         esac
     done
     echo "$ergebnis" | tr ' ' '\n' | grep -v '^$' | sort -u | paste -sd' ' -
@@ -293,9 +303,13 @@ fi
 # context" -, weil Compose nach dem gescheiterten Pull versucht, aus dem
 # Quellbaum zu bauen. Den gibt es auf einem Knoten nicht, und das ist auch
 # richtig so: er soll Abbilder bekommen, keinen Quellcode.
-MANIFEST="$(us_holen "/release/aktuell" 2>/dev/null || true)"
-if [[ -z "$MANIFEST" || "$MANIFEST" == *"noch nichts veroeffentlicht"* ]]; then
-    fehler "Auf dem Update-Server ist noch kein Release veroeffentlicht.
+#
+# Bei "nur Agent" (leere Modulliste) faellt das weg: dieser Host betreibt
+# nichts und braucht folglich kein Release.
+if [[ -n "$MODULE" ]]; then
+    MANIFEST="$(us_holen "/release/aktuell" 2>/dev/null || true)"
+    if [[ -z "$MANIFEST" || "$MANIFEST" == *"noch nichts veroeffentlicht"* ]]; then
+        fehler "Auf dem Update-Server ist noch kein Release veroeffentlicht.
 
        Ohne Abbilder kann dieser Knoten nichts starten. Auf dem
        Update-Server nachholen:
@@ -306,6 +320,14 @@ if [[ -z "$MANIFEST" || "$MANIFEST" == *"noch nichts veroeffentlicht"* ]]; then
        Veroeffentlichen genuegt hier:
 
            bash install-node.sh --modules ${MODULE// /,}"
+    fi
+fi
+
+if [[ -z "$MODULE" ]]; then
+    gut "Kein Modul - dieser Host ist unter Verwaltung, betreibt aber nichts."
+    gut "Module lassen sich im Updater zuschalten; der Agent holt sie ab."
+    echo
+    exit 0
 fi
 
 dienste=""

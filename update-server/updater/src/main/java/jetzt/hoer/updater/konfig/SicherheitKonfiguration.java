@@ -115,7 +115,20 @@ public class SicherheitKonfiguration {
                 .logoutSuccessUrl("/anmelden?ab"))
             // Der Torwaechter bekommt POSTs von Caddy und den Knoten, die kein
             // Formular ausgefuellt haben und kein Token mitbringen koennen.
-            .csrf(schutz -> schutz.ignoringRequestMatchers(PortTrennung.INTERN + "**"))
+            //
+            // Dieselbe Ueberlegung gilt fuer /api/v1/**: dort ruft etwas
+            // Automatisches an und meldet sich mit Basic-Auth an. Ein
+            // CSRF-Token setzt eine vorherige Formularseite voraus, die es
+            // hier nicht gibt - ohne diese Ausnahme antwortete jeder
+            // POST/DELETE mit 403, und die Meldung nennt CSRF, nicht die
+            // fehlende Sitzung.
+            //
+            // Das ist unbedenklich, weil die Schnittstelle zustandslos mit
+            // Basic-Auth arbeitet: ein fremder Browser kann sie nicht
+            // unbemerkt im Namen eines angemeldeten Benutzers aufrufen, denn
+            // er schickt keine Anmeldedaten mit.
+            .csrf(schutz -> schutz.ignoringRequestMatchers(
+                    PortTrennung.INTERN + "**", "/api/v1/**"))
             .httpBasic(Customizer.withDefaults());
         return http.build();
     }
