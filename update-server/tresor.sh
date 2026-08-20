@@ -163,6 +163,22 @@ if [[ "$PROFIL" == "voll" ]]; then
     frage  HJ_DISCORD_CLIENT_ID     "Client-ID"
     geheim HJ_DISCORD_CLIENT_SECRET "Client-Secret"
 
+    step "Oeffentliche Adresse"
+    info "Unter welcher Adresse die Weboberflaeche des Bots erreichbar ist."
+    info "Discord schickt die OAuth-Rueckleitung dorthin - stimmt sie nicht,"
+    info "scheitert die Anmeldung mit 'redirect_uri mismatch'."
+    info ""
+    info "Mit https:// davor, ohne Schraegstrich am Ende."
+    frage HJ_WEB_BASE_URL "Adresse" "${HJ_WEB_BASE_URL:-https://hoer.jetzt}"
+    # Schraegstrich am Ende abschneiden: der Core haengt seine Pfade an, und
+    # aus zwei Schraegstrichen wird kein gueltiger Rueckleitungs-URI.
+    HJ_WEB_BASE_URL="${HJ_WEB_BASE_URL%/}"
+    if [[ ! "$HJ_WEB_BASE_URL" =~ ^https?:// ]]; then
+        warn "Ohne Schema ist das keine Adresse - https:// wird ergaenzt."
+        HJ_WEB_BASE_URL="https://${HJ_WEB_BASE_URL}"
+    fi
+    info "-> ${HJ_WEB_BASE_URL}"
+
     step "Sprachmodell"
     info "Leer lassen, wenn keines da ist - KI-Chat und KI-Radio bleiben dann aus."
     frage_leer HJ_LLM_OLLAMA_URL "Adresse"
@@ -218,6 +234,7 @@ HJ_DB_USER=${HJ_DB_USER}
 HJ_DB_PASSWORD=${HJ_DB_PASSWORD}
 HJ_BOT_TOKEN=${HJ_BOT_TOKEN}
 HJ_DISCORD_CLIENT_ID=${HJ_DISCORD_CLIENT_ID}
+HJ_WEB_BASE_URL=${HJ_WEB_BASE_URL}
 HJ_DISCORD_CLIENT_SECRET=${HJ_DISCORD_CLIENT_SECRET}
 HJ_LLM_OLLAMA_URL=${HJ_LLM_OLLAMA_URL}
 HJ_LLM_MODEL=${HJ_LLM_MODEL}
