@@ -1,0 +1,164 @@
+# hoer.jetzt - Update-Server pruefen.
+#
+# Laeuft bei jedem Push, der den Update-Server oder die Deploy-Skripte
+# beruehrt. Er baut und veroeffentlicht NICHTS - das macht weiterhin der
+# Runner auf dem Update-Server selbst (.forgejo/workflows/release.yml), weil
+# nur der an die Registry kommt.
+#
+# ---------------------------------------------------------------------------
+# Wozu dann diese Pipeline
+#
+# Weil install-update-server.sh seinen Stand von GitHub holt. Was hier im
+# Zweig main liegt, laeuft auf dem naechsten frisch aufgesetzten Server -
+# ohne Zwischenstufe und ohne dass jemand vorher baut. Ein Uebersetzungsfehler
+# faellt damit erst beim Aufsetzen auf, und dort steht niemand daneben.
+#
+# Geprueft wird deshalb genau das, was diese Kette braucht: uebersetzt der
+# Updater, laufen seine Proben, und sind die Skripte syntaktisch heil.
+# ---------------------------------------------------------------------------
+
+name: Update-Server
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "update-server/**"
+      - "deploy/**"
+      - ".github/workflows/update-server.yml"
+  pull_request:
+    paths:
+      - "update-server/**"
+      - "deploy/**"
+  # Von Hand ausloesbar - fuer den Fall, dass man vor einem Aufsetzen
+  # nachsehen will, ob der Zweig gerade heil ist.
+  workflow_dispatch:
+
+jobs:
+  updater:
+    name: Updater uebersetzen und pruefen
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: temurin
+          cache: maven
+
+      # "verify" und nicht "package": es soll die Proben mitnehmen. Darunter
+      # sind die beiden, an denen die Zugangstrennung haengt - PfadrechteTest
+      # und UmschlagTest. Ein gruener Build ohne sie waere hier wertlos.
+      - name: Bauen und pruefen
+        working-directory: update-server/updater
+        run: mvn -B --no-transfer-progress verify
+
+      - name: Probenergebnis sichern
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: probenergebnisse
+          path: update-server/updater/target/surefire-reports/
+          if-no-files-found: ignore
+
+  skripte:
+    name: Skripte pruefen
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Syntax zuerst. Ein Skript mit einem Klammerfehler bricht auf dem
+      # Zielsystem irgendwo in der Mitte ab - also nachdem es schon etwas
+      # angefasst hat.
+      - name: Syntax
+        run: |
+          set -euo pipefail
+          fehler=0
+          while read -r f; do
+              if bash -n "$f"; then
+                  printf 'ok   %s\n' "$f"
+              else
+                  printf 'FEHL %s\n' "$f"
+                  fehler=1
+              fi
+          done < <(find deploy update-server -name "*.sh" | sort)
+          exit "$fehler"
+
+      # CRLF hat hier schon einmal Lavalink in eine Neustartschleife geschickt:
+      # ein "#!/usr/bin/env bash" mit angehaengtem Wagenruecklauf endet in
+      # "set: Illegal option -". .gitattributes verhindert es beim Auschecken,
+      # aber eine Datei, die mit CRLF eingecheckt wurde, bleibt kaputt.
+      - name: Keine CRLF-Zeilenenden
+        run: |
+          set -euo pipefail
+          if betroffen="$(find deploy update-server -name '*.sh' -exec file {} + | grep -i crlf)"; then
+              echo "Diese Skripte haben CRLF-Zeilenenden:"
+              echo "$betroffen"
+              echo
+              echo "Beheben mit: sed -i 's/\\r\$//' <datei>"
+              exit 1
+          fi
+          echo "Keine CRLF-Zeilenenden."
+
+      - name: shellcheck
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          # Nur Fehler, keine Stilhinweise: die Skripte sind gewachsen, und
+          # eine Pipeline, die an einem Hinweis scheitert, wird abgeschaltet
+          # statt beachtet.
+          find deploy update-server -name "*.sh" -print0 \
+            | xargs -0 shellcheck -S error --external-sources || exit 1
+
+  compose:
+    name: Compose-Dateien pruefen
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # "config" liest die Datei so, wie Docker sie spaeter liest. Ein
+      # Einrueckungsfehler oder eine unaufloesbare Variable faellt hier auf
+      # und nicht beim Hochfahren auf dem Zielsystem.
+      #
+      # Die Pflichtwerte werden nur gesetzt, damit die Pruefung durchlaeuft -
+      # es sind keine Zugangsdaten und sie landen nirgends.
+      - name: docker compose config
+        run: |
+          set -euo pipefail
+          cd deploy/docker
+          cat > .env <<'ENV'
+          HJ_BOT_TOKEN=pruefung
+          HJ_DB_PASSWORD=pruefung
+          HJ_LAVALINK_PASSWORD=pruefung
+          HJ_WEB_BASE_URL=https://beispiel.invalid
+          HJ_DISCORD_CLIENT_ID=0
+          HJ_DISCORD_CLIENT_SECRET=pruefung
+          HJ_REGISTRY=beispiel.invalid/hoerjetzt
+          ENV
+          # Beide Dateien, wie im Betrieb. Ohne die Spock-Ueberlagerung legt
+          # Compose Postgres aus der Grunddatei an - auf einem leeren Volume.
+          # Das ist hier folgenlos, aber die Pruefung soll denselben Aufruf
+          # nehmen wie der Betrieb.
+          docker compose -f docker-compose.yml -f docker-compose.spock.yml config >/dev/null
+          echo "Hauptstack ok."
+          docker compose -f docker-compose.nodes.yml config >/dev/null 2>&1 \
+            || echo "Hinweis: docker-compose.nodes.yml braucht ein vorhandenes Netz - uebersprungen."
+          rm -f .env
+
+      - name: Update-Server-Compose
+        run: |
+          set -euo pipefail
+          cd update-server
+          cat > .env <<'ENV'
+          HJ_TOKEN_KNOTEN=pruefung
+          HJ_TOKEN_AUFSETZEN=pruefung
+          HJ_VERWALTER_HASH=pruefung
+          HJ_UPDATE_HOST=beispiel.invalid
+          ENV
+          docker compose config >/dev/null
+          echo "Update-Server ok."
+          rm -f .env

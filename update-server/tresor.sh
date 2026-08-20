@@ -6,15 +6,20 @@
 #   bash tresor.sh zeigen  [profil]    nachsehen, was drin steht
 #   bash tresor.sh stand               was es gibt, ohne aufzumachen
 #
-# Zwei Profile, und der Unterschied ist der eigentliche Gewinn gegenueber
+# Ein Profil je Modul, und die Trennung ist der eigentliche Gewinn gegenueber
 # frueher:
 #
-#   voll       Datenbank, Bot-Token, Client-Secret, Sprachmodell, Lavalink.
-#              Bekommt nur ein Host, auf dem der Kern laeuft.
-#   lavalink   Nur das Lavalink-Passwort. Ein Audio-Knoten braucht nichts
-#              weiter - und soll auch nichts weiter bekommen. Unter GitHub lag
-#              auf jedem Knoten der vollstaendige Quellbaum; wer einen davon
-#              aufmachte, hatte alles.
+#   voll        Datenbank, Bot-Token, Client-Secret, Sprachmodell, Lavalink.
+#   (= core)    Bekommt nur ein Host, auf dem der Kern laeuft.
+#   lavalink    Nur das Lavalink-Passwort. Ein Audio-Knoten braucht nichts
+#               weiter - und soll auch nichts weiter bekommen. Unter GitHub lag
+#               auf jedem Knoten der vollstaendige Quellbaum; wer einen davon
+#               aufmachte, hatte alles.
+#   ki-radio    Nur, was das KI-Radio braucht.
+#   controller  Zusaetzlich das, was nur die Steuer-Node kennen muss.
+#
+# Welches Profil ein Knoten bekommt, entscheidet nicht er selbst, sondern
+# seine Module im Updater - siehe Faehigkeit.java.
 #
 # Der Tresor liegt im Klartext im Auslieferungsverzeichnis. Geschuetzt ist er
 # durch dasselbe wie die Abbilder: das Knoten-Passwort und eine
@@ -34,8 +39,13 @@ HIER="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BEFEHL="${1:-}"
 PROFIL="${2:-voll}"
 case "$PROFIL" in
-    voll|lavalink) ;;
-    *) fail "Profil muss voll oder lavalink sein." ;;
+    # "core" ist der neue Name fuer "voll" - der Updater bedient beide auf
+    # dieselbe Datei (siehe Tresorausgabe.lesen). Der alte Name bleibt, weil
+    # er in bestehenden Anleitungen steht.
+    core) PROFIL="voll" ;;
+    voll|lavalink|ki-radio|controller) ;;
+    ai-radio) PROFIL="ki-radio" ;;
+    *) fail "Profil muss voll (bzw. core), lavalink, ki-radio oder controller sein." ;;
 esac
 ZIEL="tresor/${PROFIL}.env"
 
@@ -55,7 +65,7 @@ ZIEL="tresor/${PROFIL}.env"
 
 if [[ "$BEFEHL" == "stand" ]]; then
     step "Tresor"
-    for p in voll lavalink; do
+    for p in voll lavalink ki-radio controller; do
         if aus_gibt_es "tresor/${p}.env"; then
             groesse="$(aus_lesen "tresor/${p}.env" | wc -c)"
             info "$(printf '%-10s %s Bytes' "$p" "$groesse")"
@@ -104,7 +114,7 @@ HJ_UPDATE_HOST=""
 [[ -f "${HIER}/.env" ]] && HJ_UPDATE_HOST="$(grep '^HJ_UPDATE_HOST=' "${HIER}/.env" | cut -d= -f2- || true)"
 
 step "Allgemein"
-frage HJ_UPDATE_HOST "Adresse des Update-Servers" "${HJ_UPDATE_HOST:-update.system.hoer.jetzt}"
+frage HJ_UPDATE_HOST "Adresse des Update-Servers" "${HJ_UPDATE_HOST:-repo.updates.hoer.jetzt}"
 
 # Kein Passwort im Tresor: das Knoten-Passwort braucht der Knoten schon, um
 # ihn ueberhaupt zu holen. Hier steht nur, wohin er sich wenden soll.
@@ -130,7 +140,7 @@ if [[ "$PROFIL" == "voll" ]]; then
     geheim HJ_DISCORD_CLIENT_SECRET "Client-Secret"
 
     step "Sprachmodell"
-    info "Leer lassen, wenn keines da ist - KI-Chat und AI-Radio bleiben dann aus."
+    info "Leer lassen, wenn keines da ist - KI-Chat und KI-Radio bleiben dann aus."
     frage_leer HJ_LLM_OLLAMA_URL "Adresse"
     if [[ -n "$HJ_LLM_OLLAMA_URL" ]]; then
         [[ "$HJ_LLM_OLLAMA_URL" =~ ^https?:// ]] || HJ_LLM_OLLAMA_URL="http://${HJ_LLM_OLLAMA_URL}"
@@ -140,6 +150,40 @@ if [[ "$PROFIL" == "voll" ]]; then
         frage HJ_LLM_MODEL "Modell" "qwen3:8b"
     else
         HJ_LLM_MODEL=""
+    fi
+
+    # ------------------------------------------------------------------
+    # Schluessel fuer die Zugangsdaten der Server-Betreiber
+    # ------------------------------------------------------------------
+    #
+    # Damit verschluesselt der Bot die API-Token, die ein Discord-Server-
+    # Betreiber fuer seinen eigenen KI-Endpunkt hinterlegt - siehe
+    # Geheimtext.java im Core. Er wird nicht abgefragt, sondern erzeugt: es
+    # gibt keinen Grund, ihn zu kennen, und ein getippter waere schwaecher
+    # als einer aus /dev/urandom.
+    #
+    # ------------------------------------------------------------------
+    # Ein vorhandener Schluessel wird UEBERNOMMEN, nie ersetzt.
+    #
+    # Wuerde beim erneuten Befuellen ein neuer erzeugt, waeren saemtliche
+    # bereits gespeicherten Token nicht mehr zu entschluesseln - und zwar
+    # stillschweigend: der KI-Chat scheiterte danach mit "Token abgelehnt",
+    # und niemand kaeme auf den Tresor als Ursache. Deshalb wird zuerst
+    # gelesen und nur bei Bedarf erzeugt.
+    # ------------------------------------------------------------------
+    HJ_GEHEIMNIS_SCHLUESSEL=""
+    if aus_gibt_es "$ZIEL"; then
+        HJ_GEHEIMNIS_SCHLUESSEL="$(aus_lesen "$ZIEL" \
+            | grep '^HJ_GEHEIMNIS_SCHLUESSEL=' | cut -d= -f2- || true)"
+    fi
+
+    step "Schluessel fuer hinterlegte Zugangsdaten"
+    if [[ -n "$HJ_GEHEIMNIS_SCHLUESSEL" ]]; then
+        info "Vorhandener wird uebernommen (${#HJ_GEHEIMNIS_SCHLUESSEL} Zeichen)."
+        info "Ein neuer wuerde alle bereits hinterlegten API-Token unlesbar machen."
+    else
+        HJ_GEHEIMNIS_SCHLUESSEL="$(openssl rand -base64 48 | tr -d '\n')"
+        info "Neu erzeugt (${#HJ_GEHEIMNIS_SCHLUESSEL} Zeichen). Wird nie abgefragt."
     fi
 
     INHALT="${INHALT}
@@ -152,7 +196,8 @@ HJ_BOT_TOKEN=${HJ_BOT_TOKEN}
 HJ_DISCORD_CLIENT_ID=${HJ_DISCORD_CLIENT_ID}
 HJ_DISCORD_CLIENT_SECRET=${HJ_DISCORD_CLIENT_SECRET}
 HJ_LLM_OLLAMA_URL=${HJ_LLM_OLLAMA_URL}
-HJ_LLM_MODEL=${HJ_LLM_MODEL}"
+HJ_LLM_MODEL=${HJ_LLM_MODEL}
+HJ_GEHEIMNIS_SCHLUESSEL=${HJ_GEHEIMNIS_SCHLUESSEL}"
 fi
 
 # ------------------------------------------------------------------ Ablegen

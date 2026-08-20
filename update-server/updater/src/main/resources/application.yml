@@ -18,11 +18,34 @@ hj:
   token:
     knoten:    ${HJ_TOKEN_KNOTEN:?Kein Knoten-Passwort - einrichten.sh laufen lassen}
     aufsetzen: ${HJ_TOKEN_AUFSETZEN:?Kein Aufsetz-Passwort - einrichten.sh laufen lassen}
+    # Das gemeinsame Passwort: aus.
+    #
+    # Es war als Uebergang gedacht, damit bestehende Knoten beim ersten Start
+    # dieser Fassung nicht stehenbleiben. Der Uebergang entfaellt - alle
+    # Knoten werden neu aufgesetzt und bekommen dabei eine eigene Kennung.
+    #
+    # Aus heisst: ein Knoten OHNE eigenes Geheimnis kommt nirgends mehr durch.
+    # Das ist die schaerfere und richtige Vorgabe. Wer sie voruebergehend
+    # braucht - etwa weil ein Knoten mitten im Umbau haengt - setzt
+    # HJ_GEMEINSAM_ERLAUBEN=true, und zwar ausdruecklich und nachweisbar
+    # statt versehentlich.
+    gemeinsam-erlauben: ${HJ_GEMEINSAM_ERLAUBEN:false}
   verwalter:
     name: ${HJ_VERWALTER_NAME:verwalter}
     hash: ${HJ_VERWALTER_HASH:?Kein Verwalter-Hash - einrichten.sh laufen lassen}
   # Wie lange das Zugriffsprotokoll aufbewahrt wird.
   protokoll-tage: ${HJ_PROTOKOLL_TAGE:21}
+  # Wo das Auslieferungsverzeichnis eingehaengt ist. Der Updater liest daraus
+  # die Tresor-Klartexte und richtet sie beim Abruf an den fragenden Knoten -
+  # deshalb braucht er es, obwohl Caddy die uebrigen Dateien ausliefert.
+  ausliefern: ${HJ_AUSLIEFERN:/srv/ausliefern}
+  daten: ${HJ_DATEN:/daten}
+  # Sicherungen der beiden Controller und die eigene.
+  #
+  # Im Datenverzeichnis und NICHT im Auslieferungsverzeichnis: was dort liegt,
+  # gibt Caddy per file_server heraus. Ein Datenbankabzug mit allen Bot-Token
+  # gehoert nicht in einen Pfad, dessen Aufgabe das Ausliefern ist.
+  sicherungen: ${HJ_SICHERUNGEN:/daten/sicherungen}
 
 spring:
   application:

@@ -25,7 +25,28 @@ public record Knoten(
         String letzteIp,
         Instant zuletztGemeldet,
         Instant zuletztGesehen,
-        boolean updateAngefordert) {
+        boolean updateAngefordert,
+        // Ab hier die Angaben aus dem Umbau auf eigene Knoten-Identitaeten.
+        boolean geheimnisGesetzt,
+        boolean gesperrt,
+        String gesperrtGrund,
+        Instant wartungSeit,
+        String wartungGrund,
+        String wartungVon,
+        String rechnername,
+        String privatIp,
+        String agentVersion) {
+
+    /**
+     * Ob dieser Knoten gerade in Wartung ist.
+     *
+     * <p>Abgeleitet aus {@code wartungSeit} statt als eigener Schalter: zwei
+     * Felder, die dasselbe sagen sollen, laufen frueher oder spaeter
+     * auseinander - und dann steht "in Wartung seit nie" in der Uebersicht.</p>
+     */
+    public boolean inWartung() {
+        return wartungSeit != null;
+    }
 
     /**
      * Ein Knoten gilt als stumm, wenn er sich seit ueber einem Tag nicht

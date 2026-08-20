@@ -1,0 +1,16 @@
+[Unit]
+Description=hoer.jetzt - Datenbanksicherung alle drei Stunden
+
+[Timer]
+# 00:07, 03:07, 06:07 ... Die sieben Minuten sind Absicht: zur vollen Stunde
+# laufen auf diesen Maschinen bereits andere Zeitgeber, und eine Sicherung,
+# die sich mit einem Update ueberschneidet, misst die schlechteste Sekunde
+# des Tages.
+OnCalendar=*-*-* 00,03,06,09,12,15,18,21:07:00
+# Nach einem Neustart nachholen, was ausgefallen ist. Ohne das faellt bei
+# einem Neustart um 02:55 die Sicherung um 03:07 aus, und niemand merkt es.
+Persistent=true
+RandomizedDelaySec=120
+
+[Install]
+WantedBy=timers.target

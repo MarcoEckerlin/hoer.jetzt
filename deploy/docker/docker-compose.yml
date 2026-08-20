@@ -59,7 +59,8 @@ services:
       HJ_WEB_REDIRECT_URI: ${HJ_WEB_BASE_URL}/auth/discord/callback
       HJ_DISCORD_CLIENT_ID: ${HJ_DISCORD_CLIENT_ID:?Client-ID fehlt}
       HJ_DISCORD_CLIENT_SECRET: ${HJ_DISCORD_CLIENT_SECRET:?Client-Secret fehlt}
-      HJ_MUSIC_BRAIN_BASE_URL: http://ai-radio:8091
+      # Zeigt auf den Dienstnamen, der seit der Umbenennung "ki-radio" heisst.
+      HJ_MUSIC_BRAIN_BASE_URL: http://ki-radio:8091
       # Ohne diese drei findet der Bot beim allerersten Start keinen Knoten:
       # in der Datenbank steht noch keiner, weil ihn niemand eintragen konnte.
       HJ_LAVALINK_NAME: free-1
@@ -249,9 +250,22 @@ services:
       retries: 6
     networks: [hoerjetzt]
 
-  ai-radio:
+  # Umbenannt von "ai-radio".
+  #
+  # Der Dienstname aendert sich, der Abbildpfad vorerst nicht: der Quellzweig
+  # des KI-Radios liegt nicht in der Arbeitskopie (Kollision K4 in
+  # UMBAU-KNOTENVERWALTUNG.md), es laesst sich hier also nicht neu bauen und
+  # unter neuem Namen veroeffentlichen. HJ_KI_RADIO_ABBILD zeigt deshalb
+  # weiterhin auf den alten Pfad und wird umgestellt, sobald der Zweig da ist.
+  #
+  # Beim ersten Hochfahren nach dieser Aenderung sieht Compose "ai-radio" als
+  # verwaisten Container und laesst ihn laufen. Einmal
+  #   docker compose ... up -d --remove-orphans
+  # raeumt ihn weg. Ohne das laufen beide, und der alte haelt Port und
+  # Datenbankverbindungen weiter belegt.
+  ki-radio:
     logging: *protokoll
-    image: ${HJ_REGISTRY:-ghcr.io/marcoeckerlin/hoerjetzt}/ai-radio:${AI_RADIO_TAG:-latest}
+    image: ${HJ_KI_RADIO_ABBILD:-${HJ_REGISTRY:-ghcr.io/marcoeckerlin/hoerjetzt}/ai-radio}:${KI_RADIO_TAG:-${AI_RADIO_TAG:-latest}}
     restart: unless-stopped
     environment:
       HJ_BOT_ID: ${HJ_BOT_ID:-1}

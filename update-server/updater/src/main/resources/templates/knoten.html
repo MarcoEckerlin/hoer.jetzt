@@ -1,0 +1,221 @@
+<!doctype html>
+<html xmlns:th="http://www.thymeleaf.org" lang="de">
+<head th:replace="~{grund :: kopf('Knoten verwalten')}"></head>
+<body>
+<nav th:replace="~{grund :: navigation('verwalten')}"></nav>
+<main>
+    <div th:replace="~{grund :: meldungen}"></div>
+
+    <!--
+      Der Token wird genau einmal gezeigt. Gespeichert ist nur sein Hash -
+      wer ihn hier verpasst, erzeugt einen neuen. Deshalb steht er gross und
+      oben und nicht als Zeile in der Tabelle.
+    -->
+    <div class="einmalig" th:if="${neuerToken}">
+        <h2>Aufsetz-Token fuer <span th:text="${neueKennung}"></span></h2>
+        <p class="gross" th:text="${neuerToken}"></p>
+        <p>
+            Gilt zwei Stunden und genau einmal. <strong>Wird nicht noch einmal
+            angezeigt</strong> &ndash; hier steht nur der Hash in der Datenbank.
+        </p>
+        <pre th:text="'bash aufsetzen.sh --kennung ' + ${neueKennung} + ' --token ' + ${neuerToken}"></pre>
+    </div>
+
+    <div class="einmalig" th:if="${neuesGeheimnis}">
+        <h2>Neues Geheimnis fuer <span th:text="${neueKennung}"></span></h2>
+        <p class="gross" th:text="${neuesGeheimnis}"></p>
+        <p>
+            Der Knoten ist ab sofort ausgesperrt, bis dieser Wert bei ihm in der
+            <code>.env</code> steht (<code>HJ_KNOTEN_GEHEIMNIS</code>) und einmal
+            <code>docker login</code> gelaufen ist. Es geht keine Verbindung von
+            hier zu ihm &ndash; das muss auf dem Host passieren.
+        </p>
+    </div>
+
+    <h1>Knoten</h1>
+    <p class="lage">
+        <span th:text="${mitGeheimnis}"></span> von <span th:text="${gesamt}"></span>
+        Knoten haben ein eigenes Geheimnis.
+        <span th:if="${mitGeheimnis &lt; gesamt}" class="warnung">
+            Die uebrigen kommen nicht durch: das gemeinsame Passwort ist ab Werk
+            abgeschaltet. Fuer jeden davon hier einen Aufsetz-Token erzeugen und
+            auf dem Host <code>install-node.sh</code> laufen lassen.
+        </span>
+    </p>
+
+    <!-- ------------------------------------------------------- Anlegen -->
+    <!--
+      Auswahl statt Kaestchen.
+      Die Kaestchen stellten die Frage "welche Module", gemeint ist aber "was
+      fuer ein Knoten wird das". Darauf gibt es eine Handvoll Antworten, nicht
+      acht frei kombinierbare - und aus der Antwort ergibt sich der
+      Namensvorschlag, den es bei freier Kombination nicht gaebe.
+      Einzelne Module bleiben erreichbar: in der Liste unten je Knoten.
+    -->
+    <form th:action="@{/knoten}" method="post" class="anlegen" id="anlegen">
+        <label>Was fuer ein Knoten
+            <select name="vorlage" id="vorlage" required>
+                <option value="" disabled selected>bitte waehlen…</option>
+                <option th:each="v : ${vorlagen}"
+                        th:value="${v.name()}"
+                        th:attr="data-vorschlag=${vorschlaege.get(v.name())}"
+                        th:text="${v.anzeige()}"></option>
+            </select>
+        </label>
+
+        <label>Kennung
+            <input type="text" name="kennung" id="kennung"
+                   pattern="[a-z0-9][a-z0-9-]{1,38}[a-z0-9]"
+                   placeholder="waehlt sich mit der Vorlage">
+            <span class="klein" id="kennung-hinweis">
+                Leer lassen nimmt den naechsten freien Namen.
+            </span>
+        </label>
+
+        <label>Name <span class="klein">(frei, nur zur Anzeige)</span>
+            <input type="text" name="name" placeholder="z.B. Premium Audio Falkenstein">
+        </label>
+
+        <p class="klein" id="vorlage-erklaerung"></p>
+
+        <button type="submit">Anlegen und Token erzeugen</button>
+    </form>
+
+    <!--
+      Der Namensvorschlag steht als data-Attribut an jeder Option - vom Server
+      gerechnet, nicht hier. Nur er kennt die vorhandenen Knoten, und
+      "lavalink-9 + 1" im Browser waere entweder geraten oder eine zweite
+      Abfrage.
+
+      Wird die Kennung leer abgeschickt, bildet der Server sie neu. Zwischen
+      dem Aufbau dieser Seite und dem Absenden kann naemlich ein zweiter
+      Knoten entstanden sein - dann zeigte das Feld noch lavalink-10, waehrend
+      es den schon gibt.
+
+      Ohne JavaScript funktioniert das Formular unveraendert: Vorlage waehlen,
+      Kennung leer lassen, absenden. Das Feld ist bewusst nicht "required".
+    -->
+    <script th:inline="javascript">
+        (function () {
+            var auswahl    = document.getElementById("vorlage");
+            var kennung    = document.getElementById("kennung");
+            var erklaerung = document.getElementById("vorlage-erklaerung");
+            if (!auswahl || !kennung) { return; }
+
+            var erklaerungen = /*[[${erklaerungen}]]*/ {};
+
+            auswahl.addEventListener("change", function () {
+                var gewaehlt = auswahl.options[auswahl.selectedIndex];
+                var vorschlag = gewaehlt.getAttribute("data-vorschlag") || "";
+
+                // Nur fuellen, wenn das Feld leer ist oder noch der vorige
+                // Vorschlag darin steht. Wer selbst etwas eingetippt hat, soll
+                // es nicht beim Umschalten verlieren.
+                if (!kennung.value || kennung.dataset.vorgeschlagen === kennung.value) {
+                    kennung.value = vorschlag;
+                    kennung.dataset.vorgeschlagen = vorschlag;
+                }
+                erklaerung.textContent = erklaerungen[auswahl.value] || "";
+            });
+        })();
+    </script>
+
+    <!-- ------------------------------------------------------- Bestand -->
+    <table th:unless="${#lists.isEmpty(knoten)}">
+        <thead>
+        <tr>
+            <th>Kennung</th><th>Name</th><th>Module</th><th>Geheimnis</th>
+            <th>Zustand</th><th>Zuletzt</th><th></th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="k : ${knoten}" th:classappend="${k.stumm(jetzt)} ? 'stumm'">
+            <td><code th:text="${k.kennung}"></code></td>
+            <td th:text="${k.name}"></td>
+            <td class="klein">
+                <span th:each="m : ${moduleJeKnoten.get(k.kennung)}"
+                      class="marke" th:text="${m.anzeige()}"></span>
+                <em th:if="${#lists.isEmpty(moduleJeKnoten.get(k.kennung))}">
+                    keines &ndash; dieser Knoten darf nichts holen
+                </em>
+            </td>
+            <td class="klein">
+                <span th:if="${k.geheimnisGesetzt}">eigenes</span>
+                <span th:unless="${k.geheimnisGesetzt}" class="warnung">gemeinsam</span>
+            </td>
+            <td class="klein">
+                <span th:if="${k.gesperrt}" class="fehler">gesperrt</span>
+                <span th:if="${k.inWartung}" class="warnung">Wartung</span>
+                <span th:if="${!k.gesperrt and !k.inWartung}">Betrieb</span>
+                <div class="klein" th:if="${k.inWartung}"
+                     th:text="${k.wartungGrund} + ' (' + ${k.wartungVon} + ')'"></div>
+                <div class="klein" th:if="${k.gesperrt}" th:text="${k.gesperrtGrund}"></div>
+            </td>
+            <td class="klein" th:text="${k.zuletztGesehen == null} ? '&ndash;'
+                                       : ${seit.apply(k.zuletztGesehen, jetzt)}"></td>
+            <td class="knopfreihe">
+                <form th:action="@{'/knoten/' + ${k.kennung} + '/token'}" method="post">
+                    <button type="submit" class="schlicht">Neuer Token</button>
+                </form>
+
+                <form th:action="@{'/knoten/' + ${k.kennung} + '/wartung'}" method="post">
+                    <input type="hidden" name="an" th:value="${!k.inWartung}">
+                    <input type="text" name="grund" th:unless="${k.inWartung}"
+                           placeholder="Grund" size="12">
+                    <button type="submit" class="schlicht"
+                            th:text="${k.inWartung} ? 'Wartung beenden' : 'In Wartung'"></button>
+                </form>
+
+                <form th:action="@{'/knoten/' + ${k.kennung} + '/sperren'}" method="post">
+                    <input type="hidden" name="an" th:value="${!k.gesperrt}">
+                    <input type="text" name="grund" th:unless="${k.gesperrt}"
+                           placeholder="Grund" size="12">
+                    <button type="submit" class="schlicht"
+                            th:text="${k.gesperrt} ? 'Entsperren' : 'Sperren'"></button>
+                </form>
+
+                <!--
+                  Module einzeln umschalten. Bewusst je Modul ein Knopf statt
+                  eines Formulars mit Speichern: eine halb ausgefuellte Maske,
+                  die beim Absenden Rechte entzieht, die man gar nicht anfassen
+                  wollte, ist an dieser Stelle die teurere Bequemlichkeit.
+                -->
+                <form th:each="m : ${module}"
+                      th:action="@{'/knoten/' + ${k.kennung} + '/modul'}" method="post">
+                    <input type="hidden" name="modul" th:value="${m.name()}">
+                    <input type="hidden" name="an"
+                           th:value="${!moduleJeKnoten.get(k.kennung).contains(m)}">
+                    <button type="submit" class="schlicht klein"
+                            th:classappend="${moduleJeKnoten.get(k.kennung).contains(m)} ? 'an'"
+                            th:text="(${moduleJeKnoten.get(k.kennung).contains(m)} ? '&minus; ' : '+ ')
+                                     + ${m.anzeige()}"></button>
+                </form>
+
+                <form th:action="@{'/knoten/' + ${k.kennung} + '/geheimnis'}" method="post">
+                    <button type="submit" class="schlicht">Geheimnis tauschen</button>
+                </form>
+            </td>
+        </tr>
+        </tbody>
+    </table>
+
+    <!-- ------------------------------------------------- Offene Token -->
+    <section th:unless="${#lists.isEmpty(offene)}">
+        <h2>Offene Aufsetz-Token</h2>
+        <p class="lage">
+            Noch nicht eingeloest. Jeder gilt zwei Stunden; danach verfaellt er
+            von selbst.
+        </p>
+        <table>
+            <thead><tr><th>Knoten</th><th>Laeuft ab</th></tr></thead>
+            <tbody>
+            <tr th:each="o : ${offene}">
+                <td><code th:text="${o.kennung()}"></code></td>
+                <td class="klein" th:text="${seit.apply(jetzt, o.laeuftAb())}"></td>
+            </tr>
+            </tbody>
+        </table>
+    </section>
+</main>
+</body>
+</html>

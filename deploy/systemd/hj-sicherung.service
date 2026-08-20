@@ -1,0 +1,11 @@
+[Unit]
+Description=hoer.jetzt - Datenbanksicherung
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /opt/hoerjetzt/main/deploy/sicherung.sh
+# Eine Sicherung darf dauern - pg_dump auf einer gewachsenen Datenbank
+# braucht Minuten, und ein Abbruch mittendrin hinterlaesst nichts Brauchbares.
+TimeoutStartSec=1800

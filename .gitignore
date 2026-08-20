@@ -51,3 +51,33 @@ discordbot-stack-*.tar.gz
 javac.*.args
 *.orig
 *.rej
+
+### Umgebungsdateien und Knotenschluessel ###
+#
+# Diese Dateien entstehen IM Repository-Baum, nicht daneben:
+#   update-server/.env      beide Knoten-Passwoerter, vom einrichten.sh
+#   deploy/docker/.env      Bot-Token, Datenbank-Passwort, Lavalink-Passwort
+#   knoten.key              der private Schluessel eines Knotens
+#
+# Vorher waren sie nicht ausgenommen. Nichts davon lag zufaellig gerade da,
+# aber genau das ist die Falle: ein "git add ." auf einem Server, auf dem
+# einrichten.sh gelaufen ist, haette beide Knoten-Passwoerter veroeffentlicht.
+.env
+.env.*
+!.env.beispiel
+**/.env
+**/.env.*
+!**/.env.beispiel
+
+*.key
+*.pem
+*.p12
+knoten.key
+
+# Der Tresor - Klartext-Zugangsdaten je Profil.
+tresor/
+**/tresor/
+
+# Sicherungen: vollstaendige Datenbankabzuege mit allen Token.
+sicherungen/
+*.sql.gz

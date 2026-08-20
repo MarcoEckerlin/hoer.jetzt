@@ -20,7 +20,10 @@ public class KnotenDaten {
 
     private static final String SPALTEN = """
             kennung, name, profil, version, vorher, zustand, ergebnis,
-            letzte_ip, zuletzt_gemeldet, zuletzt_gesehen, update_angefordert
+            letzte_ip, zuletzt_gemeldet, zuletzt_gesehen, update_angefordert,
+            geheimnis, gesperrt, gesperrt_grund,
+            wartung_seit, wartung_grund, wartung_von,
+            rechnername, privat_ip, agent_version
             """;
 
     private Knoten lesen(java.sql.ResultSet rs) throws java.sql.SQLException {
@@ -35,7 +38,18 @@ public class KnotenDaten {
                 rs.getString("letzte_ip"),
                 Zeiten.zeit(rs.getString("zuletzt_gemeldet")),
                 Zeiten.zeit(rs.getString("zuletzt_gesehen")),
-                rs.getInt("update_angefordert") == 1);
+                rs.getInt("update_angefordert") == 1,
+                // Nur ob eines gesetzt ist, nie der Wert. Der Hash hat in
+                // einem Modell, das an eine Vorlage geht, nichts verloren.
+                !leer(rs.getString("geheimnis")).isBlank(),
+                rs.getInt("gesperrt") == 1,
+                leer(rs.getString("gesperrt_grund")),
+                Zeiten.zeit(rs.getString("wartung_seit")),
+                leer(rs.getString("wartung_grund")),
+                leer(rs.getString("wartung_von")),
+                leer(rs.getString("rechnername")),
+                leer(rs.getString("privat_ip")),
+                leer(rs.getString("agent_version")));
     }
 
     public List<Knoten> alle() {
@@ -97,6 +111,144 @@ public class KnotenDaten {
 
     public void umbenennen(String kennung, String name) {
         db.sql("UPDATE knoten SET name = ? WHERE kennung = ?").params(name, kennung).update();
+    }
+
+    /**
+     * Legt einen Knoten an, bevor er das erste Mal da war.
+     *
+     * <p>Das ist die Umkehrung des bisherigen Wegs. Frueher entstand ein
+     * Eintrag erst durch die Meldung des Knotens - was richtig war, solange
+     * eine Kennung nichts bewies. Jetzt beweist sie etwas, und dann muss sie
+     * hier vergeben werden und nicht dort behauptet.</p>
+     *
+     * @return false, wenn es die Kennung schon gibt
+     */
+    public boolean anlegen(String kennung, String name, String profil) {
+        int zeilen = db.sql("""
+                INSERT INTO knoten (kennung, name, profil, angelegt, update_angefordert)
+                VALUES (?, ?, ?, ?, 0)
+                ON CONFLICT(kennung) DO NOTHING
+                """)
+                .params(kennung, name == null ? "" : name,
+                        profil == null ? "" : profil, Zeiten.text(Instant.now()))
+                .update();
+        return zeilen > 0;
+    }
+
+    /**
+     * Der naechste freie Name zu einem Praefix.
+     *
+     * <p>Aus {@code lavalink} wird {@code lavalink-10}, wenn es bereits
+     * {@code lavalink-9} gibt. Gezaehlt wird nach der <em>Zahl</em>, nicht
+     * nach dem Text: sortiert man Namen alphabetisch, kommt {@code lavalink-9}
+     * hinter {@code lavalink-10}, und der Vorschlag waere {@code lavalink-10}
+     * - also der Name, den es schon gibt.</p>
+     *
+     * <p>Luecken werden nicht gefuellt. Fehlt {@code lavalink-3}, weil der
+     * Knoten geloescht wurde, bleibt sie: eine Kennung taucht in Protokollen,
+     * Sicherungsdateinamen und Freigaben auf, und sie ein zweites Mal zu
+     * vergeben macht diese Spuren mehrdeutig.</p>
+     */
+    public String naechsteKennung(String praefix) {
+        String sauber = praefix == null ? "" : praefix.trim().toLowerCase(java.util.Locale.ROOT);
+        if (sauber.isBlank()) {
+            return "";
+        }
+        return naechste(sauber, db.sql("SELECT kennung FROM knoten WHERE kennung LIKE ?")
+                .param(sauber + "-%")
+                .query(String.class)
+                .list());
+    }
+
+    /**
+     * Die Zaehlung selbst - ohne Datenbank, damit sie pruefbar ist.
+     *
+     * <p>Sichtbar fuer die Proben und sonst niemanden. Die Abfrage darueber
+     * ist trivial, die Zaehlung nicht: sie ist der Grund, warum diese Methode
+     * getrennt steht.</p>
+     */
+    static String naechste(String praefix, List<String> vorhandene) {
+        int hoechste = 0;
+        for (String k : vorhandene) {
+            if (k == null || !k.startsWith(praefix + "-")) {
+                continue;
+            }
+            String rest = k.substring(praefix.length() + 1);
+            // Nur reine Zahlen. "lavalink-premium" darf die Zaehlung nicht
+            // stoeren, und "lavalink-2b" ist keine 2.
+            if (!rest.matches("[0-9]+")) {
+                continue;
+            }
+            try {
+                hoechste = Math.max(hoechste, Integer.parseInt(rest));
+            } catch (NumberFormatException zuGross) {
+                // Eine Zahl jenseits von int ist keine Nummerierung, sondern
+                // ein Versehen. Uebergehen statt abbrechen.
+            }
+        }
+        return praefix + "-" + (hoechste + 1);
+    }
+
+    public boolean gibtEs(String kennung) {
+        Integer zahl = db.sql("SELECT COUNT(*) FROM knoten WHERE kennung = ?")
+                .param(kennung)
+                .query(Integer.class)
+                .single();
+        return zahl != null && zahl > 0;
+    }
+
+    /** Was der Knoten bei der Anmeldung ueber sich selbst mitteilt. */
+    public void angabenSetzen(String kennung, String rechnername, String privatIp,
+                              String ipv4, String ipv6, String agentVersion) {
+        db.sql("""
+                UPDATE knoten SET rechnername = ?, privat_ip = ?,
+                    oeffentlich_ipv4 = ?, oeffentlich_ipv6 = ?, agent_version = ?
+                WHERE kennung = ?
+                """)
+                .params(leer(rechnername), leer(privatIp), leer(ipv4), leer(ipv6),
+                        leer(agentVersion), kennung)
+                .update();
+    }
+
+    // ------------------------------------------------------------- Wartung
+
+    /**
+     * Setzt einen Knoten in Wartung oder holt ihn heraus.
+     *
+     * <p>Drei Spalten statt eines Schalters: die Uebersicht soll "seit wann,
+     * warum und von wem" beantworten koennen. Beim Beenden werden alle drei
+     * geleert - ein stehengebliebener Grund von letzter Woche waere
+     * irrefuehrender als gar keiner.</p>
+     */
+    public void wartung(String kennung, boolean an, String grund, String von) {
+        if (an) {
+            db.sql("""
+                    UPDATE knoten SET wartung_seit = ?, wartung_grund = ?, wartung_von = ?
+                    WHERE kennung = ?
+                    """)
+                    .params(Zeiten.text(Instant.now()), leer(grund), leer(von), kennung)
+                    .update();
+        } else {
+            db.sql("""
+                    UPDATE knoten SET wartung_seit = NULL, wartung_grund = '', wartung_von = ''
+                    WHERE kennung = ?
+                    """)
+                    .param(kennung)
+                    .update();
+        }
+    }
+
+    public boolean inWartung(String kennung) {
+        return db.sql("SELECT wartung_seit FROM knoten WHERE kennung = ?")
+                .param(kennung)
+                .query(String.class)
+                .optional()
+                .filter(s -> s != null && !s.isBlank())
+                .isPresent();
+    }
+
+    private static String leer(String s) {
+        return s == null ? "" : s;
     }
 
     /**

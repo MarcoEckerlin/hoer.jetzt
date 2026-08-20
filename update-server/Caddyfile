@@ -58,6 +58,17 @@
 		-Server
 	}
 
+	# X-Knoten traegt die Kennung des angemeldeten Knotens - gesetzt von der
+	# Pruefung weiter unten, nicht vom Aufrufer. Deshalb wird ein
+	# mitgeschickter Kopf hier zuerst entfernt.
+	#
+	# Ohne diese Zeile bliebe ein selbst gesetztes X-Knoten stehen, sobald die
+	# Pruefung keines liefert - und /melden nimmt die Kennung genau daraus.
+	# Ein Knoten koennte sich dann als ein anderer melden und dessen Eintrag
+	# ueberschreiben. Zwei Zeilen, die man leicht uebersieht, und ein Loch,
+	# das man nur mit Blick auf beide findet.
+	request_header -X-Knoten
+
 	# Die Pruefung als wiederverwendbarer Baustein. 2xx heisst durchlassen,
 	# alles andere geht unveraendert an den Aufrufer zurueck.
 	(zugang) {
@@ -96,11 +107,35 @@
 	}
 
 	# ------------------------------------------------------------- Tresor
+	#
+	# Kein file_server mehr.
+	#
+	# Vorher gab Caddy hier eine Datei aus dem Auslieferungsverzeichnis
+	# heraus - fuer jeden Knoten dieselbe und im Klartext. Wer das Passwort
+	# hatte, hatte Bot-Token, Datenbank-Passwort und Client-Secret.
+	#
+	# Jetzt laeuft der Abruf durch den Updater, denn erst der weiss, WER
+	# fragt: er richtet den Inhalt an den oeffentlichen Schluessel dieses
+	# Knotens. Zwei Knoten bekommen zwei verschiedene Antworten, und keiner
+	# kann die des anderen oeffnen.
 	handle /tresor/* {
 		route {
 			import zugang
-			root * /srv/ausliefern
-			file_server
+			rewrite * /intern{uri}
+			reverse_proxy updater:8080
+		}
+	}
+
+	# ------------------------------------------------------- Schluessel
+	#
+	# Wo ein Knoten seinen oeffentlichen Schluessel hinterlegt. Der private
+	# bleibt bei ihm - deshalb kann dieser Server einen Tresor, den er selbst
+	# geschlossen hat, hinterher nicht mehr oeffnen.
+	handle /schluessel {
+		route {
+			import zugang
+			rewrite * /intern/schluessel
+			reverse_proxy updater:8080
 		}
 	}
 
@@ -113,9 +148,47 @@
 		}
 	}
 
+	# ---------------------------------------------------------- Sicherungen
+	#
+	# Wohin die Controller alle drei Stunden ihren pg_dump schieben. Nur sie -
+	# die Faehigkeit SICHERUNG_SCHREIBEN haengt am Modul CONTROLLER, ein
+	# Audio-Knoten kommt hier nicht durch.
+	#
+	# Die Zeitgrenzen sind grosszuegig: eine gewachsene Datenbank braucht
+	# Minuten, und ein Abbruch mittendrin hinterlaesst eine Datei, die wie
+	# eine Sicherung aussieht.
+	handle /sicherung/* {
+		route {
+			import zugang
+			rewrite * /intern{uri}
+			reverse_proxy updater:8080 {
+				transport http {
+					read_timeout 30m
+					write_timeout 30m
+				}
+			}
+		}
+	}
+
+	# ------------------------------------------------------------- Anmelden
+	#
+	# Die Erstanmeldung eines Knotens: Bootstrap-Token gegen dauerhaftes
+	# Geheimnis. Ohne Passwort und ohne Adresspruefung, denn beides hat ein
+	# frisch bestellter Server noch nicht - genau das holt er sich hier.
+	#
+	# Geschuetzt ist der Weg durch den Token im Koerper: knotenspezifisch,
+	# zwei Stunden gueltig, genau einmal einloesbar. Kein forward_auth also,
+	# aber auch keine offene Tuer.
+	handle /anmelden {
+		route {
+			rewrite * /intern/anmelden
+			reverse_proxy updater:8080
+		}
+	}
+
 	# ------------------------------------------------------------- Knoten
 	#
-	# Der einzige Bereich mit dem kurzen Passwort - und der einzige ohne
+	# Der einzige Bereich mit dem kurzen Passwort - und einer von zweien ohne
 	# Adresspruefung. Das ist Absicht: ein frisch aufgesetzter Rechner ist
 	# noch nicht freigeschaltet, und genau das Skript, das er hier holt,
 	# sagt ihm, dass er es werden muss.

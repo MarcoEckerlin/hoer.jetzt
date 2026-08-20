@@ -1,67 +1,187 @@
 package jetzt.hoer.updater.dienst;
 
+import jetzt.hoer.updater.daten.AusweisDaten;
+import jetzt.hoer.updater.modell.Ausweis;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Base64;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Die beiden Passwoerter.
+ * Wer darf herein - und als wer.
  *
- *   Knoten-Passwort   4096 Bit Zufall. Oeffnet Abbilder, Release, Tresor und
- *                     die Meldestelle. Liegt dauerhaft auf jedem Knoten.
+ * <h2>Wie sich das geaendert hat</h2>
  *
- *   Aufsetz-Passwort  Kurz und tippbar. Oeffnet nur /knoten/ - das
- *                     Installationsskript und die Compose-Dateien.
+ * Frueher gab es genau zwei Passwoerter, und der Benutzername wurde gelesen
+ * und verworfen: "es gibt genau ein Passwort je Bereich; ein zusaetzlicher
+ * Name waere ein zweites Geheimnis, das keines ist - er steht in jeder
+ * Anleitung."
  *
- * Beide kommen als Basic-Auth herein. Warum Basic und nicht ein eigener Kopf:
- * "docker login" kann genau das und sonst nichts. Ein Bearer-Token muesste
- * man Docker auf einem zweiten Weg unterschieben, und dann haette man zwei
- * Verfahren fuer dieselbe Sache.
+ * Das stimmte, solange alle Knoten dasselbe Passwort teilten. Genau daran hing
+ * aber die Luecke: ein aufgemachter Audio-Knoten gab Bot-Token, Datenbank-
+ * Passwort und Client-Secret preis, und widerrufen liess sich nur die Adresse
+ * - die wechselt, sobald eine Hetzner-Maschine neu aufgesetzt wird.
  *
- * Der Vergleich laeuft ueber MessageDigest.isEqual - der bricht nicht beim
- * ersten abweichenden Zeichen ab. Ein String.equals verraet ueber die
- * Laufzeit, wie viele Zeichen am Anfang schon stimmen; bei einem Passwort,
- * das ueber das Netz erreichbar ist, ist das kein theoretischer Einwand.
+ * Jetzt traegt der Benutzername die Kennung des Knotens. Das ist der kleinste
+ * moegliche Eingriff: Basic-Auth schickt beide Felder ohnehin, "docker login"
+ * kann es unveraendert, und es kommt kein zweites Verfahren dazu.
+ *
+ * <h2>Warum SHA-256 und nicht bcrypt</h2>
+ *
+ * Ein Knoten-Geheimnis ist 256 Bit aus {@link SecureRandom} - kein von einem
+ * Menschen gewaehltes Passwort. bcrypts Arbeitsfaktor schuetzt gegen das
+ * Durchprobieren wahrscheinlicher Eingaben; bei gleichverteiltem Zufall in
+ * dieser Groesse gibt es nichts durchzuprobieren. Dazu kaeme bcrypts Grenze
+ * bei 72 Byte und das Dollarzeichen im Hash, das Docker Compose in der
+ * {@code .env} als Variable liest - beides bereits einmal teuer gewesen.
+ *
+ * Der Klartext steht damit nirgends mehr: wer die Datenbank liest, bekommt
+ * Hashes. Vorher stand das gemeinsame Passwort im Klartext in der
+ * Konfiguration.
  */
 @Service
 public class Zugang {
 
-    private final byte[] knoten;
+    /**
+     * Wie lange eine Anmeldung wiederverwendet wird.
+     *
+     * <p>Kein Feinschliff, sondern noetig: ein {@code docker pull} fragt je
+     * Abbildschicht einmal an. Ohne Zwischenspeicher waere das je Schicht eine
+     * Datenbankabfrage plus ein Hash - bei vier Abbildern mehrere hundert in
+     * wenigen Sekunden. Dieselbe Ueberlegung wie im {@link Torwaechter}, und
+     * bewusst dieselbe Dauer.</p>
+     */
+    private static final Duration HALTBAR = Duration.ofSeconds(30);
+
+    private record Gemerkt(Ausweis ausweis, Instant ablauf) {
+    }
+
+    private final byte[] gemeinsamesGeheimnis;
     private final byte[] aufsetzen;
+    private final boolean gemeinsamErlaubt;
+    private final AusweisDaten ausweise;
+
+    private final Map<String, Gemerkt> zwischenspeicher = new ConcurrentHashMap<>();
 
     public Zugang(@Value("${hj.token.knoten}") String knoten,
-                  @Value("${hj.token.aufsetzen}") String aufsetzen) {
-        this.knoten = knoten.trim().getBytes(StandardCharsets.UTF_8);
+                  @Value("${hj.token.aufsetzen}") String aufsetzen,
+                  // Vorgabe aus. Ein Knoten ohne eigenes Geheimnis kommt
+                  // damit nirgends durch - siehe application.yml.
+                  @Value("${hj.token.gemeinsam-erlauben:false}") boolean gemeinsamErlaubt,
+                  AusweisDaten ausweise) {
+        this.gemeinsamesGeheimnis = knoten.trim().getBytes(StandardCharsets.UTF_8);
         this.aufsetzen = aufsetzen.trim().getBytes(StandardCharsets.UTF_8);
+        this.gemeinsamErlaubt = gemeinsamErlaubt;
+        this.ausweise = ausweise;
     }
 
-    public boolean knotenPasswort(String kopf) {
-        return stimmt(kopf, knoten);
+    /**
+     * Prueft die Anmeldung eines Knotens.
+     *
+     * <p>Zuerst der benannte Knoten, danach - und nur wenn erlaubt - das
+     * gemeinsame Passwort. Die Reihenfolge ist wichtig fuer den Uebergang:
+     * ein bereits umgestellter Knoten soll nicht versehentlich als
+     * "gemeinsam" durchgehen und damit wieder alle Rechte bekommen.</p>
+     *
+     * @param kopf der vollstaendige Authorization-Kopf
+     * @return leer, wenn die Anmeldung nicht stimmt
+     */
+    public Optional<Ausweis> anmelden(String kopf) {
+        Anmeldedaten daten = zerlegen(kopf);
+        if (daten == null) {
+            return Optional.empty();
+        }
+
+        String schluessel = daten.benutzer() + " " + hashen(daten.passwort());
+        Instant jetzt = Instant.now();
+
+        Gemerkt gemerkt = zwischenspeicher.get(schluessel);
+        if (gemerkt != null && gemerkt.ablauf().isAfter(jetzt)) {
+            return Optional.ofNullable(gemerkt.ausweis());
+        }
+
+        Ausweis ausweis = pruefen(daten);
+        zwischenspeicher.put(schluessel, new Gemerkt(ausweis, jetzt.plus(HALTBAR)));
+        return Optional.ofNullable(ausweis);
     }
 
+    private Ausweis pruefen(Anmeldedaten daten) {
+        if (!daten.benutzer().isBlank()) {
+            Optional<String> hash = ausweise.geheimnisHash(daten.benutzer());
+            if (hash.isPresent()) {
+                if (!MessageDigest.isEqual(hashen(daten.passwort()).getBytes(StandardCharsets.UTF_8),
+                                           hash.get().getBytes(StandardCharsets.UTF_8))) {
+                    // Ein benannter Knoten mit falschem Passwort faellt hier
+                    // durch und nicht in den gemeinsamen Fall darunter. Sonst
+                    // liesse sich die Knotenpruefung umgehen, indem man einen
+                    // beliebigen Namen und das alte Passwort schickt.
+                    return null;
+                }
+                return Ausweis.fuer(daten.benutzer(), ausweise.faehigkeiten(daten.benutzer()));
+            }
+        }
+
+        if (gemeinsamErlaubt
+                && MessageDigest.isEqual(daten.passwort().getBytes(StandardCharsets.UTF_8),
+                                         gemeinsamesGeheimnis)) {
+            return Ausweis.mitGemeinsamemPasswort();
+        }
+        return null;
+    }
+
+    /** Das kurze Passwort fuer {@code /knoten/}. Unveraendert. */
     public boolean aufsetzPasswort(String kopf) {
-        return stimmt(kopf, aufsetzen);
+        Anmeldedaten daten = zerlegen(kopf);
+        return daten != null
+                && MessageDigest.isEqual(daten.passwort().getBytes(StandardCharsets.UTF_8), aufsetzen);
     }
 
     /**
-     * @param kopf der vollstaendige Authorization-Kopf, also "Basic base64(benutzer:passwort)"
+     * Nach jeder Aenderung an Knoten, Modulen oder Faehigkeiten aufzurufen.
+     * Ohne das wirkte eine Sperre erst nach Ablauf der Haltbarkeit - und genau
+     * in dem Moment, in dem man einen Knoten sperrt, will man nicht warten.
      */
-    private static boolean stimmt(String kopf, byte[] erwartet) {
-        String passwort = passwortAus(kopf);
-        if (passwort == null) return false;
-        return MessageDigest.isEqual(passwort.getBytes(StandardCharsets.UTF_8), erwartet);
+    public void verwerfen() {
+        zwischenspeicher.clear();
     }
 
+    // -------------------------------------------------------------- Werkzeug
+
     /**
-     * Der Benutzername wird nicht geprueft. Es gibt genau ein Passwort je
-     * Bereich; ein zusaetzlicher Name waere ein zweites Geheimnis, das keines
-     * ist - er steht in jeder Anleitung. Docker verlangt aber, dass einer
-     * dasteht, deshalb wird er gelesen und verworfen.
+     * Erzeugt ein neues Knoten-Geheimnis. 256 Bit, Base64 ohne Polsterung -
+     * kurz genug fuer eine {@code .env}-Zeile und ohne Zeichen, die Docker
+     * Compose oder eine Shell umdeuten wuerden.
      */
-    private static String passwortAus(String kopf) {
+    public static String geheimnisErzeugen() {
+        byte[] roh = new byte[32];
+        new SecureRandom().nextBytes(roh);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(roh);
+    }
+
+    public static String hashen(String klartext) {
+        try {
+            byte[] summe = MessageDigest.getInstance("SHA-256")
+                    .digest(klartext.getBytes(StandardCharsets.UTF_8));
+            return Base64.getEncoder().encodeToString(summe);
+        } catch (NoSuchAlgorithmException nichtMoeglich) {
+            // SHA-256 gehoert zum Pflichtumfang jeder JVM.
+            throw new IllegalStateException("SHA-256 fehlt", nichtMoeglich);
+        }
+    }
+
+    private record Anmeldedaten(String benutzer, String passwort) {
+    }
+
+    private static Anmeldedaten zerlegen(String kopf) {
         if (kopf == null || !kopf.regionMatches(true, 0, "Basic ", 0, 6)) {
             return null;
         }
@@ -69,7 +189,10 @@ public class Zugang {
             String roh = new String(Base64.getDecoder().decode(kopf.substring(6).trim()),
                     StandardCharsets.UTF_8);
             int doppel = roh.indexOf(':');
-            return doppel < 0 ? "" : roh.substring(doppel + 1);
+            if (doppel < 0) {
+                return new Anmeldedaten("", "");
+            }
+            return new Anmeldedaten(roh.substring(0, doppel), roh.substring(doppel + 1));
         } catch (IllegalArgumentException e) {
             return null;
         }

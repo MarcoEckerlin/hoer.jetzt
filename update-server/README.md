@@ -3,7 +3,7 @@
 Löst GitHub als Bezugsquelle ab. Läuft zuhause, liefert **Abbilder statt
 Quellcode**.
 
-Erreichbar unter `https://update.system.hoer.jetzt`.
+Erreichbar unter `https://repo.updates.hoer.jetzt`.
 
 ---
 
@@ -23,7 +23,7 @@ Der Update-Server dreht das um:
 | Was er dafür braucht | git, Maven, JDK, ~2 GB | Docker |
 | Dauer eines Updates | 2–3 Minuten Build | Sekunden, nur Laden |
 | Rückweg | Rebuild des alten Standes | ein Abbild-Tag |
-| Zugang | SSH-Deploy-Key pro Host | Client-Zertifikat |
+| Zugang | SSH-Deploy-Key pro Host | Passwort + freigeschaltete Adresse |
 
 ---
 
@@ -41,7 +41,7 @@ sich fehlerfrei abtippen lässt. Rund 80 Bit.
 Öffnet **nur** `/knoten/` — das Installationsskript und die Compose-Dateien.
 
 ```bash
-curl -fsSLu knoten https://update.system.hoer.jetzt/knoten/aufsetzen.sh -o a.sh && bash a.sh
+curl -fsSLu knoten https://repo.updates.hoer.jetzt/knoten/aufsetzen.sh -o a.sh && bash a.sh
 ```
 
 Das `-u knoten` ohne Doppelpunkt ist Absicht: curl fragt das Passwort selbst
@@ -132,6 +132,28 @@ bash tresor.sh zeigen voll
 ---
 ## Einrichten
 
+Auf einer frischen Maschine — **von GitHub**, nicht von hier:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/MarcoEckerlin/hoer.jetzt/main/deploy/install-update-server.sh | bash
+```
+
+Das ist der einzige Installer, der GitHub braucht, und der Grund ist banal: er
+legt den Update-Server gerade erst an. Jeder andere holt seinen Stand von
+`repo.updates.hoer.jetzt` — dieser kann das nicht, er *ist* das Ziel.
+
+Ein Initialpasswort für die Oberfläche lässt sich vorgeben:
+
+```bash
+bash install-update-server.sh --passwort-stdin < geheim.txt
+```
+
+`--passwort 'GEHEIM'` geht auch, warnt aber: der Wert steht danach in
+`~/.bash_history` und stand während des Laufs in `ps aux`. Ohne Angabe wird
+eines erzeugt und einmal angezeigt — das ist die beste der drei Varianten.
+
+Wenn die Quellen schon liegen, genügt:
+
 ```bash
 bash einrichten.sh
 ```
@@ -148,7 +170,7 @@ liegt als bcrypt-Hash da.
 
 | | |
 |---|---|
-| Domain | `update.system.hoer.jetzt` |
+| Domain | `repo.updates.hoer.jetzt` |
 | Weiterleiten an | `http://127.0.0.1:8086` |
 | Zertifikat | wie üblich über den NPM |
 | Upload-Grenze | **aus** (`client_max_body_size 0`) |
@@ -180,8 +202,8 @@ die zusammengehören, weil beide auf denselben Bestand schauen:
 
 **1. Er ist das Tor.** Vor jedem Zugriff auf `/v2/`, `/release/`, `/tresor/`
 und `/melden` fragt Caddy per `forward_auth` beim Updater nach, ob diese
-Adresse freigeschaltet ist. Ein gültiger Ausweis reicht damit nicht mehr — es
-braucht Ausweis **und** freigeschaltete Adresse.
+Adresse freigeschaltet ist. Das Knoten-Passwort allein reicht damit nicht — es
+braucht Passwort **und** freigeschaltete Adresse.
 
 Warum nicht Caddys eigenes `remote_ip`: das will die Liste in der
 Konfigurationsdatei stehen haben. Jede Freischaltung wäre eine Dateiänderung
@@ -247,7 +269,7 @@ privaten Bereiche an. Ohne das sperrte sich der Server bei der Einrichtung
 selbst aus: die Selbstprobe schiebt ein Testabbild durch Caddy, und
 `/etc/hosts` zeigt die eigene Adresse auf `127.0.0.1`. Aus dem Internet ist
 damit nichts erreichbar — diese Adressen werden dort nicht geroutet, und ein
-gültiger Ausweis wird zusätzlich verlangt.
+das Knoten-Passwort wird zusätzlich verlangt.
 
 Anpassen über `hj.freigabe-start` bzw. die Umgebung.
 
@@ -289,8 +311,8 @@ auf ein fehlendes Abbild zeigt, wäre ein Ausfall auf allen Hosts gleichzeitig
 
 ## Der Umzug — der eine Handgriff, der bleibt
 
-Der Ausweis kann nicht über GitHub kommen; ein privates Repository ist kein
-Geheimnisspeicher. Ablauf:
+Das Knoten-Passwort kann nicht über GitHub kommen; ein privates Repository ist
+kein Geheimnisspeicher. Ablauf:
 
 1. Update-Server aufsetzen, Tresor befüllen, ein Release veröffentlichen.
 2. Ein **letztes** Release über GitHub ausrollen — es enthält die neue
@@ -305,7 +327,7 @@ Geheimnisspeicher. Ablauf:
 5. Probe: `bash /opt/hoerjetzt/main/deploy/auto-update.sh --pruefen`
    Danach sollte der Host in der Knotenübersicht auftauchen.
 
-Fehlt der Ausweis, bricht `auto-update.sh` mit genau dieser Anleitung ab statt
+Fehlt das Passwort, bricht `auto-update.sh` mit genau dieser Anleitung ab statt
 stillschweigend nichts zu tun.
 
 ---
@@ -324,32 +346,64 @@ ein `-f` ohne Filter hätte den Rückweg sofort mitgenommen.
 
 ## Wenn ein Knoten verloren geht
 
-Alle Knoten teilen sich einen Ausweis. Geht eine Maschine verloren, ist der
-Weg:
+Jeder Knoten hat sein eigenes Geheimnis. Der Widerruf betrifft deshalb nur
+ihn — und nicht mehr alle.
 
-```bash
-bash schluessel.sh erneuern    # neuer Ausweis, gleiche CA
-```
+Im Updater unter **Verwalten** den Knoten **sperren**. Das wirkt sofort: der
+Zwischenspeicher wird bei jeder Änderung verworfen, offene Aufsetz-Token
+werden mitwiderrufen. Gesperrt statt gelöscht, damit die Spur bleibt.
 
-und den neuen auf die verbliebenen Hosts bringen. Die CA bleibt, der alte
-Ausweis gilt weiter — für echte Sperrung bräuchte es eine Sperrliste oder
-einen Ausweis je Knoten. Beides ist mit dieser CA jederzeit nachrüstbar; für
-den jetzigen Umfang wäre es Aufwand ohne Gegenwert.
+Zusätzlich lässt sich unter **Freigaben** die Adresse sperren. Beides
+zusammen ist der Gürtel-und-Hosenträger-Fall; die Knotensperre allein reicht,
+weil sie am Knoten hängt und nicht an einer IP, die sich beim Neuaufsetzen
+ändert.
 
----
+Soll der Knoten weiterlaufen, aber mit neuem Geheimnis: **Geheimnis
+tauschen**. Er ist danach ausgesperrt, bis der neue Wert bei ihm in der
+`.env` steht — es geht keine Verbindung von hier zu ihm.
+
+> Das war früher anders und ist der Kern des Umbaus: bis dahin teilten sich
+> alle Knoten ein Passwort, und ein aufgemachter Audio-Knoten gab Bot-Token,
+> Datenbank-Passwort und Client-Secret preis. Widerrufen ließ sich nur die
+> Adresse — die wechselt, sobald eine Hetzner-Maschine neu aufgesetzt wird.
+
+Ein Passwort **je Knoten** wäre die saubere Lösung — der Updater müsste dafür
+eine Liste statt eines Wertes vergleichen. Steht unter „Offen".
 
 ## Offen
 
-**Alle Knoten teilen ein Passwort.** Die Adressfreigabe gibt den Widerruf, der
-sonst fehlte — aber sie hängt an der IP, und die wechselt, wenn eine
-Hetzner-Maschine neu aufgesetzt wird. Ein Passwort **je Knoten** wäre der
-nächste Schritt; der Updater müsste dafür eine Liste statt eines Wertes
-vergleichen.
+~~**Alle Knoten teilen ein Passwort.**~~ **Erledigt.** Jeder Knoten hat eine
+eigene Kennung und ein eigenes Geheimnis; der Benutzername in Basic-Auth
+trägt die Kennung, `docker login` bleibt unverändert. Was ein Knoten holen
+darf, ergibt sich aus seinen Modulen (`Faehigkeit.java`). Ein Audio-Knoten
+kommt nicht mehr an den Core-Tresor.
 
-**Der Tresor liegt im Klartext.** Bewusste Entscheidung für ein Passwort statt
-Passwort plus Schlüsseldatei. Wer das zurückdrehen will, braucht wieder ein
-RSA-Paar und CMS — das war vorher gebaut und getestet, es steht in der
-Git-Historie.
+~~**Der Tresor liegt im Klartext.**~~ **Erledigt.** Er wird beim Abruf an den
+öffentlichen Schlüssel des anfragenden Knotens gerichtet — zwei Knoten
+bekommen zwei verschiedene Antworten, und keiner kann die des anderen öffnen.
+Der private Schlüssel entsteht beim Aufsetzen und verlässt den Host nie.
+
+Verfahren: RSA-OAEP für den Sitzungsschlüssel, AES-256-CBC mit HMAC-SHA256 als
+Encrypt-then-MAC. Nicht GCM — der Gegenpart ist ein Bash-Skript, und
+`openssl enc` kann den Authentifizierungsanhang nicht. Der HMAC wird **vor**
+dem Entschlüsseln geprüft; andersherum verrät das Auffüllmuster von CBC den
+Klartext Byte für Byte.
+
+**Der Server kann den Tresor weiterhin lesen.** Er hält den Klartext, um ihn
+verschlüsseln zu können. Das ist inhärent daran, dass er ihn verteilt — was
+sich geändert hat, ist der Weg dorthin und der Kreis der Empfänger.
+
+**Der Knoten braucht wieder ein Schlüsselpaar.** Hier stand vorher, das sei
+bewusst abgeschafft worden — „ein Passwort reicht für alles". Das ist
+zurückgenommen, und zwar nicht aus Reue über die damalige Entscheidung: sie
+war richtig, solange alle Knoten ohnehin dasselbe Passwort teilten. Sobald
+jeder eine eigene Identität hat, kostet ein Schlüsselpaar fast nichts mehr —
+`install-node.sh` erzeugt es beim Aufsetzen, und niemand muss es abtippen
+oder verwahren.
+
+Nicht CMS, wie es die alte Fassung vorsah: das JDK kann es ohne
+Fremdbibliothek nicht, und eine Bibliothek mehr im Abbild für einen Umschlag
+ist ein schlechter Tausch.
 
 **„Update vormerken" wirkt erst beim nächsten Lauf** von `auto-update.sh`, also
 nachts um drei oder wenn der Agent es auslöst. Es geht keine Verbindung vom

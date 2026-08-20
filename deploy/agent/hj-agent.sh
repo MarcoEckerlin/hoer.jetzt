@@ -2,145 +2,193 @@
 #
 # hoer.jetzt - Agent.
 #
-# Laeuft auf jeder Node, alle 60 Sekunden per systemd-Timer. Er meldet sich
-# beim Controller, bekommt zurueck welche Shards und welches Release diese Node
-# fahren soll, und setzt beides um.
+# Laeuft auf jedem Knoten, jede Minute per systemd-Timer. Er meldet den
+# Zustand, holt Ziel-Release und Shard-Aufteilung und setzt beides um - je
+# Modul getrennt.
+#
+#   bash hj-agent.sh                       der normale Lauf
+#   bash hj-agent.sh --wartung "Grund"     diesen Knoten in Wartung setzen
+#   bash hj-agent.sh --betrieb             Wartung beenden
+#   bash hj-agent.sh --zustand             nur anzeigen, nichts aendern
 #
 # ---------------------------------------------------------------------------
 # Warum ein Skript und kein Dienst
 #
 # Der Agent muss "docker compose" auf dem Host ausfuehren. Ein Dienst im
 # Container braeuchte dafuer den Docker-Socket - und wer den hat, ist auf dem
-# Host root. Fuer eine Aufgabe, die einmal pro Minute drei Dateien anfasst, ist
-# das ein absurder Tausch. Als Skript unter systemd laeuft er dort, wo er
-# ohnehin hingehoert, und laesst sich mit journalctl lesen wie alles andere.
+# Host root. Fuer eine Aufgabe, die einmal pro Minute ein paar Dateien anfasst,
+# ist das ein absurder Tausch. Als Skript unter systemd laeuft er dort, wo er
+# hingehoert, und laesst sich mit journalctl lesen wie alles andere.
+#
+# ---------------------------------------------------------------------------
+# Was sich gegenueber der ersten Fassung geaendert hat
+#
+# Vorher verwaltete der Agent genau einen Stapel: er startete "core" neu, und
+# das war es. Auf einem Knoten mit Core UND Lavalink UND KI-Radio ist das zu
+# grob - ein Lavalink-Update darf den Bot nicht mitreissen, und ein Modul in
+# Wartung muss stehen bleiben, waehrend die anderen weiterlaufen.
+#
+# Deshalb: Module einzeln, eine Sperre gegen ueberlappende Laeufe, und ein
+# Wartungszustand, den beide Meldestellen kennen.
 # ---------------------------------------------------------------------------
 
 set -euo pipefail
 
-ARBEIT="${ARBEIT:-/opt/hoerjetzt}"
-UMGEBUNG="${UMGEBUNG:-${ARBEIT}/.env}"
+HIER="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=agent-lib.sh
+. "${HIER}/agent-lib.sh"
 
-sagen() { printf '[agent] %s\n' "$*"; }
-fehler() { printf '[agent] FEHLER: %s\n' "$*" >&2; exit 1; }
+WARTUNGSDATEI="${ARBEIT}/.wartung"
+AGENT_VERSION="2"
+
+# ------------------------------------------------------------ Handschalter
+
+case "${1:-}" in
+    --wartung)
+        printf '%s\n' "${2:-von Hand}" > "$WARTUNGSDATEI"
+        sagen "Wartung eingeschaltet: ${2:-von Hand}"
+        sagen "Laufende Aufgaben werden nicht abgebrochen - es kommen nur keine neuen dazu."
+        exit 0
+        ;;
+    --betrieb)
+        rm -f "$WARTUNGSDATEI"
+        sagen "Wartung beendet."
+        exit 0
+        ;;
+    --zustand)
+        umgebung_lesen || true
+        printf 'Knoten:  %s\n' "${HJ_KNOTEN_KENNUNG:-<nicht angemeldet>}"
+        printf 'Module:  %s\n' "$(module_lesen)"
+        printf 'Wartung: %s\n' "$([[ -f "$WARTUNGSDATEI" ]] && cat "$WARTUNGSDATEI" || echo nein)"
+        printf 'Zustand: %s\n' "$(zustand_sammeln)"
+        exit 0
+        ;;
+esac
+
+# ------------------------------------------------------------------ Vorlauf
 
 [[ -f "$UMGEBUNG" ]] || fehler "${UMGEBUNG} nicht gefunden."
+umgebung_lesen
 
-# Gelesen, nicht ausgefuehrt - siehe denselben Kommentar in
-# deploy/spock-einrichten.sh. Ein Dollarzeichen im Passwort wuerde bei
-# "source" als Variable gelesen und das Skript unter "set -u" abbrechen.
-umgebung_lesen() {
-    local zeile schluessel wert
-    while IFS= read -r zeile || [[ -n "$zeile" ]]; do
-        [[ "$zeile" =~ ^[[:space:]]*# ]] && continue
-        [[ "$zeile" == *=* ]] || continue
-        schluessel="${zeile%%=*}"
-        wert="${zeile#*=}"
-        schluessel="${schluessel//[[:space:]]/}"
-        [[ "$schluessel" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
-        printf -v "$schluessel" '%s' "$wert"
-        export "${schluessel?}"
-    done < "$1"
-}
+MODULE="$(module_lesen)"
+[[ -n "$MODULE" ]] || fehler "Keine Module in ${MODULDATEI}. install-node hat nicht sauber beendet."
 
-umgebung_lesen "$UMGEBUNG"
+KNOTEN="${HJ_KNOTEN_KENNUNG:-${HJ_NODE_NAME:-$(hostname -s)}}"
+IN_WARTUNG=false
+[[ -f "$WARTUNGSDATEI" ]] && IN_WARTUNG=true
 
-: "${HJ_CONTROLLER_URL:?HJ_CONTROLLER_URL setzen - Adresse der Steuer-Node}"
-: "${HJ_CONTROLLER_TOKEN:?HJ_CONTROLLER_TOKEN setzen}"
-KNOTEN="${HJ_NODE_NAME:-$(hostname -s)}"
-NODE_NR="${HJ_NODE_NR:-1}"
-PRIVAT_IP="${HJ_PRIVAT_IP:-}"
+# Ab hier wird angefasst - also erst die Sperre.
+mit_sperre || exit 0
 
-cd "${ARBEIT}/main/deploy/docker" 2>/dev/null || fehler "${ARBEIT}/main/deploy/docker fehlt."
+# ------------------------------------------------------------------- Melden
 
-# ------------------------------------------------------------------ Zustand
-
-# Was laeuft gerade? Bewusst knapp - der Controller braucht kein Abbild der
-# Maschine, sondern die Antwort auf "geht es dieser Node gut".
-laufend="$(docker compose ps --status running --format '{{.Service}}' 2>/dev/null | paste -sd, - || echo "")"
 version="$(grep '^version=' "${ARBEIT}/main/RELEASE" 2>/dev/null | cut -d= -f2 || echo unbekannt)"
-last="$(cut -d' ' -f1-3 < /proc/loadavg)"
-speicher="$(free -m | awk '/^Mem:/ {print $3 "/" $2 " MB"}')"
-platte="$(df -h --output=pcent "${ARBEIT}" | tail -1 | tr -d ' %')"
 
-zustand="$(printf '{"dienste":"%s","last":"%s","speicher":"%s","platte_prozent":%s}' \
-    "$laufend" "$last" "$speicher" "${platte:-0}")"
+# Zwei Meldestellen, und das ist Absicht.
+#
+# Der Controller kennt den Live-Zustand im Minutentakt und verteilt Shards.
+# Der Update-Server kennt das Ergebnis des letzten Update-Laufs. Beide
+# benutzen dieselbe Kennung, damit nicht zwei Listen entstehen, die dasselbe
+# meinen. Faellt eine Stelle aus, laeuft die andere weiter - ein Knoten, der
+# wegen einer unerreichbaren Meldestelle stehenbleibt, waere das schlechtere
+# Verhalten.
 
-# ------------------------------------------------------------------ Melden
+soll_version=""
+soll_gesamt=""; soll_von=""; soll_bis=""
 
-antwort="$(curl -fsS --max-time 15 \
-    -X POST "${HJ_CONTROLLER_URL%/}/api/verbund/anmelden" \
-    -H "Authorization: Bearer ${HJ_CONTROLLER_TOKEN}" \
-    -H "Content-Type: application/json" \
-    -d "$(printf '{"nodeName":"%s","privatIp":"%s","nodeNr":%s,"releaseVersion":"%s","zustandJson":%s}' \
-        "$KNOTEN" "$PRIVAT_IP" "$NODE_NR" "$version" "$zustand")" \
-    2>/dev/null)" || {
-    # Der Controller ist nicht erreichbar. Das ist kein Grund, irgendetwas zu
-    # aendern: die Node laeuft weiter mit dem, was sie hat. Ein Agent, der bei
-    # Funkstille anfaengt umzubauen, ist gefaehrlicher als gar keiner.
-    sagen "Controller nicht erreichbar - keine Aenderung."
-    exit 0
-}
+if [[ -n "${HJ_CONTROLLER_URL:-}" && -n "${HJ_CONTROLLER_TOKEN:-}" ]]; then
+    antwort="$(curl -fsS --max-time 15 \
+        -X POST "${HJ_CONTROLLER_URL%/}/api/verbund/anmelden" \
+        -H "Authorization: Bearer ${HJ_CONTROLLER_TOKEN}" \
+        -H "Content-Type: application/json" \
+        -d "$(printf '{"nodeName":"%s","privatIp":"%s","nodeNr":%s,"releaseVersion":"%s","wartung":%s,"zustandJson":%s}' \
+            "$KNOTEN" "${HJ_PRIVAT_IP:-}" "${HJ_NODE_NR:-1}" "$version" \
+            "$IN_WARTUNG" "$(zustand_sammeln)")" \
+        2>/dev/null)" || antwort=""
 
-lies() {
-    printf '%s' "$antwort" | python3 -c "
+    if [[ -n "$antwort" ]]; then
+        lies() {
+            printf '%s' "$antwort" | python3 -c "
 import json, sys
 try:
     print(json.load(sys.stdin).get('$1', '') or '')
 except Exception:
     print('')
 "
-}
+        }
+        soll_version="$(lies zielRelease)"
+        soll_gesamt="$(lies shardsGesamt)"
+        soll_von="$(lies shardsVon)"
+        soll_bis="$(lies shardsBis)"
+    else
+        # Keine Aenderung bei Funkstille. Ein Agent, der bei fehlender Antwort
+        # anfaengt umzubauen, ist gefaehrlicher als gar keiner.
+        sagen "Controller nicht erreichbar - keine Zuteilung uebernommen."
+    fi
+fi
 
-soll_version="$(lies zielRelease)"
-soll_gesamt="$(lies shardsGesamt)"
-soll_von="$(lies shardsVon)"
-soll_bis="$(lies shardsBis)"
+# Herzschlag an den Update-Server. Traegt auch den Wartungszustand: dort
+# entscheidet er darueber, ob dieser Knoten ein Update angeboten bekommt.
+if [[ -n "${HJ_KNOTEN_GEHEIMNIS:-}" ]]; then
+    us_senden "/melden" "$(printf \
+        '{"kennung":"%s","name":"%s","profil":"%s","version":"%s","zustand":%s,"ergebnis":"%s","wartung":%s,"agentVersion":"%s"}' \
+        "$KNOTEN" "${HJ_NODE_NAME:-$KNOTEN}" "$(module_lesen | tr ' ' '+')" \
+        "$version" "$(zustand_sammeln)" "lauf" "$IN_WARTUNG" "$AGENT_VERSION")" \
+        >/dev/null 2>&1 || sagen "Update-Server nicht erreichbar - Herzschlag ausgelassen."
+fi
 
-sagen "Node ${KNOTEN}: Release ${version} -> ${soll_version:-unveraendert}, Shards ${soll_von:-?}-${soll_bis:-?} von ${soll_gesamt:-?}"
+sagen "Knoten ${KNOTEN} [${MODULE}] Release ${version} -> ${soll_version:-unveraendert}"
 
-# ------------------------------------------------------------------ Umsetzen
+# ------------------------------------------------------------------ Wartung
+
+if $IN_WARTUNG; then
+    # In Wartung wird gemeldet und beziehbar geblieben, aber nichts neu
+    # gestartet und keine Zuteilung uebernommen. Genau das steht in Abschnitt
+    # 63: der Knoten erreicht Update-Server und Controller weiterhin,
+    # uebernimmt aber keine neuen produktiven Aufgaben.
+    sagen "In Wartung ($(cat "$WARTUNGSDATEI")) - keine Aenderungen an den Diensten."
+    exit 0
+fi
+
+# --------------------------------------------------------------- Zuteilung
 
 geaendert=0
+if hat_modul core; then
+    # Shards gehen nur den Core etwas an. Ein reiner Audio-Knoten hat keine.
+    umgebung_setzen HJ_SHARDS_GESAMT "$soll_gesamt" && geaendert=1
+    umgebung_setzen HJ_SHARD_VON     "$soll_von"    && geaendert=1
+    umgebung_setzen HJ_SHARD_BIS     "$soll_bis"    && geaendert=1
+fi
 
-# Shard-Aufteilung in die .env schreiben. Nur wenn sie sich unterscheidet -
-# sonst schriebe der Agent die Datei jede Minute neu.
-setze() {
-    local schluessel="$1" wert="$2"
-    [[ -n "$wert" ]] || return 0
-    if grep -q "^${schluessel}=" "$UMGEBUNG"; then
-        local ist
-        ist="$(grep "^${schluessel}=" "$UMGEBUNG" | head -1 | cut -d= -f2-)"
-        [[ "$ist" == "$wert" ]] && return 0
-        sed -i "s|^${schluessel}=.*|${schluessel}=${wert}|" "$UMGEBUNG"
-    else
-        printf '%s=%s\n' "$schluessel" "$wert" >> "$UMGEBUNG"
-    fi
-    sagen "${schluessel}=${wert}"
-    geaendert=1
-}
+# ----------------------------------------------------------------- Release
 
-setze HJ_SHARDS_GESAMT "$soll_gesamt"
-setze HJ_SHARD_VON "$soll_von"
-setze HJ_SHARD_BIS "$soll_bis"
-
-# Release nachziehen. Das macht auto-update.sh, das dabei auf Ruhe wartet -
-# ein Shard mitten in laufender Wiedergabe neu zu starten reisst den Ton ab.
 if [[ -n "$soll_version" && "$soll_version" != "$version" ]]; then
     sagen "Release ${version} -> ${soll_version}, uebergebe an auto-update.sh"
-    bash "${ARBEIT}/main/deploy/auto-update.sh" || sagen "Update meldete einen Fehler - siehe Log."
-    geaendert=0   # auto-update.sh startet selbst neu
-elif [[ "$geaendert" -eq 1 ]]; then
-    sagen "Shard-Aufteilung geaendert - core neu starten."
-    # Compose liest die .env aus seinem eigenen Verzeichnis. Frueher lag dort
-    # eine Kopie, die hier aufgefrischt wurde - inzwischen ist es ein Symlink
-    # auf dieselbe Datei. Ein "cp" darauf bricht mit "same file" ab, und unter
-    # "set -e" waere der Neustart darunter nie gelaufen: der Agent haette die
-    # Aufteilung geschrieben und nie angewendet.
-    if [[ ! -e .env ]] || ! [[ .env -ef "$UMGEBUNG" ]]; then
-        cp "$UMGEBUNG" .env
+    # auto-update.sh wartet auf Ruhe, bevor es neu startet - einen Shard
+    # mitten in laufender Wiedergabe neu zu starten reisst den Ton ab.
+    if bash "${ARBEIT}/main/deploy/auto-update.sh"; then
+        sagen "Update durchgelaufen."
+    else
+        warnen "Update meldete einen Fehler - siehe Log. Der Knoten laeuft weiter."
     fi
-    docker compose up -d core
+    # auto-update.sh startet selbst neu; der Neustart unten waere doppelt.
+    exit 0
+fi
+
+# ------------------------------------------------------------- Neu starten
+
+if [[ "$geaendert" -eq 1 ]]; then
+    sagen "Shard-Aufteilung geaendert - core neu starten."
+    # Compose liest die .env aus seinem eigenen Verzeichnis. Dort liegt
+    # inzwischen ein Symlink auf dieselbe Datei; ein "cp" darauf braeche mit
+    # "same file" ab, und unter "set -e" waere der Neustart darunter nie
+    # gelaufen - der Agent haette die Aufteilung geschrieben und nie
+    # angewendet.
+    ziel="${ARBEIT}/main/deploy/docker/.env"
+    if [[ ! -e "$ziel" ]] || ! [[ "$ziel" -ef "$UMGEBUNG" ]]; then
+        cp "$UMGEBUNG" "$ziel"
+    fi
+    compose up -d core
 fi
 
 sagen "Fertig."

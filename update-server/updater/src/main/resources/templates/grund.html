@@ -13,6 +13,7 @@
 <body>
 <nav th:fragment="navigation(hier)">
     <a th:href="@{/}" th:classappend="${hier == 'uebersicht'} ? 'hier'">Knoten</a>
+    <a th:href="@{/knoten}" th:classappend="${hier == 'verwalten'} ? 'hier'">Verwalten</a>
     <a th:href="@{/freigaben}" th:classappend="${hier == 'freigaben'} ? 'hier'">Freigaben</a>
     <a th:href="@{/protokoll}" th:classappend="${hier == 'protokoll'} ? 'hier'">Protokoll</a>
     <form th:action="@{/abmelden}" method="post" class="rechts">

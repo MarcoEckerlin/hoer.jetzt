@@ -52,7 +52,7 @@ KOPF
 step "Adresse"
 info "Der oeffentliche Name, unter dem der Nginx Proxy Manager diesen"
 info "Dienst veroeffentlicht. Ohne Port und ohne https:// davor."
-frage HJ_UPDATE_HOST "Oeffentlicher Name" "update.system.hoer.jetzt"
+frage HJ_UPDATE_HOST "Oeffentlicher Name" "repo.updates.hoer.jetzt"
 
 info ""
 info "Und der Port, auf dem dieser Dienst im LAN lauscht. Dorthin zeigt"
@@ -108,12 +108,38 @@ info "Knoten:    ${#PW_KNOTEN} Zeichen, 4096 Bit."
 
 # Das einzige, was noch gehasht wird: die Anmeldung an der Oberflaeche. Ein
 # Mensch tippt es, also darf es nicht im Klartext herumliegen.
-PW_PULT="$(zufall)"
+#
+# HJ_VERWALTER_PASSWORT kommt aus install-update-server.sh, wenn dort ein
+# Initialpasswort angegeben wurde (Abschnitt 10 der Spezifikation). Ueber die
+# Umgebung und nicht als Argument: ein Argument stuende in "ps aux" und waere
+# fuer jeden lokalen Benutzer lesbar, solange der Prozess laeuft.
+#
+# Sofort nach dem Lesen aus der Umgebung entfernt - sonst erbte es jeder
+# Kindprozess dieses Skripts, und davon gibt es hier etliche, unter anderem
+# mehrere "docker run".
+if [[ -n "${HJ_VERWALTER_PASSWORT:-}" ]]; then
+    PW_PULT="$HJ_VERWALTER_PASSWORT"
+    unset HJ_VERWALTER_PASSWORT
+    PW_PULT_VORGEGEBEN=true
+    if [[ ${#PW_PULT} -lt 12 ]]; then
+        warn "Das Initialpasswort ist kuerzer als zwoelf Zeichen."
+        warn "Diese Oberflaeche steuert Freigaben, Tresor und Releases."
+    fi
+else
+    PW_PULT="$(zufall)"
+    PW_PULT_VORGEGEBEN=false
+fi
 PW_ADMIN="$(zufall)"
 
 step "Hash fuer die Oberflaeche"
 docker pull -q caddy:2-alpine >/dev/null 2>&1 || fail "caddy:2-alpine nicht ladbar."
-HJ_VERWALTER_HASH="$(docker run --rm caddy:2-alpine caddy hash-password --plaintext "$PW_PULT")"
+# Ueber die Standardeingabe, nicht als Argument.
+#
+# "--plaintext $PW_PULT" stellte das Passwort in "ps aux" - fuer jeden
+# lokalen Benutzer lesbar, solange der Container laeuft. Das sind
+# Millisekunden, aber es ist genau die Art Leck, die Abschnitt 10 der
+# Spezifikation ausschliesst, und caddy liest ohne den Schalter von stdin.
+HJ_VERWALTER_HASH="$(printf '%s' "$PW_PULT" | docker run --rm -i caddy:2-alpine caddy hash-password)"
 [[ -n "$HJ_VERWALTER_HASH" ]] || fail "Hashen fehlgeschlagen."
 info "bcrypt."
 
@@ -174,21 +200,32 @@ fi
 step "Forgejo starten"
 docker compose up -d forgejo || fail "Forgejo startet nicht."
 
+# Zwei Bedingungen, und die zweite ist die eigentliche. Der Health-Check
+# antwortet, sobald der Webserver steht - auch wenn Forgejo sich noch fuer
+# nicht installiert haelt. Erst mit der app.ini ist es wirklich soweit, und
+# genau die fehlte, als "forgejo admin" hier abbrach.
+FJ_INI="/data/gitea/conf/app.ini"
 info "Warte auf die Ersteinrichtung..."
 for versuch in $(seq 1 60); do
     if docker compose exec -T forgejo curl -fsS -m 3 \
-            http://127.0.0.1:3000/api/healthz >/dev/null 2>&1; then
+            http://127.0.0.1:3000/api/healthz >/dev/null 2>&1 \
+       && docker compose exec -T forgejo test -f "$FJ_INI" >/dev/null 2>&1; then
         break
     fi
-    [[ "$versuch" -eq 60 ]] && fail "Forgejo antwortet nicht - docker compose logs forgejo"
+    if [[ "$versuch" -eq 60 ]]; then
+        warn "Forgejo ist nach zwei Minuten nicht fertig eingerichtet."
+        warn "Nachsehen: docker compose logs forgejo"
+        warn "Fehlt ${FJ_INI}, ist INSTALL_LOCK nicht angekommen."
+        fail "Abgebrochen."
+    fi
     sleep 2
 done
-info "Forgejo antwortet."
+info "Forgejo ist eingerichtet."
 
 step "Verwaltungskonto"
 # Die Ausgabe nicht wegwerfen: schlaegt es fehl, steht der Grund darin, und
 # ohne ihn sucht man an der falschen Stelle.
-if ! ANLEGEN="$(docker compose exec -T -u git forgejo forgejo admin user create \
+if ! ANLEGEN="$(docker compose exec -T -u git forgejo forgejo --config "$FJ_INI" admin user create \
         --admin --username "$HJ_ADMIN" --password "$PW_ADMIN" \
         --email "$HJ_ADMIN_MAIL" --must-change-password=false 2>&1)"; then
     warn "$ANLEGEN"
@@ -200,7 +237,7 @@ info "$HJ_ADMIN"
 # Registry kommt - und dorthin kommt nur, wer Caddy das Knoten-Passwort
 # vorgelegt hat.
 step "Organisation"
-TOKEN="$(docker compose exec -T -u git forgejo forgejo admin user generate-access-token \
+TOKEN="$(docker compose exec -T -u git forgejo forgejo --config "$FJ_INI" admin user generate-access-token \
     -u "$HJ_ADMIN" --scopes all --raw)" || fail "Kein Verwaltungstoken."
 TOKEN="$(printf '%s' "$TOKEN" | tr -d '\r\n ')"
 
@@ -379,11 +416,20 @@ cat <<ENDE
 
       Knoten-Passwort   (4096 Bit, steht unten noch einmal einzeln)
 
-      Updater           ${HJ_ADMIN} / ${PW_PULT}
+      Updater           ${HJ_ADMIN} / $(if $PW_PULT_VORGEGEBEN; then
+                            printf '%s' "<das beim Aufruf angegebene Passwort>"
+                        else printf '%s' "$PW_PULT"; fi)
                         http://${HJ_PULT_BIND}:${HJ_PULT_PORT}/
-                        Freigaben, Knoten, Zugriffsprotokoll.
+                        Freigaben, Knoten, Verwalten, Zugriffsprotokoll.
 
-                        Neue Knoten muessen dort freigeschaltet werden,
+                        Vorgegebene Passwoerter werden hier nicht wiederholt -
+                        sie stehen schon dort, wo sie hergekommen sind, und
+                        eine zweite Kopie im Terminalpuffer macht es nicht
+                        besser.
+
+                        Neue Knoten werden unter "Verwalten" angelegt; dabei
+                        entsteht ein Aufsetz-Token, der zwei Stunden gilt.
+                        Ihre Adresse muss unter "Freigaben" eingetragen sein,
                         bevor sie an Tresor und Abbilder kommen.
 
       Forgejo           ${HJ_ADMIN} / ${PW_ADMIN}

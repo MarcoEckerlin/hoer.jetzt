@@ -59,6 +59,12 @@ services:
     environment:
       USER_UID: 1000
       USER_GID: 1000
+      # Ohne das haelt sich Forgejo fuer nicht installiert und wartet auf den
+      # Web-Installer: es legt keine app.ini an, und jeder Aufruf von
+      # "forgejo admin" bricht mit "Unable to load config file for a installed
+      # Forgejo instance" ab. Der Health-Check antwortet derweil munter weiter,
+      # deshalb faellt es erst beim ersten Verwaltungsbefehl auf.
+      FORGEJO__security__INSTALL_LOCK: "true"
       FORGEJO__server__ROOT_URL: https://${HJ_UPDATE_HOST}/
       FORGEJO__server__DOMAIN: ${HJ_UPDATE_HOST}
       FORGEJO__server__SSH_DOMAIN: ${HJ_GIT_BIND:-127.0.0.1}
@@ -138,9 +144,16 @@ services:
       HJ_VERWALTER_HASH: ${HJ_VERWALTER_HASH:?Kein Verwalter-Hash - einrichten.sh laufen lassen}
       HJ_PROTOKOLL_TAGE: ${HJ_PROTOKOLL_TAGE:-21}
       HJ_DATEN: /daten
+      # Wo die Tresor-Klartexte liegen. Der Updater liest sie und richtet sie
+      # beim Abruf an den anfragenden Knoten - siehe Tresorausgabe.
+      HJ_AUSLIEFERN: /srv/ausliefern
       TZ: ${TZ:-Europe/Berlin}
     volumes:
       - updater-daten:/daten
+      # Nur lesend. Der Updater soll den Tresor verschluesseln koennen, aber
+      # nichts im Auslieferungsverzeichnis veraendern - das befuellen
+      # ausschliesslich veroeffentlichen.sh und tresor.sh.
+      - ausliefern:/srv/ausliefern:ro
     ports:
       - "${HJ_PULT_BIND:-127.0.0.1}:${HJ_PULT_PORT:-8090}:8081"
     networks: [hj-update]
