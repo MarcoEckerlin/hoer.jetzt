@@ -103,7 +103,7 @@ export default function BotZugang() {
             <section className="karte-flach">
                 <h2>KI-Anbieter</h2>
                 <p className="leise">
-                    Für den Chat und das AI-Radio. Modelle ohne Function-Calling erkennt der Bot
+                    Für den Chat und das KI-Radio. Modelle ohne Function-Calling erkennt der Bot
                     selbst und läuft dann ohne Werkzeuge weiter.
                 </p>
                 <div className="feldgitter">

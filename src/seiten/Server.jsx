@@ -6,7 +6,7 @@ import Serverstatistik from "../teile/Serverstatistik.jsx";
 /**
  * Alle Server, auf denen der Bot ist - mit ihren Freigaben.
  *
- * <p>Die drei Freigaben (KI-Chat, AI-Radio, Premium-Audio) kosten Rechenzeit
+ * <p>Die drei Freigaben (KI-Chat, KI-Radio, Premium-Audio) kosten Rechenzeit
  * oder Wiedergabekapazitaet und werden deshalb hier vergeben, nicht vom
  * Serverbetreiber. In der Uebersicht eines Servers sind sie nur sichtbar -
  * mit dem Hinweis, wer sie erteilt.</p>

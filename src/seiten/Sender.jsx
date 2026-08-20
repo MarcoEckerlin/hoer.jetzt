@@ -118,7 +118,7 @@ export default function Sender() {
                 {(liste || []).length === 0 && !entwurf && (
                     <p className="leise">
                         Kein globaler Sender eingetragen. Bis dahin sehen die Server nur ihre
-                        eigenen — und das AI-Radio, wo es freigeschaltet ist.
+                        eigenen — und das KI-Radio, wo es freigeschaltet ist.
                     </p>
                 )}
 

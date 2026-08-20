@@ -110,7 +110,7 @@ function Aufteilung({ zahlen }) {
     const teile = [
         { name: "Musik", wert: zahlen.musikSekunden30d, klasse: "ist-musik" },
         { name: "Radio", wert: zahlen.radioSekunden30d, klasse: "ist-radio" },
-        { name: "AI-Radio", wert: zahlen.aiRadioSekunden30d, klasse: "ist-ai" }
+        { name: "KI-Radio", wert: zahlen.aiRadioSekunden30d, klasse: "ist-ai" }
     ].filter((t) => t.wert > 0);
 
     const summe = teile.reduce((s, t) => s + t.wert, 0);

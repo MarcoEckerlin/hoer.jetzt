@@ -18,7 +18,7 @@ import { SYMBOLE } from "../teile/Symbole.jsx";
  * Welche Modulseiten es gibt und in welcher Reihenfolge.
  *
  * <p>{@code sichtbar} entscheidet, ob ein Modul ueberhaupt in der Leiste
- * auftaucht. Das betrifft die Freigaben: KI-Chat und AI-Radio kosten
+ * auftaucht. Das betrifft die Freigaben: KI-Chat und KI-Radio kosten
  * Rechenzeit und werden einzeln vergeben. Ein Menuepunkt, der beim Anklicken
  * nur mitteilt, dass er nicht benutzt werden darf, ist kein Hinweis, sondern
  * eine Sackgasse mit Ankuendigung.</p>

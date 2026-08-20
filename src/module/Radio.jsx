@@ -12,7 +12,7 @@ import Bildfeld from "../teile/Bildfeld.jsx";
  * gescrollt werden muessen.</p>
  *
  * <p>Die Liste wird <em>mit</em> Server-Bezug geholt. Ohne ihn laesst der Bot
- * das AI-Radio bewusst weg - die Freigabe gilt je Server, und ohne zu wissen um
+ * das KI-Radio bewusst weg - die Freigabe gilt je Server, und ohne zu wissen um
  * welchen es geht, waere jede Antwort geraten.</p>
  *
  * <h2>Zwei Herkuenfte, zwei Listen</h2>
@@ -130,7 +130,7 @@ export default function Radio({ guildId, konfig }) {
             {aktiv && <div className="notiz">Gerade läuft <strong>{aktiv}</strong>.</div>}
 
             {/*
-              Hier stand ein Hinweis, dass das AI-Radio nicht freigeschaltet
+              Hier stand ein Hinweis, dass das KI-Radio nicht freigeschaltet
               sei. Er ist weg: wer die Freigabe nicht hat, soll von der
               Funktion gar nichts mitbekommen - sonst wirbt die Seite fuer
               etwas, das derselbe Nutzer nicht bekommen kann, und macht aus
