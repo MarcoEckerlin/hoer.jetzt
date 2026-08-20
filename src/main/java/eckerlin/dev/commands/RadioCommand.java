@@ -29,7 +29,7 @@ public class RadioCommand implements SlashCommand {
 
     @Override
     public SlashCommandData getCommandData() {
-        return Commands.slash("radio", "Startet Webradio oder AI Radio")
+        return Commands.slash("radio", "Startet Webradio oder KI-Radio")
                 .addOptions(
                         new OptionData(OptionType.STRING, "sender", "Radiosender aus der Datenbank", false, true),
                         new OptionData(OptionType.INTEGER, "id", "Radio-ID aus der Datenbank", false)
@@ -62,7 +62,7 @@ public class RadioCommand implements SlashCommand {
             return;
         }
 
-        // Das AI-Radio hat bewusst eine negative ID (siehe RadioStationService),
+        // Das KI-Radio hat bewusst eine negative ID (siehe RadioStationService),
         // deshalb reicht "groesser null" als Pruefung nicht mehr.
         Integer radioId = resolveRadioId(event);
         if (radioId == null || (radioId < 1 && radioId != RadioStationService.SMART_RADIO_ID)) {

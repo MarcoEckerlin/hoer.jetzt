@@ -218,7 +218,7 @@
             + '<div class="stat"><div class="k">Server</div><div class="v">' + guilds.length + '</div>'
             + '<div class="s">' + members.toLocaleString("de-DE") + ' Mitglieder insgesamt</div></div>'
             + '<div class="stat"><div class="k">Freigeschaltet</div><div class="v">' + granted + '</div>'
-            + '<div class="s">Server mit KI oder AI-Radio</div></div>'
+            + '<div class="s">Server mit KI oder KI-Radio</div></div>'
             + '<div class="stat"><div class="k">Bot-Admins</div><div class="v">' + admins.length + '</div>'
             + '<div class="s">' + esc((state.admins && state.admins.currentRole) || "—") + ' — deine Stufe</div></div>'
             + '<div class="stat"><div class="k">Status</div><div class="v" style="font-size:20px">'

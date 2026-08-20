@@ -271,11 +271,11 @@ public class ListenerStatsService {
         );
         String author = firstNonBlank(
                 safe(currentTrack.getInfo().getAuthor(), 255),
-                "ai_radio".equals(playbackKind) ? "AI Radio" : "",
+                "ai_radio".equals(playbackKind) ? "KI-Radio" : "",
                 "radio".equals(playbackKind) ? state.activeRadioName() : ""
         );
         String sourceLabel = switch (playbackKind) {
-            case "ai_radio" -> "AI Radio";
+            case "ai_radio" -> "KI-Radio";
             case "radio" -> firstNonBlank(
                     state.activeRadioName(),
                     safe(currentTrack.getInfo().getAuthor(), 190),
@@ -424,8 +424,8 @@ public class ListenerStatsService {
                   AND started_at >= ?
                   -- Nur gewoehnliches Radio.
                   --
-                  -- Das AI-Radio stand hier mit drin und tauchte damit als
-                  -- Quelle "AI Radio" in der oeffentlichen Bestenliste auf -
+                  -- Das KI-Radio stand hier mit drin und tauchte damit als
+                  -- Quelle "KI-Radio" in der oeffentlichen Bestenliste auf -
                   -- die Seite warb also fuer eine Funktion, die nur wenige
                   -- Server ueberhaupt bekommen. Aus der Vorlage liess sich das
                   -- nicht entfernen, weil der Name aus den Daten kam.
@@ -455,7 +455,7 @@ public class ListenerStatsService {
                     if ("radio".equalsIgnoreCase(subtitle)) {
                         subtitle = "Radio";
                     } else if ("ai_radio".equalsIgnoreCase(subtitle)) {
-                        subtitle = "AI Radio";
+                        subtitle = "KI-Radio";
                     }
                     items.add(new PublicStatsRankedItemView(
                             safeDisplay(resultSet.getString("title")),
@@ -604,7 +604,7 @@ public class ListenerStatsService {
     }
 
     private String liveSubtitle(ActiveListenerSession session) {
-        if (!session.author().isBlank() && !"AI Radio".equals(session.author())) {
+        if (!session.author().isBlank() && !"KI-Radio".equals(session.author())) {
             return session.author();
         }
         if (!session.sourceLabel().isBlank()) {
@@ -615,7 +615,7 @@ public class ListenerStatsService {
 
     private String modeLabel(String playbackKind) {
         return switch (playbackKind == null ? "" : playbackKind) {
-            case "ai_radio" -> "AI Radio";
+            case "ai_radio" -> "KI-Radio";
             case "radio" -> "Radio";
             default -> "Musik";
         };

@@ -202,7 +202,7 @@ public class DashboardApiController {
     }
 
     /**
-     * Ohne Server-Bezug bleibt das AI-Radio aussen vor: die Freigabe gilt je
+     * Ohne Server-Bezug bleibt das KI-Radio aussen vor: die Freigabe gilt je
      * Server, und ohne zu wissen um welchen es geht, ist "nein" die richtige
      * Antwort.
      */
@@ -222,7 +222,7 @@ public class DashboardApiController {
     // Eigene Sender eines Servers
     //
     // Getrennt von /radio/stations: dort steht, was gehoert werden darf
-    // (global + eigene + AI-Radio), hier nur, was dieser Server selbst
+    // (global + eigene + KI-Radio), hier nur, was dieser Server selbst
     // gepflegt hat und deshalb auch aendern darf. Eine Liste fuer beides
     // waere eine Liste, in der die Haelfte der Zeilen keinen Loeschknopf hat.
     // ------------------------------------------------------------------

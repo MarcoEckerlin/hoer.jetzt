@@ -44,7 +44,7 @@ public class RadiosCommand implements SlashCommand {
 
     @Override
     public void execute(SlashCommandInteractionEvent event) {
-        // Senderliste aus Sicht dieses Servers: ohne Freigabe kein AI-Radio.
+        // Senderliste aus Sicht dieses Servers: ohne Freigabe kein KI-Radio.
         List<RadioStation> stations = audioService.getStations(
                 event.getGuild() == null ? null : event.getGuild().getId());
         if (stations.isEmpty()) {

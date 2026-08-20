@@ -109,7 +109,7 @@ public class AudioService {
     private static final long MUSIC_RESUME_PREROLL_MS = 2_500L;
     private static final int SMART_RADIO_PREFETCH_QUEUE_SIZE = 2;
     private static final String AI_RADIO_LOCKED_MESSAGE =
-            "AI Radio ist für diesen Server nicht freigeschaltet. Ein Bot-Administrator kann es im Adminpanel freigeben.";
+            "KI-Radio ist für diesen Server nicht freigeschaltet. Ein Bot-Administrator kann es im Adminpanel freigeben.";
     private static final String RADIO_COOLDOWN_PREFIX = "Bitte warte noch ";
     private static final List<String> SMART_RADIO_FALLBACK_QUERIES = List.of(
             "Coldplay Adventure of a Lifetime official audio",
@@ -343,7 +343,7 @@ public class AudioService {
         return voiceInterceptor;
     }
 
-    // Hier stand ein getStations() ohne Serverbezug, das das AI-Radio
+    // Hier stand ein getStations() ohne Serverbezug, das das KI-Radio
     // bedingungslos mitlieferte. Niemand rief es auf - aber der naechste
     // Aufrufer haette die Freigabe umgangen, ohne es zu merken, denn der
     // Signatur sah man das nicht an. Wer eine Senderliste braucht, nimmt
@@ -928,7 +928,7 @@ public class AudioService {
         return name.isBlank() ? "" : tierService.tierOfNode(name).label();
     }
 
-    /** Senderliste aus Sicht eines Servers - ohne AI-Radio, wenn es dort gesperrt ist. */
+    /** Senderliste aus Sicht eines Servers - ohne KI-Radio, wenn es dort gesperrt ist. */
     public List<RadioStation> getStations(String guildId) {
         boolean aiRadio = guildId != null
                 && entitlementService.isEnabled(guildId, GuildFeature.AI_RADIO);
@@ -1319,7 +1319,7 @@ public class AudioService {
         // Die Freischaltung wird hier geprueft und nicht erst im Music-Brain-Client:
         // dort landete eine Ablehnung in derselben Fehlerbehandlung wie ein Netzwerk-
         // ausfall und wurde stillschweigend durch den Fallback-Mix ersetzt. Damit lief
-        // AI Radio auf jedem Server, auch ohne Freigabe.
+        // KI-Radio auf jedem Server, auch ohne Freigabe.
         if (!entitlementService.isEnabled(guild.getId(), GuildFeature.AI_RADIO)) {
             state.setSmartRadioEnabled(false);
             if (continuing) {
@@ -1331,7 +1331,7 @@ public class AudioService {
 
         state.setSmartRadioEnabled(true);
         state.setRepeatEnabled(false);
-        state.setActiveRadioName("AI Radio");
+        state.setActiveRadioName("KI-Radio");
         state.setWaitingForListeners(false);
         cancelScheduledDisconnect(guild.getIdLong());
         connectToVoice(guild, channel);
@@ -1343,7 +1343,7 @@ public class AudioService {
         }
 
         if (!state.beginSmartRadioLoad()) {
-            return CompletableFuture.completedFuture("AI Radio wird bereits vorbereitet.");
+            return CompletableFuture.completedFuture("KI-Radio wird bereits vorbereitet.");
         }
 
         return musicBrainClientService.requestRadio(guild.getId(), configService.getMusicBrainBatchSize())
@@ -1354,9 +1354,9 @@ public class AudioService {
                         getGuildState(guild.getIdLong()).setSmartRadioEnabled(false);
                         return new MusicBrainRadioResponse(rootMessage(throwable), List.of());
                     }
-                    Alert.send("WARN", "AUDIO", "AI Radio nutzt den Fallback-Mix: " + safeTitle(rootMessage(throwable)));
+                    Alert.send("WARN", "AUDIO", "KI-Radio nutzt den Fallback-Mix: " + safeTitle(rootMessage(throwable)));
                     return new MusicBrainRadioResponse(
-                            "AI Radio nutzt gerade den sicheren Fallback-Mix.",
+                            "KI-Radio nutzt gerade den sicheren Fallback-Mix.",
                             SMART_RADIO_FALLBACK_QUERIES
                     );
                 })
@@ -1381,7 +1381,7 @@ public class AudioService {
         if (queries.isEmpty()) {
             String reason = response == null || response.summary() == null ? "" : response.summary().trim();
             return CompletableFuture.completedFuture(reason.isBlank()
-                    ? "AI Radio konnte gerade keine passenden Titel finden."
+                    ? "KI-Radio konnte gerade keine passenden Titel finden."
                     : reason);
         }
 
@@ -1397,19 +1397,19 @@ public class AudioService {
                     clearConnectedVoiceChannelStatus(guild);
                     disconnectFromVoice(guild);
                 }
-                return "AI Radio hat keine sicheren und passenden Tracks gefunden.";
+                return "KI-Radio hat keine sicheren und passenden Tracks gefunden.";
             }
 
             String summary = response == null || response.summary() == null ? "" : response.summary().trim();
             if (continuing) {
                 return summary.isBlank()
-                        ? "AI Radio hat die Queue aufgefüllt."
-                        : "AI Radio hat die Queue aufgefüllt. " + summary;
+                        ? "KI-Radio hat die Queue aufgefüllt."
+                        : "KI-Radio hat die Queue aufgefüllt. " + summary;
             }
 
             return summary.isBlank()
-                    ? "AI Radio Clean Shuffle wurde gestartet."
-                    : "AI Radio Clean Shuffle wurde gestartet. " + summary;
+                    ? "KI-Radio Clean Shuffle wurde gestartet."
+                    : "KI-Radio Clean Shuffle wurde gestartet. " + summary;
         });
     }
 
@@ -1485,7 +1485,7 @@ public class AudioService {
                 AudioChannel channel = resolveActiveVoiceChannel(guild);
                 if (channel != null) {
                     startSmartRadio(guild, channel, true);
-                    return "Übersprungen — AI-Radio sucht den nächsten Titel.";
+                    return "Übersprungen — KI-Radio sucht den nächsten Titel.";
                 }
             }
             scheduleDisconnectAfterInactivity(guild, "Queue beendet");
@@ -1938,7 +1938,7 @@ public class AudioService {
             cancelScheduledDisconnect(guild.getIdLong());
             cancelRadioWarmBufferTask(guild.getIdLong());
             state.setWaitingForListeners(false);
-            state.setActiveRadioName(state.smartRadioEnabled() ? "AI Radio" : "");
+            state.setActiveRadioName(state.smartRadioEnabled() ? "KI-Radio" : "");
             state.setCurrentTrack(track);
             return playTrack(guild, track, 0L, true)
                     .thenApply(player -> {
@@ -2053,7 +2053,7 @@ public class AudioService {
                 if (channel != null) {
                     startSmartRadio(guild, channel, true)
                             .exceptionally(throwable -> {
-                                scheduleDisconnectAfterInactivity(guild, "AI Radio beendet");
+                                scheduleDisconnectAfterInactivity(guild, "KI-Radio beendet");
                                 return null;
                             });
                     return;
@@ -2493,7 +2493,7 @@ public class AudioService {
         pausePlayback(guild, true);
         discordLoggingService.logMusicEvent(
                 guild,
-                state.smartRadioEnabled() ? "AI Radio wartet auf Horer" : "Wiedergabe pausiert",
+                state.smartRadioEnabled() ? "KI-Radio wartet auf Horer" : "Wiedergabe pausiert",
                 "Im Voice-Channel **" + connectedChannel.getName() + "** ist niemand mehr. Die Wiedergabe wird pausiert und läuft intern weiter."
         );
     }
@@ -2549,7 +2549,7 @@ public class AudioService {
                 });
         discordLoggingService.logMusicEvent(
                 guild,
-                smartRadio ? "AI Radio fortgesetzt" : "Wiedergabe fortgesetzt",
+                smartRadio ? "KI-Radio fortgesetzt" : "Wiedergabe fortgesetzt",
                 "Im Voice-Channel **" + connectedChannel.getName() + "** ist wieder jemand. Die Queue wird an der aktuellen Position fortgesetzt."
         );
     }

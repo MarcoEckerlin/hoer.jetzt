@@ -525,3 +525,72 @@ CREATE TABLE IF NOT EXISTS betrieb_schalter (
     geaendert_am timestamp   NOT NULL DEFAULT current_timestamp,
     PRIMARY KEY (bot_id, schluessel)
 );
+
+-- ---------------------------------------------------------------------------
+-- Wartung
+-- ---------------------------------------------------------------------------
+--
+-- Eine Node in Wartung bleibt erreichbar, meldet sich weiter und bezieht
+-- weiter Updates - sie bekommt nur keine neuen Aufgaben. Das ist der
+-- Unterschied zu "ausgefallen": ausgefallen merkt man an der ausbleibenden
+-- Meldung, Wartung ist eine Ansage.
+--
+-- Der Wert kommt vom Agenten der Node und nicht aus dem Adminbereich. Grund:
+-- die Wartung wird dort eingeschaltet, wo gearbeitet wird, und muss auch dann
+-- gelten, wenn der Controller gerade nicht erreichbar ist.
+ALTER TABLE cluster_nodes ADD COLUMN IF NOT EXISTS wartung boolean NOT NULL DEFAULT false;
+ALTER TABLE cluster_nodes ADD COLUMN IF NOT EXISTS wartung_seit timestamp;
+
+-- ---------------------------------------------------------------------------
+-- KI-Provider je Discord-Server
+-- ---------------------------------------------------------------------------
+--
+-- Bisher galt eine Einstellung fuer die ganze Instanz. Damit hing der KI-Chat
+-- aller Server an einem Modell und einem Endpunkt - wer ein eigenes Modell
+-- betreibt, konnte es nicht benutzen, und wer keines hat, bekam gar nichts.
+--
+-- Zwei Betriebsarten:
+--
+--   SELFHOST     Der Server-Betreiber hinterlegt Endpunkt, Modell und Token.
+--                Die Rechenzeit ist seine.
+--   HOER_HOSTED  Er waehlt aus den Modellen, die hoer.jetzt bereitstellt.
+--                Endpunkt und Token bleiben auf dem Server - der Betreiber
+--                bekommt sie nie zu sehen. Deshalb stehen sie hier auch NICHT
+--                in der Zeile: bei HOER_HOSTED sind api_token und endpunkt
+--                leer und werden aus der Instanzkonfiguration genommen.
+--
+-- api_token ist verschluesselt abgelegt, nicht im Klartext. Der Schluessel
+-- steht in der Umgebung des Bots (HJ_GEHEIMNIS_SCHLUESSEL) und nicht in der
+-- Datenbank - sonst braeuchte man ihn nicht zu trennen. Ein Datenbankabzug
+-- allein gibt die Token damit nicht her.
+CREATE TABLE IF NOT EXISTS guild_ai_provider (
+    bot_id        int          NOT NULL,
+    guild_id      varchar(32)  NOT NULL,
+    modus         varchar(16)  NOT NULL DEFAULT 'HOER_HOSTED',
+    endpunkt      text         NOT NULL DEFAULT '',
+    model         varchar(120) NOT NULL DEFAULT '',
+    api_token     text         NOT NULL DEFAULT '',
+    token_limit   int          NOT NULL DEFAULT 4096,
+    aktiv         boolean      NOT NULL DEFAULT false,
+    geaendert_von varchar(32)  NOT NULL DEFAULT '',
+    geaendert_am  timestamp    NOT NULL DEFAULT current_timestamp,
+    PRIMARY KEY (bot_id, guild_id)
+);
+
+-- Welche Modelle hoer.jetzt selbst anbietet. Eine Tabelle statt einer
+-- Umgebungsvariablen, weil sich das Angebot aendert, ohne dass der Bot neu
+-- starten soll - und weil zu jedem Modell mehr gehoert als sein Name.
+CREATE TABLE IF NOT EXISTS ai_modell (
+    bot_id       int          NOT NULL,
+    kennung      varchar(120) NOT NULL,
+    anzeige      varchar(160) NOT NULL DEFAULT '',
+    endpunkt     text         NOT NULL DEFAULT '',
+    api_token    text         NOT NULL DEFAULT '',
+    token_limit  int          NOT NULL DEFAULT 4096,
+    -- Ob ein Server dieses Modell waehlen darf. Abgeschaltete bleiben stehen,
+    -- damit ein Server, der es eingestellt hatte, eine verstaendliche Meldung
+    -- bekommt statt eines leeren Auswahlfelds.
+    waehlbar     boolean      NOT NULL DEFAULT true,
+    sortierung   int          NOT NULL DEFAULT 0,
+    PRIMARY KEY (bot_id, kennung)
+);

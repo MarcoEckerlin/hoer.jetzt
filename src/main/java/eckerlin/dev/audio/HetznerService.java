@@ -102,25 +102,61 @@ public class HetznerService {
      * @return der angelegte Server, oder leer bei einem Fehler
      */
     public Optional<Server> anlegen(String name, String stufe) {
+        return anlegen(name, Servervorlage.ausUmgebung(stufe));
+    }
+
+    /**
+     * Legt einen Server nach einer benannten Vorlage an.
+     *
+     * <p>Die Fassung ohne Vorlage bleibt und benutzt
+     * {@link Servervorlage#ausUmgebung} - sie verhaelt sich damit genau wie
+     * vorher. Bestehende Installationen merken vom Umbau nichts.</p>
+     */
+    public Optional<Server> anlegen(String name, Servervorlage vorlage) {
         if (!eingeschaltet()) {
             return Optional.empty();
         }
 
+        // Schleife statt forEach(marken::put): JSONObject.put wirft eine
+        // gepruefte JSONException, und eine solche Methode laesst sich nicht
+        // als BiConsumer verwenden.
+        JSONObject marken = new JSONObject();
+        for (java.util.Map.Entry<String, String> marke : vorlage.alleMarken().entrySet()) {
+            marken.put(marke.getKey(), marke.getValue());
+        }
+
         JSONObject anfrage = new JSONObject()
                 .put("name", name)
-                .put("server_type", umgebung("HJ_AUTOSCALE_TYPE", "cx33"))
-                .put("image", umgebung("HJ_AUTOSCALE_IMAGE", "debian-12"))
-                .put("location", umgebung("HJ_AUTOSCALE_LOCATION", "hel1"))
+                .put("server_type", vorlage.serverTyp())
+                .put("image", vorlage.abbild())
                 .put("start_after_create", true)
-                .put("user_data", startskript(name, stufe))
-                .put("labels", new JSONObject()
-                        .put("hoerjetzt", "knoten")
-                        .put("stufe", stufe));
+                .put("user_data", startskript(name, vorlage.stufe()))
+                .put("labels", marken);
+
+        // Rechenzentrum ist genauer als Standort - und Hetzner nimmt nur eins
+        // von beiden. Beide zu schicken quittiert die API mit einem Fehler,
+        // der nach einem Rechteproblem aussieht.
+        if (vorlage.rechenzentrum() != null && !vorlage.rechenzentrum().isBlank()) {
+            anfrage.put("datacenter", vorlage.rechenzentrum());
+        } else {
+            anfrage.put("location", vorlage.standort());
+        }
+
+        // Oeffentliche Adressen. Beide abzuschalten ergibt einen Server, der
+        // nur ueber das private Netz erreichbar ist - fuer einen Audio-Knoten
+        // hinter einem Lastverteiler durchaus sinnvoll, aber er kaeme dann
+        // auch nicht mehr an den Update-Server. Deshalb ausdruecklich zu
+        // waehlen und nicht stillschweigend die Vorgabe.
+        anfrage.put("public_net", new JSONObject()
+                .put("enable_ipv4", vorlage.ipv4())
+                .put("enable_ipv6", vorlage.ipv6()));
 
         // Ohne SSH-Schluessel schickt Hetzner ein Root-Passwort per Mail. Das
         // funktioniert, ist aber ein Passwort mehr in einem Postfach - und der
         // Knoten braucht ohnehin keinen Menschen, der sich anmeldet.
-        JSONArray schluessel = liste(umgebung("HJ_AUTOSCALE_SSH_KEYS", ""));
+        JSONArray schluessel = vorlage.sshSchluessel().isEmpty()
+                ? liste(umgebung("HJ_AUTOSCALE_SSH_KEYS", ""))
+                : new JSONArray(vorlage.sshSchluessel());
         if (!schluessel.isEmpty()) {
             anfrage.put("ssh_keys", schluessel);
         }
@@ -132,11 +168,16 @@ public class HetznerService {
         // SSH-Schluesseln, wo auch der Name geht. Wer "intern" eintrug, bekam
         // deshalb bisher einen Server ganz ohne privates Netz, und der Grund
         // stand nur in einer Antwort, die niemand gelesen hat.
-        JSONArray netze = kennungen("networks", umgebung("HJ_AUTOSCALE_NETWORK", ""));
+        JSONArray netze = vorlage.netze().isEmpty()
+                ? kennungen("networks", umgebung("HJ_AUTOSCALE_NETWORK", ""))
+                : new JSONArray(vorlage.netze());
         if (!netze.isEmpty()) {
             anfrage.put("networks", netze);
         }
-        JSONArray firewalls = kennungen("firewalls", umgebung("HJ_AUTOSCALE_FIREWALL", ""));
+
+        JSONArray firewalls = vorlage.firewalls().isEmpty()
+                ? kennungen("firewalls", umgebung("HJ_AUTOSCALE_FIREWALL", ""))
+                : new JSONArray(vorlage.firewalls());
         if (!firewalls.isEmpty()) {
             JSONArray gebaut = new JSONArray();
             for (int i = 0; i < firewalls.length(); i++) {
@@ -145,15 +186,118 @@ public class HetznerService {
             anfrage.put("firewalls", gebaut);
         }
 
+        // Placement Group: sorgt dafuer, dass zwei Knoten nicht auf demselben
+        // Blech landen. Bei zwei Audio-Knoten, die sich gegenseitig auffangen
+        // sollen, ist das kein Feinschliff - auf einem Wirt faellt beides
+        // gleichzeitig aus.
+        if (vorlage.platzierung() != null) {
+            anfrage.put("placement_group", vorlage.platzierung());
+        }
+
+        if (!vorlage.speicher().isEmpty()) {
+            anfrage.put("volumes", new JSONArray(vorlage.speicher()));
+            // Ohne das haengt das Volume zwar dran, ist aber nicht eingebunden
+            // - und der Dienst schreibt weiter auf die Systemplatte, bis sie
+            // voll ist.
+            anfrage.put("automount", true);
+        }
+
         JSONObject antwort = rufe("POST", "/servers", anfrage);
         if (antwort == null || antwort.optJSONObject("server") == null) {
             return Optional.empty();
         }
 
         Server erzeugt = lesen(antwort.getJSONObject("server"));
-        Alert.send("INFO", "AUDIO", "Hetzner-Server %s (%d) angelegt.".formatted(erzeugt.name(), erzeugt.id()));
+        Alert.send("INFO", "AUDIO", "Hetzner-Server %s (%d) nach Vorlage %s angelegt (%s)."
+                .formatted(erzeugt.name(), erzeugt.id(), vorlage.name(), vorlage.serverTyp()));
         amLastverteiler(erzeugt.id(), true);
         return Optional.of(erzeugt);
+    }
+
+    /**
+     * Aendert die Groesse eines Servers.
+     *
+     * <h2>Warum der Server dafuer aus sein muss</h2>
+     *
+     * <p>Hetzner aendert die Groesse nur an einer abgeschalteten Maschine. Das
+     * ist keine Bequemlichkeitsfrage der API - CPU und Arbeitsspeicher lassen
+     * sich einer laufenden VM nicht unterschieben. Der Ablauf ist deshalb
+     * zwingend: Wartung, herunterfahren, aendern, starten, pruefen.</p>
+     *
+     * <h2>upgrade_disk bleibt aus</h2>
+     *
+     * <p>Eine vergroesserte Platte laesst sich <b>nicht</b> wieder
+     * verkleinern - ab dann haengt der Server dauerhaft an der groesseren
+     * Preisklasse, auch wenn man den Typ zurueckdreht. Fuer einen Audio-Knoten,
+     * der zwischen Klein und Gross wandern soll, waere das eine Einbahnstrasse.
+     * Wer mehr Platz braucht, haengt ein Volume an (siehe
+     * {@link Servervorlage#speicher()}).</p>
+     *
+     * @param id      Hetzner-Kennung
+     * @param typ     Zieltyp, z.B. {@code cpx41}
+     * @return true, wenn Hetzner die Aenderung angenommen hat
+     */
+    public boolean groesseAendern(long id, String typ) {
+        if (!eingeschaltet() || typ == null || typ.isBlank()) {
+            return false;
+        }
+
+        Optional<Server> vorher = server(id);
+        if (vorher.isEmpty()) {
+            Alert.send("WARN", "AUDIO", "Server " + id + " gibt es nicht - keine Groessenaenderung.");
+            return false;
+        }
+
+        // Herunterfahren und warten. Ohne das Warten kommt die Aenderung bei
+        // einer noch laufenden Maschine an und Hetzner lehnt sie ab - mit
+        // einer Meldung, die nach einem falschen Servertyp aussieht.
+        rufe("POST", "/servers/" + id + "/actions/shutdown", new JSONObject());
+        if (!wartenAufZustand(id, "off", java.time.Duration.ofMinutes(2))) {
+            Alert.send("WARN", "AUDIO",
+                    "Server " + id + " faehrt nicht herunter - Groessenaenderung abgebrochen.");
+            // Wieder hochfahren: ein Server, der wegen eines abgebrochenen
+            // Resize aus bleibt, ist schlimmer als einer, der die alte
+            // Groesse behaelt.
+            rufe("POST", "/servers/" + id + "/actions/poweron", new JSONObject());
+            return false;
+        }
+
+        JSONObject antwort = rufe("POST", "/servers/" + id + "/actions/change_type",
+                new JSONObject().put("server_type", typ).put("upgrade_disk", false));
+
+        boolean gut = antwort != null && antwort.optJSONObject("action") != null;
+
+        // Immer wieder einschalten - auch wenn die Aenderung scheiterte.
+        rufe("POST", "/servers/" + id + "/actions/poweron", new JSONObject());
+
+        Alert.send(gut ? "INFO" : "WARN", "AUDIO",
+                "Server %s (%d): Groesse %s -> %s %s."
+                        .formatted(vorher.get().name(), id, "bisher", typ,
+                                gut ? "geaendert" : "FEHLGESCHLAGEN"));
+        return gut;
+    }
+
+    /**
+     * Wartet, bis ein Server den gewuenschten Zustand erreicht.
+     *
+     * <p>Mit Obergrenze: eine Maschine, die sich nicht herunterfahren laesst,
+     * darf den aufrufenden Prozess nicht dauerhaft festhalten.</p>
+     */
+    private boolean wartenAufZustand(long id, String zustand, java.time.Duration hoechstens) {
+        long ende = System.currentTimeMillis() + hoechstens.toMillis();
+        while (System.currentTimeMillis() < ende) {
+            Optional<Server> jetzt = server(id);
+            if (jetzt.isPresent() && zustand.equalsIgnoreCase(jetzt.get().status())) {
+                return true;
+            }
+            try {
+                Thread.sleep(5000);
+            } catch (InterruptedException unterbrochen) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
+        return false;
     }
 
     /**

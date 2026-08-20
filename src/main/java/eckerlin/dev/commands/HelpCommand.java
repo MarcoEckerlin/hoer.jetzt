@@ -18,7 +18,7 @@ public class HelpCommand implements SlashCommand {
         String message = """
                 **Audio**
                 `/play query:<song/url>` - Musik suchen oder URL abspielen
-                `/radio sender:<auswahl>` - Webradio oder AI Radio direkt aus der Senderliste starten
+                `/radio sender:<auswahl>` - Webradio oder KI-Radio direkt aus der Senderliste starten
                 `/radio id:<db-id>` - alternativ per Datenbank-ID starten
                 `/radios` - Radiosenderliste ansehen
                 `/queue`, `/pause`, `/resume`, `/skip`, `/stop`, `/volume`, `/repeat`, `/bass`

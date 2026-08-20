@@ -16,7 +16,7 @@ import java.util.Optional;
 public enum GuildFeature {
 
     LLM_CHAT("KI-Chat", "Chat-Assistent im Textkanal, inklusive Audio-Werkzeugen."),
-    AI_RADIO("AI-Radio", "Automatisch kuratiertes Radio über den Music-Brain-Dienst."),
+    AI_RADIO("KI-Radio", "Automatisch kuratiertes Radio über den Music-Brain-Dienst."),
 
     /**
      * Audio ueber die Premium-Knoten.

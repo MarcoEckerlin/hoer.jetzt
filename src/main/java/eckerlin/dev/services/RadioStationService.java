@@ -40,20 +40,20 @@ public class RadioStationService {
     private static final Logger LOG = LoggerFactory.getLogger(RadioStationService.class);
 
     /**
-     * Das AI-Radio ist kein Tabelleneintrag, sondern eine Betriebsart - es
+     * Das KI-Radio ist kein Tabelleneintrag, sondern eine Betriebsart - es
      * braucht trotzdem eine ID, um in derselben Liste stehen zu koennen.
      *
      * <p>Die Zahl ist negativ, und das ist kein Zufall: die IDs kommen aus
      * {@code hj_id_seq}, einer Sequenz, die sich alle Tabellen teilen. Der
      * frueher benutzte Wert 900001 lag in ihrem Zahlenraum - ein echter Sender
-     * haette ihn irgendwann bekommen und das AI-Radio damit verdeckt. Eine
+     * haette ihn irgendwann bekommen und das KI-Radio damit verdeckt. Eine
      * Sequenz vergibt keine negativen Nummern.</p>
      */
     public static final int SMART_RADIO_ID = -1;
 
     private static final RadioStation SMART_RADIO_STATION = new RadioStation(
             SMART_RADIO_ID,
-            "AI Radio Clean Shuffle",
+            "KI-Radio Clean Shuffle",
             "smart://taste-radio"
     );
 
@@ -95,7 +95,7 @@ public class RadioStationService {
     /**
      * Senderliste aus Sicht eines Servers: globale zuerst, dann die eigenen.
      *
-     * @param mitSmartRadio {@code false} laesst das AI-Radio weg. Es ist je
+     * @param mitSmartRadio {@code false} laesst das KI-Radio weg. Es ist je
      *                      Server freizuschalten und hat in einer Liste, die
      *                      ein nicht freigeschalteter Server sieht, nichts
      *                      verloren - sonst steht dort ein Sender, der beim
@@ -299,7 +299,7 @@ public class RadioStationService {
      * <p>Nur http und https: alles andere gaebe der Wiedergabe eine Adresse in
      * die Hand, die sie nicht ueber das Netz aufloest - {@code file://} etwa
      * zeigt auf das Dateisystem des Servers. Und {@code smart://} ist die
-     * interne Kennung des AI-Radios; wer sie von Hand eintraegt, bekaeme einen
+     * interne Kennung des KI-Radios; wer sie von Hand eintraegt, bekaeme einen
      * Sender, der sich als etwas anderes ausgibt.</p>
      */
     private String pruefeStream(String url) {

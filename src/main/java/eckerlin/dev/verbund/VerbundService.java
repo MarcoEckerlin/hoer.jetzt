@@ -66,14 +66,24 @@ public class VerbundService {
     }
 
     private void schreibeMeldung(NodeMeldung meldung) {
+        // wartung_seit wird nur beim Wechsel gesetzt bzw. geleert - sonst
+        // stuende dort bei jeder Meldung die aktuelle Zeit, und "seit wann in
+        // Wartung" waere immer "seit einer Minute".
         String sql = "INSERT INTO cluster_nodes"
-                + " (node_name, privat_ip, node_nr, release_version, zustand_json, letzte_meldung)"
-                + " VALUES (?,?,?,?,?, current_timestamp)"
+                + " (node_name, privat_ip, node_nr, release_version, zustand_json,"
+                + "  wartung, wartung_seit, letzte_meldung)"
+                + " VALUES (?,?,?,?,?,?, CASE WHEN ? THEN current_timestamp ELSE NULL END,"
+                + "         current_timestamp)"
                 + " ON CONFLICT (node_name) DO UPDATE SET"
                 + "   privat_ip = EXCLUDED.privat_ip,"
                 + "   node_nr = EXCLUDED.node_nr,"
                 + "   release_version = EXCLUDED.release_version,"
                 + "   zustand_json = EXCLUDED.zustand_json,"
+                + "   wartung = EXCLUDED.wartung,"
+                + "   wartung_seit = CASE"
+                + "       WHEN EXCLUDED.wartung AND NOT cluster_nodes.wartung THEN current_timestamp"
+                + "       WHEN NOT EXCLUDED.wartung THEN NULL"
+                + "       ELSE cluster_nodes.wartung_seit END,"
                 + "   letzte_meldung = current_timestamp";
         try (Connection verbindung = DB.connection();
              PreparedStatement anweisung = verbindung.prepareStatement(sql)) {
@@ -82,6 +92,8 @@ public class VerbundService {
             anweisung.setInt(3, meldung.nodeNr() <= 0 ? 1 : meldung.nodeNr());
             anweisung.setString(4, meldung.releaseVersion());
             anweisung.setString(5, meldung.zustandJson());
+            anweisung.setBoolean(6, meldung.inWartung());
+            anweisung.setBoolean(7, meldung.inWartung());
             anweisung.executeUpdate();
         } catch (SQLException fehler) {
             throw new IllegalStateException("Meldung konnte nicht gespeichert werden: " + fehler.getMessage(), fehler);
@@ -104,8 +116,16 @@ public class VerbundService {
         List<String> lebend = new ArrayList<>();
         int gesamt = 1;
 
+        // Nodes in Wartung bekommen keine Shards.
+        //
+        // Sie melden sich weiter und sind erreichbar - "lebend" allein reicht
+        // deshalb nicht als Bedingung. Wer in Wartung ist, soll keine neuen
+        // Aufgaben uebernehmen; die Shards gehen an die uebrigen. Faellt die
+        // letzte Node in Wartung, bleibt die Liste leer und die Aufteilung
+        // unveraendert - das ist gewollt, sonst stuende der Verbund still,
+        // weil jemand die letzte Maschine warten wollte.
         String sql = "SELECT node_name FROM cluster_nodes"
-                + " WHERE letzte_meldung > ? ORDER BY node_name";
+                + " WHERE letzte_meldung > ? AND wartung = false ORDER BY node_name";
         try (Connection verbindung = DB.connection()) {
             try (PreparedStatement anweisung = verbindung.prepareStatement(sql)) {
                 anweisung.setTimestamp(1, Timestamp.from(Instant.now().minus(KARENZ)));
@@ -197,7 +217,7 @@ public class VerbundService {
             return liste;
         }
         String sql = "SELECT node_name, privat_ip, node_nr, shards_von, shards_bis, shards_gesamt,"
-                + " release_version, zustand_json, letzte_meldung"
+                + " release_version, zustand_json, letzte_meldung, wartung"
                 + " FROM cluster_nodes ORDER BY node_name";
         try (Connection verbindung = DB.connection();
              PreparedStatement anweisung = verbindung.prepareStatement(sql);
@@ -215,7 +235,8 @@ public class VerbundService {
                         ergebnis.getString("release_version"),
                         ergebnis.getString("zustand_json"),
                         gemeldet == null ? null : gemeldet.toInstant().toString(),
-                        gemeldet != null && gemeldet.toInstant().isAfter(grenze)
+                        gemeldet != null && gemeldet.toInstant().isAfter(grenze),
+                        ergebnis.getBoolean("wartung")
                 ));
             }
         } catch (SQLException fehler) {
@@ -295,8 +316,22 @@ public class VerbundService {
             String privatIp,
             int nodeNr,
             String releaseVersion,
-            String zustandJson
+            String zustandJson,
+            /*
+             * Ob diese Node gerade in Wartung ist.
+             *
+             * Als Boolean und nicht als boolean: aeltere Agenten schicken das
+             * Feld nicht mit, und Jackson setzt dann null. Bei einem einfachen
+             * boolean waere daraus false geworden - hier zufaellig das
+             * Richtige, beim naechsten Feld mit umgekehrter Vorgabe aber
+             * nicht mehr. Die Absicht steht so ausdruecklich da.
+             */
+            Boolean wartung
     ) {
+        /** Fehlende Angabe heisst Betrieb, nicht Wartung. */
+        public boolean inWartung() {
+            return Boolean.TRUE.equals(wartung);
+        }
     }
 
     public record NodeAntwort(
@@ -317,7 +352,15 @@ public class VerbundService {
             String releaseVersion,
             String zustandJson,
             String letzteMeldung,
-            boolean lebt
+            boolean lebt,
+            /*
+             * Getrennt von "lebt": eine Node in Wartung meldet sich weiter und
+             * ist erreichbar - sie uebernimmt nur nichts Neues. Beides in ein
+             * Feld zu legen hiesse, genau den Unterschied zu verlieren, um den
+             * es geht: eine stumme Node ist ein Problem, eine in Wartung ist
+             * eine Ansage.
+             */
+            boolean wartung
     ) {
     }
 }

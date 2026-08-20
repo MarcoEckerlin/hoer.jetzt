@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * der tief in der Lavalink-Bibliothek haengt - ihn ohne Umwege benutzen kann.</p>
  *
  * <p>Die Stufe eines Servers steckt in den Freischaltungen ({@code guild_entitlements})
- * und damit an derselben Stelle wie KI-Chat und AI-Radio: alles, was nur ein
+ * und damit an derselben Stelle wie KI-Chat und KI-Radio: alles, was nur ein
  * Bot-Administrator vergeben darf, liegt in einer Tabelle und hat eine Oberflaeche.</p>
  */
 @Service
