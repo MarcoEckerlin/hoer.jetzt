@@ -21,14 +21,14 @@
 # Welches Profil ein Knoten bekommt, entscheidet nicht er selbst, sondern
 # seine Module im Updater - siehe Faehigkeit.java.
 #
-# Der Tresor liegt im Klartext im Auslieferungsverzeichnis. Geschuetzt ist er
-# durch dasselbe wie die Abbilder: das Knoten-Passwort und eine
-# freigeschaltete Adresse.
+# Der Tresor wird beim Abruf an den oeffentlichen Schluessel des fragenden
+# Knotens gerichtet - zwei Knoten bekommen zwei verschiedene Antworten, und
+# keiner kann die des anderen oeffnen. Siehe Umschlag.java und
+# deploy/agent/tresor-oeffnen.sh.
 #
-# Frueher war er an einen eigenen Schluessel gerichtet, den dieser Server
-# nicht hatte - er konnte die Zugangsdaten also selbst nicht lesen. Das ist
-# jetzt nicht mehr so. Dafuer braucht ein Knoten nur noch ein Passwort statt
-# Passwort und Schluesseldatei.
+# Hier auf dem Server liegt er im Klartext: der Updater muss ihn lesen
+# koennen, um ihn verschluesseln zu koennen. Geschuetzt ist er durch die
+# Dateirechte und dadurch, dass nur der Updater an das Volume kommt.
 
 set -euo pipefail
 
@@ -114,7 +114,7 @@ HJ_UPDATE_HOST=""
 [[ -f "${HIER}/.env" ]] && HJ_UPDATE_HOST="$(grep '^HJ_UPDATE_HOST=' "${HIER}/.env" | cut -d= -f2- || true)"
 
 step "Allgemein"
-frage HJ_UPDATE_HOST "Adresse des Update-Servers" "${HJ_UPDATE_HOST:-repo.updates.hoer.jetzt}"
+frage HJ_UPDATE_HOST "Adresse des Update-Servers" "${HJ_UPDATE_HOST:-repository.hoer.jetzt}"
 
 # Kein Passwort im Tresor: das Knoten-Passwort braucht der Knoten schon, um
 # ihn ueberhaupt zu holen. Hier steht nur, wohin er sich wenden soll.

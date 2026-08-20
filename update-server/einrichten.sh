@@ -58,7 +58,7 @@ KOPF
 step "Adresse"
 info "Der oeffentliche Name, unter dem der Nginx Proxy Manager diesen"
 info "Dienst veroeffentlicht. Ohne Port und ohne https:// davor."
-frage HJ_UPDATE_HOST "Oeffentlicher Name" "repo.updates.hoer.jetzt"
+frage HJ_UPDATE_HOST "Oeffentlicher Name" "repository.hoer.jetzt"
 
 info ""
 info "Port der Repo-Seite - Abbilder, Release, Tresor, Meldestelle."

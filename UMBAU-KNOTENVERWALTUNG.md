@@ -117,6 +117,14 @@ Die Rolle wird ein Schalter, kein Programm.
 | `admin.updates.hoer.jetzt` | Port 8090 ueber SSH-Tunnel |
 | `first.controller.system.hoer.jetzt` | feste IP in `HJ_CONTROLLER_URL` |
 
+> Seit dem 20.08.2026 heisst der Name `repository.hoer.jetzt` - kuerzer, und
+> ohne das "updates", das im Namen ohnehin nichts erklaerte. Der Zeitpunkt war
+> guenstig: es war noch kein Abbild veroeffentlicht und kein Knoten
+> aufgesetzt. Der Name steckt in jedem Abbild-Tag
+> (`veroeffentlichen.sh`: `REGISTRY="${HJ_UPDATE_HOST}/hoerjetzt"`), spaeter
+> haette die Umbenennung also alles neu veroeffentlichen bedeutet und jede
+> Knoten-`.env` betroffen.
+
 Der Admin-Bereich liegt heute bewusst **nicht** im Internet. Ihn unter
 `admin.updates.hoer.jetzt` erreichbar zu machen, ist eine Sicherheitsentscheidung
 und keine Umbenennung — dahinter liegen Freigaben, Tresor und Release-Steuerung.
@@ -257,7 +265,7 @@ Server, ohne dass jemand vorher baut.
 ### Admin-Bereich: bleibt hinter dem Tunnel
 
 Kein DNS-Name, weiterhin `ssh -L 8090:127.0.0.1:8090`. K3 ist damit nur zur
-Haelfte umgesetzt, und das ist die Absicht: `repo.updates.hoer.jetzt` ist
+Haelfte umgesetzt, und das ist die Absicht: `repository.hoer.jetzt` ist
 umgestellt, `admin.updates.hoer.jetzt` gibt es nicht.
 
 ### Knoten: kein Uebergang noetig

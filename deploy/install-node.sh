@@ -8,7 +8,7 @@
 #
 #   --kennung <name>    Kennung dieses Knotens (aus dem Updater)
 #   --token <hj-...>    Aufsetz-Token (aus dem Updater, gilt zwei Stunden)
-#   --update-host <fqdn>  Vorgabe: repo.updates.hoer.jetzt
+#   --update-host <fqdn>  Vorgabe: repository.hoer.jetzt
 #   --pruefen           nur nachsehen, nichts aendern
 #
 # ---------------------------------------------------------------------------
@@ -64,7 +64,7 @@ SPERRE="${ARBEIT}/.sperre"
 MODULE_WUNSCH=""
 KENNUNG=""
 TOKEN=""
-HJ_UPDATE_HOST="${HJ_UPDATE_HOST:-repo.updates.hoer.jetzt}"
+HJ_UPDATE_HOST="${HJ_UPDATE_HOST:-repository.hoer.jetzt}"
 NUR_PRUEFEN=false
 
 while [[ $# -gt 0 ]]; do

@@ -15,7 +15,7 @@
 # Warum dieses Skript von GitHub kommt und nicht vom Update-Server
 #
 # Weil es ihn gerade erst anlegt. Jeder andere Installer holt sich seinen
-# Stand von repo.updates.hoer.jetzt - der hier kann das nicht, er ist das
+# Stand von repository.hoer.jetzt - der hier kann das nicht, er ist das
 # Ziel. Das ist kein Schoenheitsfehler, sondern der Grund, warum GitHub als
 # Bezugsquelle erhalten bleibt, obwohl der Update-Server sie sonst ersetzt.
 #

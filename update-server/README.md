@@ -3,7 +3,7 @@
 Löst GitHub als Bezugsquelle ab. Läuft zuhause, liefert **Abbilder statt
 Quellcode**.
 
-Erreichbar unter `https://repo.updates.hoer.jetzt`.
+Erreichbar unter `https://repository.hoer.jetzt`.
 
 ---
 
@@ -41,7 +41,7 @@ sich fehlerfrei abtippen lässt. Rund 80 Bit.
 Öffnet **nur** `/knoten/` — das Installationsskript und die Compose-Dateien.
 
 ```bash
-curl -fsSLu knoten https://repo.updates.hoer.jetzt/knoten/aufsetzen.sh -o a.sh && bash a.sh
+curl -fsSLu knoten https://repository.hoer.jetzt/knoten/aufsetzen.sh -o a.sh && bash a.sh
 ```
 
 Das `-u knoten` ohne Doppelpunkt ist Absicht: curl fragt das Passwort selbst
@@ -158,7 +158,7 @@ curl -fsSL https://raw.githubusercontent.com/MarcoEckerlin/hoer.jetzt/main/deplo
 
 Das ist der einzige Installer, der GitHub braucht, und der Grund ist banal: er
 legt den Update-Server gerade erst an. Jeder andere holt seinen Stand von
-`repo.updates.hoer.jetzt` — dieser kann das nicht, er *ist* das Ziel.
+`repository.hoer.jetzt` — dieser kann das nicht, er *ist* das Ziel.
 
 Ein Initialpasswort für die Oberfläche lässt sich vorgeben:
 
@@ -188,7 +188,7 @@ liegt als bcrypt-Hash da.
 
 | | |
 |---|---|
-| Domain | `repo.updates.hoer.jetzt` |
+| Domain | `repository.hoer.jetzt` |
 | Weiterleiten an | `http://<host>:8091` |
 | Zertifikat | wie üblich über den NPM |
 | Upload-Grenze | **aus** (`client_max_body_size 0`) |

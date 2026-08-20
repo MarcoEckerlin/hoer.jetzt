@@ -2,7 +2,7 @@
 #
 # hoer.jetzt - Bootstrap.
 #
-#   curl -fsSL https://repo.updates.hoer.jetzt/bootstrap | bash -s -- \
+#   curl -fsSL https://repository.hoer.jetzt/bootstrap | bash -s -- \
 #        --rolle node --modules core,lavalink --kennung core-3 --token hj-....
 #
 #   --rolle node|controller|update-server
@@ -35,7 +35,7 @@ set -euo pipefail
 
 ROLLE=""
 ZWEIG="main"
-UPDATE_HOST="${HJ_UPDATE_HOST:-repo.updates.hoer.jetzt}"
+UPDATE_HOST="${HJ_UPDATE_HOST:-repository.hoer.jetzt}"
 DURCHREICHEN=()
 
 while [[ $# -gt 0 ]]; do
@@ -55,7 +55,7 @@ fehler() { printf '[bootstrap] FEHLER: %s\n' "$*" >&2; exit 1; }
 
 # Der Update-Server kann sich nicht von sich selbst holen.
 #
-# Alles Uebrige bezieht seinen Stand von repo.updates.hoer.jetzt. Fuer die
+# Alles Uebrige bezieht seinen Stand von repository.hoer.jetzt. Fuer die
 # Rolle update-server gibt es diese Adresse aber noch gar nicht - sie entsteht
 # ja gerade erst. Deshalb geht dieser eine Weg ueber GitHub, und deshalb steht
 # er in einem eigenen Skript.

@@ -2,7 +2,7 @@
 #
 # hoer.jetzt - aus einer leeren Maschine einen Knoten machen.
 #
-#   curl -fsSLku knoten https://repo.updates.hoer.jetzt:8443/knoten/aufsetzen.sh -o a.sh
+#   curl -fsSLku knoten https://repository.hoer.jetzt:8443/knoten/aufsetzen.sh -o a.sh
 #   bash a.sh
 #
 # Das -k ist noetig, nicht bequem: der Server weist sich mit einem
@@ -80,7 +80,7 @@ case "$PROFIL" in
     *) fail "Profil muss voll oder lavalink sein." ;;
 esac
 
-frage HJ_UPDATE_HOST "Update-Server" "repo.updates.hoer.jetzt"
+frage HJ_UPDATE_HOST "Update-Server" "repository.hoer.jetzt"
 # Das kurze, tippbare Passwort - dasselbe, mit dem dieses Skript gerade
 # geholt wurde. Es oeffnet nur /knoten/ und wird weiter unten noch fuer die
 # Compose-Dateien gebraucht. Das lange Knoten-Passwort kommt spaeter.
