@@ -164,6 +164,45 @@ jobs:
       # Weiterleitung - die Ursache war eine Einrueckungsebene in dieser Datei.
       #
       # Die Umgebungswerte sind nur Platzhalter, damit die Pruefung durchlaeuft.
+
+      # Holt bootstrap.sh das, was veroeffentlichen.sh ablegt?
+      #
+      # Diese beiden Enden sind unabhaengig gewachsen und liefen auseinander:
+      # bootstrap.sh laedt "knoten/<zweig>.tar.gz", veroeffentlichen.sh legte
+      # aber nur "knoten/voll.tar.gz" und "knoten/lavalink.tar.gz" ab - Namen
+      # aus der Zeit vor den modularen Installern. install-node.sh und die
+      # Einzelinstaller kamen damit ueberhaupt nie auf einen Knoten.
+      #
+      # Gemerkt haette man es erst beim ersten Aufsetzen ueber diesen Weg.
+      - name: Passen Bootstrap und Veroeffentlichung zusammen?
+        run: |
+          set -euo pipefail
+          fehler=0
+          holt="$(grep -oE 'knoten/\$\{ZWEIG\}\.tar\.gz' deploy/bootstrap.sh | head -1 || true)"
+          if [ -z "$holt" ]; then
+              echo "bootstrap.sh laedt nicht mehr knoten/\${ZWEIG}.tar.gz - Pruefung anpassen."
+              fehler=1
+          fi
+          if ! grep -q 'knoten/\${ZWEIG_NAME}\.tar\.gz' update-server/veroeffentlichen.sh; then
+              echo "FEHL veroeffentlichen.sh legt kein knoten/<zweig>.tar.gz ab"
+              echo "     bootstrap.sh wuerde beim Herunterladen scheitern."
+              fehler=1
+          else
+              echo "ok   Bundle wird veroeffentlicht"
+          fi
+          # Und enthaelt es, was bootstrap.sh danach startet?
+          for s in install-node.sh install-controller.sh install-core.sh \
+                   install-lavalink.sh install-ki-radio.sh \
+                   agent/agent-lib.sh agent/tresor-oeffnen.sh auto-update.sh; do
+              if [ -f "deploy/$s" ]; then
+                  echo "ok   deploy/$s"
+              else
+                  echo "FEHL deploy/$s fehlt"
+                  fehler=1
+              fi
+          done
+          exit "$fehler"
+
       - name: Caddyfile validieren
         run: |
           set -euo pipefail

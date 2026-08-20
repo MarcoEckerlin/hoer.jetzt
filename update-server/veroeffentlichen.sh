@@ -149,6 +149,49 @@ aus_schreiben "knoten/aufsetzen.sh" < "${QUELLEN}/main/deploy/knoten-aufsetzen.s
     || fail "aufsetzen.sh liess sich nicht ablegen."
 info "aufsetzen.sh"
 
+# --------------------------------------------------------------------------
+# Das Deploy-Bundle - was bootstrap.sh holt
+#
+# bootstrap.sh laedt "knoten/<zweig>.tar.gz" und erwartet darin
+# "<zweig>/deploy/...", weil es danach
+# "${ARBEIT}/${ZWEIG}/deploy/install-node.sh" startet.
+#
+# Diese Datei hat lange gefehlt. Veroeffentlicht wurden nur die beiden
+# Profilpakete (voll, lavalink) aus der Zeit vor den modularen Installern -
+# bootstrap.sh lief damit ins Leere, und install-node.sh, die Einzelinstaller
+# und der Agent kamen ueberhaupt nie auf einen Knoten.
+#
+# Aufgefallen beim Durchsehen, nicht im Betrieb: es hat noch niemand einen
+# Knoten ueber diesen Weg aufgesetzt.
+#
+# Kein Quellcode und keine Zugangsdaten - deploy/ enthaelt nur Skripte,
+# Compose-Dateien und systemd-Units. Die .env-Dateien sind ausgenommen, weil
+# sie im Repository ohnehin nicht liegen.
+ZWEIG_NAME="${ZWEIG_NAME:-main}"
+mkdir -p "${PACK}/bundle/${ZWEIG_NAME}"
+cp -r "${QUELLEN}/main/deploy" "${PACK}/bundle/${ZWEIG_NAME}/deploy"
+find "${PACK}/bundle" -name ".env" -o -name "*.env" -o -name "*.key" | while read -r weg; do
+    rm -f "$weg"
+done
+tar -C "${PACK}/bundle" -czf "${PACK}/${ZWEIG_NAME}.tar.gz" .
+aus_schreiben "knoten/${ZWEIG_NAME}.tar.gz" < "${PACK}/${ZWEIG_NAME}.tar.gz" \
+    || fail "Deploy-Bundle liess sich nicht ablegen."
+info "$(printf '%-10s %s Bytes  (%s Dateien)' "${ZWEIG_NAME}.tar.gz" \
+        "$(stat -c%s "${PACK}/${ZWEIG_NAME}.tar.gz")" \
+        "$(find "${PACK}/bundle" -type f | wc -l)")"
+
+# Gegenprobe: enthaelt das Bundle wirklich, was bootstrap.sh gleich sucht?
+# Ein Paket, dem der Installer fehlt, faellt sonst erst auf dem frischen
+# Knoten auf - und dort steht niemand daneben.
+for pflicht in deploy/install-node.sh deploy/install-core.sh \
+               deploy/install-controller.sh deploy/install-lavalink.sh \
+               deploy/agent/agent-lib.sh deploy/agent/tresor-oeffnen.sh \
+               deploy/auto-update.sh; do
+    [[ -f "${PACK}/bundle/${ZWEIG_NAME}/${pflicht}" ]] \
+        || fail "Im Bundle fehlt ${pflicht} - bootstrap.sh wuerde daran scheitern."
+done
+info "Bundle vollstaendig geprueft."
+
 # ------------------------------------------------------------------ 4  Manifest
 #
 # Erst jetzt. Ab diesem Augenblick holen sich die Knoten das neue Release.
