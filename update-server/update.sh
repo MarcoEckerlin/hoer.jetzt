@@ -144,6 +144,37 @@ if ! docker compose -f "$COMPOSE" up -d --build; then
        docker compose -f ${COMPOSE} logs --tail 40"
 fi
 
+# ------------------------------------------------------------ Werkzeug
+
+# bootstrap.sh und das Deploy-Buendel mitziehen.
+#
+# Sie haengen an keinem Release - es sind die Skripte aus dem Quellbaum, der
+# gerade aktualisiert wurde. Wuerden sie hier nicht mitgehen, holte sich ein
+# frisch aufgesetzter Knoten weiterhin den alten Stand, und niemand kaeme
+# darauf: der Server meldet die neue Version, der Knoten bekommt die alte.
+sagen "Aufsetz-Werkzeug nachziehen"
+AUS_VOLUME="${AUS_VOLUME:-hj-update_ausliefern}"
+schreiben() {
+    docker run --rm -i -v "${AUS_VOLUME}:/aus" -w /aus alpine:3 \
+        sh -c "mkdir -p \"\$(dirname '$1')\" && cat > '$1.neu' && chmod 644 '$1.neu' && mv '$1.neu' '$1'"
+}
+if schreiben "knoten/bootstrap.sh" < "${QUELLBAUM}/deploy/bootstrap.sh" \
+   && schreiben "knoten/aufsetzen.sh" < "${QUELLBAUM}/deploy/knoten-aufsetzen.sh"; then
+    B="$(mktemp -d)"
+    mkdir -p "${B}/${ZWEIG}"
+    cp -r "${QUELLBAUM}/deploy" "${B}/${ZWEIG}/deploy"
+    find "$B" \( -name "*.env" -o -name "*.key" -o -name ".env" \) -delete 2>/dev/null || true
+    tar -C "$B" -czf "${B}.tar.gz" .
+    if schreiben "knoten/${ZWEIG}.tar.gz" < "${B}.tar.gz"; then
+        sagen "  bootstrap.sh, aufsetzen.sh und ${ZWEIG}.tar.gz aktualisiert."
+    else
+        warnen "Deploy-Buendel liess sich nicht ablegen."
+    fi
+    rm -rf "$B" "${B}.tar.gz"
+else
+    warnen "Aufsetz-Werkzeug liess sich nicht ablegen - laeuft Docker?"
+fi
+
 # ------------------------------------------------------------------ pruefen
 
 sagen "Nachsehen, ob alles laeuft"

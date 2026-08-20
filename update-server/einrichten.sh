@@ -451,6 +451,42 @@ else
     warn "Kein Runner-Token erhalten - Actions bleiben vorerst aus."
 fi
 
+step "Aufsetz-Werkzeug bereitstellen"
+
+# Das Aufsetzen darf nicht auf ein Release warten.
+#
+# bootstrap.sh, aufsetzen.sh und der Deploy-Stand haengen an keinem Release -
+# sie liegen bereits im Quellbaum. Bis hierher legte sie aber allein
+# veroeffentlichen.sh ab, und das laeuft erst, wenn Abbilder gebaut werden.
+#
+# Folge auf einem frisch eingerichteten Server: die Knotenseite zeigt einen
+# fertigen Einzeiler, und der endet in
+#
+#   curl: (22) The requested URL returned error: 404
+#
+# Der Befehl ist richtig, die Datei fehlt nur. Wer das sieht, sucht am
+# falschen Ende - bei DNS, beim Proxy, beim Token.
+QUELLBAUM_HIER="$(cd "${HIER}/.." && pwd)"
+
+aus_schreiben "knoten/bootstrap.sh" < "${QUELLBAUM_HIER}/deploy/bootstrap.sh" \
+    || fail "bootstrap.sh liess sich nicht ablegen."
+aus_schreiben "knoten/aufsetzen.sh" < "${QUELLBAUM_HIER}/deploy/knoten-aufsetzen.sh" \
+    || fail "aufsetzen.sh liess sich nicht ablegen."
+info "bootstrap.sh und aufsetzen.sh"
+
+# Das Bundle, das bootstrap.sh danach holt. Struktur "<zweig>/deploy/..." -
+# bootstrap.sh entpackt es nach ARBEIT und startet ARBEIT/<zweig>/deploy/...
+ZWEIG_HIER="$(git -C "$QUELLBAUM_HIER" rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)"
+BUENDEL="$(mktemp -d)"
+mkdir -p "${BUENDEL}/${ZWEIG_HIER}"
+cp -r "${QUELLBAUM_HIER}/deploy" "${BUENDEL}/${ZWEIG_HIER}/deploy"
+find "$BUENDEL" \( -name "*.env" -o -name "*.key" -o -name ".env" \) -delete 2>/dev/null || true
+tar -C "$BUENDEL" -czf "${BUENDEL}.tar.gz" .
+aus_schreiben "knoten/${ZWEIG_HIER}.tar.gz" < "${BUENDEL}.tar.gz" \
+    || fail "Deploy-Buendel liess sich nicht ablegen."
+info "$(printf '%s.tar.gz (%s Dateien)' "$ZWEIG_HIER" "$(find "$BUENDEL" -type f | wc -l)")"
+rm -rf "$BUENDEL" "${BUENDEL}.tar.gz"
+
 step "Caddy und Updater starten"
 printf 'noch nichts veroeffentlicht\n' | aus_schreiben release/aktuell \
     || fail "Auslieferungsverzeichnis nicht beschreibbar."
