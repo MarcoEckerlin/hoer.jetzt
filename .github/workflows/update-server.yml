@@ -203,6 +203,44 @@ jobs:
           done
           exit "$fehler"
 
+
+      # Sind die Vorlagen strukturell heil?
+      #
+      # Anlass: eine awk-Ersetzung hat knoten.html von 235 auf 36 Zeilen
+      # gekuerzt - der Bereichsschalter fand sein Ende nicht und verschluckte
+      # alles danach. Die Datei war danach syntaktisch unauffaellig, nur eben
+      # halb. Die Seite rendert dann ohne Fehler und ist leer.
+      #
+      # Genau das faellt weder beim Uebersetzen noch in den Proben auf: es ist
+      # kein Java, und Thymeleaf beschwert sich nicht ueber fehlende Teile.
+      - name: Vorlagen strukturell pruefen
+        run: |
+          set -uo pipefail
+          fehler=0
+          cd update-server/updater/src/main/resources/templates
+          for f in *.html; do
+              meldung=""
+              for tag in div form table main body html; do
+                  auf="$(grep -o "<${tag}[ >]" "$f" | wc -l)"
+                  zu="$(grep -o "</${tag}>" "$f" | wc -l)"
+                  if [ "$auf" -ne "$zu" ]; then
+                      meldung="${meldung} ${tag}(${auf}/${zu})"
+                  fi
+              done
+              # grund.html ist ein Baustein und schliesst absichtlich nicht alles.
+              if [ "$f" = "grund.html" ]; then
+                  printf 'uebersprungen %s (Baustein)\n' "$f"
+                  continue
+              fi
+              if [ -n "$meldung" ]; then
+                  printf 'FEHL %-16s unausgeglichen:%s\n' "$f" "$meldung"
+                  fehler=1
+              else
+                  printf 'ok   %-16s %s Zeilen\n' "$f" "$(grep -c '' "$f")"
+              fi
+          done
+          exit "$fehler"
+
       - name: Caddyfile validieren
         run: |
           set -euo pipefail
