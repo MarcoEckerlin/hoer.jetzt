@@ -197,6 +197,23 @@ Die Upload-Grenze ist kein Detail: Abbild-Schichten sind hunderte Megabyte, und
 NPM bricht sonst mittendrin ab — mit einer Meldung, die nach einem Fehler in
 der Registry aussieht.
 
+
+### Passwort der Oberfläche vergessen
+
+```bash
+bash passwort.sh
+```
+
+Erzeugt ein neues, zeigt es einmal an, tauscht den Hash in der `.env` und
+startet den Updater neu. Eigenes Passwort mit `--stdin` oder `--datei`,
+Benutzername mit `--name`.
+
+Der Klartext steht nach dem Einrichten nirgends — gespeichert ist nur der
+bcrypt-Hash. Bricht `einrichten.sh` zwischen dem Schreiben der `.env` und der
+Schlussanzeige ab, ist das Passwort weg, bevor es jemand gesehen hat. Vorher
+half nur ein kompletter Neuaufbau; für ein vergessenes Passwort einer
+Weboberfläche ist das absurd.
+
 ### Die Selbstprobe
 
 Sie prüft, was man sonst erst im Betrieb merkt:
