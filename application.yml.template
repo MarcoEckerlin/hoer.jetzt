@@ -125,6 +125,29 @@ plugins:
       videoLoading: true
       searching: false
 
+    # TV ausdruecklich statt nach Vorgabe.
+    #
+    # Der Block steht hier, damit die Einstellung sichtbar ist und nicht an
+    # einer Plugin-Vorgabe haengt, die sich mit einer Version aendern kann.
+    #
+    # Ehrlich zur Wirkung: KEINE. Er entstand bei der Suche danach, warum
+    # altersbeschraenkte Titel scheitern - die Vermutung war, TV werde wegen
+    # fehlendem videoLoading nie gefragt. Nach dem Ausrollen war das Verhalten
+    # unveraendert: TV steht weiterhin in "initialised with clients", taucht
+    # aber in keiner Fehlerliste von /loadtracks auf. Die Vermutung war falsch.
+    #
+    # Warum er trotzdem bleibt: er schadet nicht, macht die Absicht sichtbar,
+    # und die eigentliche Frage ist offen. Wer sie weiterverfolgt, soll nicht
+    # bei derselben Vermutung anfangen - deshalb steht hier, dass sie schon
+    # gemessen und verworfen wurde. Naechster Ansatz waere
+    # plugins.youtube.po_token statt reinem OAuth.
+    #
+    # searching bleibt aus: dafuer taugt TV nicht, und MUSIC/WEB machen es besser.
+    TV:
+      playback: true
+      videoLoading: true
+      searching: false
+
     # Anmeldung und Bot-Erkennung. Wird vom Startskript eingesetzt, wenn
     # YOUTUBE_OAUTH oder YOUTUBE_PO_TOKEN gesetzt sind - siehe entrypoint.sh.
 ${YOUTUBE_ZUSATZ}
