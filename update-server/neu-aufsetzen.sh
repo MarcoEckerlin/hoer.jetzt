@@ -63,10 +63,27 @@ fi
 # Verzeichnis abgeleitet. Nach einem Umzug nach /tmp hiesse er sonst "tmp",
 # und der Filter fände nichts.
 HIER="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || echo /tmp)"
-PROJEKT="update-server"
 QUELL="${ARBEIT}/main/update-server"
 [[ -f "${QUELL}/docker-compose.yml" ]] || QUELL="$HIER"
 COMPOSE="${QUELL}/docker-compose.yml"
+
+# Der Projektname, unter dem Docker die Volumes fuehrt.
+#
+# Er kommt aus "name:" in der Compose-Datei und ist NICHT der
+# Verzeichnisname. Hier stand vorher "update-server" - der Ordner heisst so -,
+# tatsaechlich lautet er "hj-update". Der Filter fand damit nichts, und die
+# Volumes ueberlebten das Aufraeumen unbemerkt: das Skript meldete "(keine
+# gefunden)" und war zufrieden.
+#
+# Aufgefallen ist es an einem Containernamen in einer Fehlermeldung:
+# hj-update-forgejo-1.
+#
+# Wenn die Compose-Datei da ist, wird der Name daraus gelesen - dann stimmt er
+# auch nach einer Umbenennung. Sonst der bekannte Wert.
+if [[ -f "${QUELL}/docker-compose.yml" ]]; then
+    PROJEKT="$(awk '/^name:/{print $2; exit}' "${QUELL}/docker-compose.yml")"
+fi
+PROJEKT="${PROJEKT:-hj-update}"
 
 echo
 echo "  ================================================================"
@@ -304,7 +321,15 @@ for muster in hoerjetzt/ codeberg.org/forgejo caddy postgres redis; do
         echo "    ${muster}"
     fi
 done
-docker network rm "${PROJEKT}_hoerjetzt" >/dev/null 2>&1 || true
+# Netze ueber das Label, nicht ueber einen geratenen Namen.
+#
+# "${PROJEKT}_hoerjetzt" stand hier und war falsch: das Netz heisst in der
+# Compose-Datei "hj-update", Docker macht daraus "hj-update_hj-update". Der
+# Name haengt also an zwei Stellen, die sich unabhaengig aendern koennen -
+# das Label haengt nur am Projekt.
+for n in $(docker network ls -q --filter "label=com.docker.compose.project=${PROJEKT}" 2>/dev/null || true); do
+    docker network rm "$n" >/dev/null 2>&1 || true
+done
 
 echo "  Quellen..."
 rm -rf "$ARBEIT"
