@@ -8,6 +8,7 @@ import jetzt.hoer.updater.dienst.Sicherungen;
 import jetzt.hoer.updater.dienst.Torwaechter;
 import jetzt.hoer.updater.dienst.Tresorausgabe;
 import jetzt.hoer.updater.dienst.Umschlag;
+import jetzt.hoer.updater.dienst.Vorfeld;
 import jetzt.hoer.updater.dienst.Zugang;
 import jetzt.hoer.updater.modell.Ausweis;
 import jetzt.hoer.updater.modell.Knoten;
@@ -17,6 +18,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import jakarta.servlet.http.HttpServletRequest;
 
 import java.util.Map;
 import java.util.Optional;
@@ -55,10 +57,13 @@ public class TorController {
     private final Tresorausgabe tresorausgabe;
     private final SchluesselDaten schluesselDaten;
     private final Sicherungen sicherungen;
+    private final Vorfeld vorfeld;
 
     public TorController(Torwaechter torwaechter, Zugang zugang, KnotenDaten knoten,
                          Knotenverwaltung verwaltung, Tresorausgabe tresorausgabe,
-                         SchluesselDaten schluesselDaten, Sicherungen sicherungen) {
+                         SchluesselDaten schluesselDaten, Sicherungen sicherungen,
+                         Vorfeld vorfeld) {
+        this.vorfeld = vorfeld;
         this.sicherungen = sicherungen;
         this.torwaechter = torwaechter;
         this.zugang = zugang;
@@ -82,6 +87,7 @@ public class TorController {
             @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String anmeldung,
             @RequestHeader(value = "CF-Connecting-IP", required = false) String cloudflare,
             @RequestHeader(value = "X-Forwarded-For", required = false) String weitergereicht,
+            HttpServletRequest anfrage,
             @RequestHeader(value = "X-Forwarded-Uri", required = false) String pfad) {
 
         Optional<Ausweis> ausweis = zugang.anmelden(anmeldung);
@@ -91,7 +97,7 @@ public class TorController {
                     .body("Passwort fehlt oder stimmt nicht.\n");
         }
 
-        String adresse = adresseBestimmen(cloudflare, weitergereicht);
+        String adresse = vorfeld.adresse(anfrage.getRemoteAddr(), cloudflare, weitergereicht);
         if (!torwaechter.darf(adresse, pfad)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                     .body("Diese Adresse (" + adresse + ") ist nicht freigeschaltet.\n");
@@ -139,38 +145,6 @@ public class TorController {
                 .body("Passwort fehlt oder stimmt nicht.\n");
     }
 
-    /**
-     * Welche Adresse zaehlt.
-     *
-     * Die Kette ist Cloudflare -> Nginx Proxy Manager -> Caddy -> hier. Die
-     * Gegenstelle der Verbindung ist damit der NPM und nie der Knoten; die
-     * echte Adresse steht nur in den Koepfen.
-     *
-     * CF-Connecting-IP setzt Cloudflare selbst und ueberschreibt dabei, was
-     * der Aufrufer geschickt hat - solange der Verkehr wirklich durch
-     * Cloudflare laeuft, ist die Angabe nicht faelschbar.
-     *
-     * Der Rueckfall auf X-Forwarded-For nimmt den *ersten* Eintrag. Das ist
-     * hier richtig und anderswo falsch: jede Zwischenstelle haengt hinten an,
-     * vorne steht also der urspruengliche Aufrufer. Bei nur einer
-     * Zwischenstelle waere der letzte Eintrag der richtige - deshalb muss
-     * diese Entscheidung zur tatsaechlichen Kette passen und nicht zu einer
-     * Faustregel.
-     *
-     * Das heisst zugleich: wer den Update-Server unter Umgehung von
-     * Cloudflare und NPM direkt erreichen kann, kann sich eine Adresse
-     * aussuchen. Der Port darf deshalb nicht offen im Netz stehen - er
-     * gehoert ins LAN, und davor der NPM.
-     */
-    private static String adresseBestimmen(String cloudflare, String weitergereicht) {
-        if (cloudflare != null && !cloudflare.isBlank()) {
-            return cloudflare.trim();
-        }
-        if (weitergereicht != null && !weitergereicht.isBlank()) {
-            return weitergereicht.split(",")[0].trim();
-        }
-        return "";
-    }
 
     /** Was ein Knoten bei seiner Erstanmeldung schickt. */
     public record Anmeldewunsch(
@@ -200,14 +174,15 @@ public class TorController {
     public ResponseEntity<Map<String, Object>> anmelden(
             @RequestBody Anmeldewunsch wunsch,
             @RequestHeader(value = "CF-Connecting-IP", required = false) String cloudflare,
-            @RequestHeader(value = "X-Forwarded-For", required = false) String weitergereicht) {
+            @RequestHeader(value = "X-Forwarded-For", required = false) String weitergereicht,
+            HttpServletRequest anfrage) {
 
         if (wunsch == null || wunsch.kennung() == null || wunsch.kennung().isBlank()
                 || wunsch.token() == null || wunsch.token().isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("fehler", "kennung und token noetig"));
         }
 
-        String adresse = adresseBestimmen(cloudflare, weitergereicht);
+        String adresse = vorfeld.adresse(anfrage.getRemoteAddr(), cloudflare, weitergereicht);
         Optional<String> geheimnis = verwaltung.anmelden(
                 wunsch.kennung().trim().toLowerCase(java.util.Locale.ROOT),
                 wunsch.token().trim(),
@@ -386,7 +361,8 @@ public class TorController {
             @RequestBody Meldung meldung,
             @RequestHeader(value = KNOTEN_KOPF, required = false) String angemeldetAls,
             @RequestHeader(value = "CF-Connecting-IP", required = false) String cloudflare,
-            @RequestHeader(value = "X-Forwarded-For", required = false) String weitergereicht) {
+            @RequestHeader(value = "X-Forwarded-For", required = false) String weitergereicht,
+            HttpServletRequest anfrage) {
 
         if (meldung == null || meldung.kennung() == null || meldung.kennung().isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("fehler", "kennung fehlt"));
@@ -407,7 +383,7 @@ public class TorController {
                     .body(Map.of("fehler", "Kennung passt nicht zur Anmeldung"));
         }
 
-        String adresse = adresseBestimmen(cloudflare, weitergereicht);
+        String adresse = vorfeld.adresse(anfrage.getRemoteAddr(), cloudflare, weitergereicht);
 
         // Der Merker wird vor dem Speichern gelesen: melden() setzt ihn
         // zurueck, und der Knoten soll ihn in genau dieser Antwort noch

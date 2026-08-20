@@ -66,7 +66,7 @@ HJ_PORT_INTERN="${HJ_PORT_INTERN:-}"
 if [[ -z "$HJ_PORT_INTERN" && -f "${HIER}/.env" ]]; then
     HJ_PORT_INTERN="$(grep '^HJ_PORT_INTERN=' "${HIER}/.env" | cut -d= -f2- || true)"
 fi
-HJ_PORT_INTERN="${HJ_PORT_INTERN:-8086}"
+HJ_PORT_INTERN="${HJ_PORT_INTERN:-8091}"
 
 REGISTRY="${HJ_UPDATE_HOST}/hoerjetzt"
 REGISTRY_PUSH="127.0.0.1:${HJ_PORT_INTERN}/hoerjetzt"

@@ -15,8 +15,14 @@
 # Zusaetzlich muss jede Adresse im Updater freigeschaltet sein. Passwort
 # allein reicht nicht.
 #
-# TLS macht der Nginx Proxy Manager. Dieser Dienst spricht einfaches HTTP
-# und gehoert deshalb ins LAN - der Port darf nicht ins Internet.
+# TLS macht der Nginx Proxy Manager oder Cloudflare. Dieser Dienst spricht
+# einfaches HTTP. Werden seine Ports oeffentlich gebunden - Vorgabe ist
+# 0.0.0.0 -, gehoert zwingend TLS davor, sonst gehen Verwalter-Passwort und
+# Knoten-Passwort im Klartext ueber die Leitung.
+#
+# Die Adressfreigabe wirkt in beiden Faellen: Vorfeld.java glaubt den
+# Weiterleitungs-Koepfen nur, wenn die Verbindung von einem bekannten Proxy
+# kommt. Wer direkt anklopft, wird mit seiner echten Adresse gemessen.
 
 set -euo pipefail
 
@@ -55,14 +61,14 @@ info "Dienst veroeffentlicht. Ohne Port und ohne https:// davor."
 frage HJ_UPDATE_HOST "Oeffentlicher Name" "repo.updates.hoer.jetzt"
 
 info ""
-info "Und der Port, auf dem dieser Dienst im LAN lauscht. Dorthin zeigt"
-info "spaeter der Proxy-Host im NPM. Nicht ins Internet weiterleiten -"
-info "hier laeuft unverschluesseltes HTTP."
-frage HJ_PORT_INTERN "Interner Port" "8086"
+info "Port der Repo-Seite - Abbilder, Release, Tresor, Meldestelle."
+info "Hier laeuft unverschluesseltes HTTP. Wird der Port oeffentlich"
+info "erreichbar gemacht, gehoert TLS davor (NPM oder Cloudflare)."
+frage HJ_PORT_INTERN "Port der Repo-Seite" "8091"
 info ""
-info "Auf welcher Adresse dieser Port liegen soll. Laeuft der NPM auf"
-info "demselben Host, reicht 127.0.0.1. Sonst die LAN-Adresse."
-frage HJ_CADDY_BIND "Lauschadresse" "127.0.0.1"
+info "Auf welcher Adresse. 0.0.0.0 heisst: von ueberall erreichbar."
+info "127.0.0.1 heisst: nur ueber einen Proxy auf demselben Host."
+frage HJ_CADDY_BIND "Lauschadresse" "0.0.0.0"
 
 step "Port"
 if command -v ss >/dev/null 2>&1 && ss -ltn 2>/dev/null | grep -q ":${HJ_PORT_INTERN} "; then
@@ -79,9 +85,13 @@ frage HJ_ADMIN    "Benutzername fuer die Verwaltung" "marco"
 frage HJ_ADMIN_MAIL "Mailadresse fuer das Forgejo-Konto" "system@hoer.jetzt"
 
 info ""
-info "Die Oberflaeche des Updaters - Freigaben, Knoten, Protokoll -"
-info "liegt auf einem eigenen Port und gehoert ins private Netz."
-frage HJ_PULT_BIND "Auf welcher Adresse soll die Oberflaeche lauschen" "127.0.0.1"
+info "Die Oberflaeche des Updaters - Freigaben, Knoten, Verwalten,"
+info "Protokoll. Dahinter liegen Tresor- und Release-Steuerung."
+info ""
+info "0.0.0.0 macht sie von ueberall erreichbar. Dann ist das"
+info "Verwalter-Passwort die einzige Huerde - TLS davorschalten und"
+info "ein langes Passwort waehlen."
+frage HJ_PULT_BIND "Auf welcher Adresse soll die Oberflaeche lauschen" "0.0.0.0"
 frage HJ_PULT_PORT "Auf welchem Port" "8090"
 
 # ------------------------------------------------------------------ 2  Passwoerter
@@ -449,19 +459,14 @@ cat <<ENDE
                         else printf '%s' "$PW_PULT"; fi)
                         Freigaben, Knoten, Verwalten, Zugriffsprotokoll.
 
-                        Die Oberflaeche lauscht auf ${HJ_PULT_BIND}:${HJ_PULT_PORT} -
-                        also NUR auf diesem Host. Vom eigenen Rechner aus
-                        fuehrt der Weg ueber einen Tunnel:
+                        http://$(hostname -I 2>/dev/null | awk '{print $1}'):${HJ_PULT_PORT}/
 
-                          ssh -L ${HJ_PULT_PORT}:${HJ_PULT_BIND}:${HJ_PULT_PORT} root@$(hostname -I 2>/dev/null | awk '{print $1}')
-
-                        Danach im Browser:  http://127.0.0.1:${HJ_PULT_PORT}/
-
-                        Das ist Absicht und keine fehlende Einstellung:
-                        dahinter liegen Freigaben, Tresor und die
-                        Release-Steuerung. Wer diesen Port veroeffentlicht,
-                        macht das Verwalter-Passwort zur einzigen Huerde
-                        zwischen dem Internet und der gesamten Infrastruktur.
+                        Dieser Port ist auf ${HJ_PULT_BIND} gebunden. Steht dort
+                        0.0.0.0, ist die Oberflaeche aus dem ganzen Netz
+                        erreichbar - und das Verwalter-Passwort ist die
+                        einzige Huerde davor. Es laeuft unverschluesseltes
+                        HTTP: ohne TLS davor geht das Passwort im Klartext
+                        ueber die Leitung.
 
                         Vorgegebene Passwoerter werden hier nicht wiederholt -
                         sie stehen schon dort, wo sie hergekommen sind, und

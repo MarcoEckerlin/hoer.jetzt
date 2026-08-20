@@ -76,7 +76,7 @@ Passwort nicht hat, soll nicht erfahren, ob seine Adresse freigeschaltet wäre.
    Nginx Proxy Manager  -->  hält das Zertifikat
      |  http, nur im LAN
      v
-   Caddy :8086
+   Caddy :8091
      |
      |--- forward_auth ---> Updater :8080   Passwort ok? Adresse frei?
      |                      (nur im internen Docker-Netz)
@@ -87,21 +87,30 @@ Passwort nicht hat, soll nicht erfahren, ob seine Adresse freigeschaltet wäre.
    /melden    ------> Updater :8080         Knoten-Passwort + Freigabe
    /knoten/*  ------> Volume "ausliefern"   Aufsetz-Passwort, keine Freigabe
 
-                      Updater :8081         Oberfläche, privates Netz
+                      Updater :8081  --> :8090 am Host   Oberfläche
 ```
 
 **Cloudflare darf auf Proxy stehen.** Der Updater liest die echte Adresse aus
 `CF-Connecting-IP`, das Cloudflare selbst setzt und dabei überschreibt.
 
-Daraus folgt aber: **der interne Port darf nicht ins Internet.** Wer Caddy
-direkt erreicht, sucht sich seine Adresse selbst aus. Deshalb liegt er auf
-`127.0.0.1` bzw. der LAN-Adresse, und davor steht der NPM.
+**Und wenn der Port offen im Netz steht?** Dann greift `Vorfeld.java`: den
+Weiterleitungs-Köpfen wird nur geglaubt, wenn die Verbindung von einem
+bekannten Proxy kommt (`hj.proxy.vertrauen`, Vorgabe localhost plus die
+privaten Bereiche). Wer direkt anklopft, wird mit **seiner echten Adresse**
+gemessen; was er in `CF-Connecting-IP` geschrieben hat, wird verworfen.
+
+Ohne diese Prüfung wäre die Adressfreigabe bei offenem Port wirkungslos — ein
+Header genügt, und im Protokoll stünde die erfundene Adresse. Das ist der
+Grund, warum der Port früher zwingend ins LAN gehörte.
+
+Was der offene Port **nicht** löst: hier läuft unverschlüsseltes HTTP. Ohne
+TLS davor gehen beide Passwörter im Klartext über die Leitung.
 
 `/knoten/` ist der einzige Pfad ohne Adressprüfung — ein frisch aufgesetzter
 Rechner ist noch nicht freigeschaltet, und genau das Skript, das er dort holt,
 sagt ihm, dass er es werden muss.
 
-Forgejos Oberfläche und das Git lauschen nur auf `127.0.0.1`. Für die
+Forgejo bleibt als einziges auf `127.0.0.1`. Für die
 Verwaltung: `ssh -L 3000:127.0.0.1:3000`.
 
 `ausliefern` ist ein benanntes Docker-Volume, kein Pfad auf dem Host — die
@@ -116,11 +125,20 @@ Die gemeinsamen Zugangsdaten, nach Profil getrennt: `voll` bekommt Datenbank,
 Bot-Token und Client-Secret, `lavalink` nur das Lavalink-Passwort. Ein
 Audio-Knoten braucht nichts weiter — und soll nichts weiter bekommen.
 
-Er liegt **im Klartext** im Auslieferungsverzeichnis, geschützt durch dasselbe
-wie die Abbilder. Früher war er an einen eigenen RSA-Schlüssel gerichtet, den
-der Server nicht hatte; er konnte die Zugangsdaten also selbst nicht lesen. Das
-ist jetzt nicht mehr so. Dafür braucht ein Knoten nur noch ein Passwort statt
-Passwort plus Schlüsseldatei.
+Er wird beim Abruf **an den öffentlichen Schlüssel des fragenden Knotens
+gerichtet**. Zwei Knoten bekommen zwei verschiedene Antworten, und keiner kann
+die des anderen öffnen. Der private Schlüssel entsteht beim Aufsetzen und
+verlässt den Host nie.
+
+Verfahren: RSA-OAEP für den Sitzungsschlüssel, AES-256-CBC mit HMAC-SHA256 als
+Encrypt-then-MAC. Nicht GCM — der Gegenpart ist ein Bash-Skript, und
+`openssl enc` kann den Authentifizierungsanhang nicht. Der HMAC wird **vor**
+dem Entschlüsseln geprüft.
+
+> Hier stand vorher, der Tresor liege im Klartext im Auslieferungsverzeichnis
+> und der Server könne die Zugangsdaten mitlesen. Das galt, solange alle Knoten
+> ohnehin dasselbe Passwort teilten — dann schützte Verschlüsselung vor
+> niemandem. Mit eigener Identität je Knoten ändert sich die Rechnung.
 
 ```bash
 bash tresor.sh fuellen voll
@@ -171,7 +189,7 @@ liegt als bcrypt-Hash da.
 | | |
 |---|---|
 | Domain | `repo.updates.hoer.jetzt` |
-| Weiterleiten an | `http://127.0.0.1:8086` |
+| Weiterleiten an | `http://<host>:8091` |
 | Zertifikat | wie üblich über den NPM |
 | Upload-Grenze | **aus** (`client_max_body_size 0`) |
 

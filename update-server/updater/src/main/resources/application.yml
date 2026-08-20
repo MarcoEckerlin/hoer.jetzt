@@ -10,6 +10,26 @@ server:
   forward-headers-strategy: none
 
 hj:
+  # Wessen Weiterleitungs-Koepfen geglaubt wird.
+  #
+  # Die echte Adresse eines Aufrufers steht hinter einem Proxy nicht in der
+  # Verbindung, sondern in CF-Connecting-IP oder X-Forwarded-For. Das sind
+  # gewoehnliche Kopfzeilen - jeder kann sie schicken.
+  #
+  # Sie zaehlen deshalb nur, wenn die Gegenstelle der Verbindung selbst hier
+  # aufgefuehrt ist. Wer direkt anklopft, wird mit seiner echten Adresse
+  # gemessen, und was er in die Koepfe geschrieben hat, faellt weg.
+  #
+  # Das ist die Voraussetzung dafuer, dass der Port offen im Netz stehen darf:
+  # ohne diese Pruefung genuegte ein Header, um sich an der Adressfreigabe
+  # vorbeizuhangeln - und im Protokoll stuende die erfundene Adresse.
+  #
+  # Die Vorgabe deckt localhost und die privaten Bereiche ab, also Caddy und
+  # NPM im Docker-Netz. Steht der NPM auf einem anderen Host im LAN, ist er
+  # damit ebenfalls erfasst.
+  proxy:
+    vertrauen: ${HJ_PROXY_VERTRAUEN:127.0.0.1/32,::1/128,172.16.0.0/12,10.0.0.0/8,192.168.0.0/16}
+
   # Die Oberflaeche. Liegt im privaten Netz.
   pult-port: 8081
   # Die beiden Knoten-Passwoerter. Im Klartext, weil sie im Klartext
