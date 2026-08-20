@@ -333,16 +333,36 @@ fi
 # Registry kommt - und dorthin kommt nur, wer Caddy das Knoten-Passwort
 # vorgelegt hat.
 step "Organisation"
-TOKEN="$(docker compose exec -T -u git forgejo forgejo --config "$FJ_INI" admin user generate-access-token \
-    -u "$HJ_ADMIN" --scopes all --raw)" || fail "Kein Verwaltungstoken."
+
+# Der Token bekommt einen eindeutigen Namen.
+#
+# Forgejo lehnt einen zweiten Token mit demselben Namen ab ("access token name
+# has been used already"). Ohne Zeitstempel scheiterte damit jeder zweite Lauf
+# von einrichten.sh - und zwar an einer Stelle, die mit dem eigentlichen
+# Vorgang nichts zu tun hat.
+TOKEN_NAME="einrichten-$(date '+%Y%m%d%H%M%S')"
+TOKEN="$(docker compose exec -T -u git forgejo forgejo --config "$FJ_INI" \
+    admin user generate-access-token -u "$HJ_ADMIN" --token-name "$TOKEN_NAME" \
+    --scopes all --raw 2>&1)" || fail "Kein Verwaltungstoken: ${TOKEN}"
 TOKEN="$(printf '%s' "$TOKEN" | tr -d '\r\n ')"
 
-docker compose exec -T forgejo curl -fsS -X POST \
-    -H "Authorization: token ${TOKEN}" -H "Content-Type: application/json" \
-    -d '{"username":"hoerjetzt","visibility":"public"}' \
-    http://127.0.0.1:3000/api/v1/orgs >/dev/null \
-    || fail "Organisation hoerjetzt liess sich nicht anlegen."
-info "hoerjetzt - hier liegen die Abbilder."
+# Organisation anlegen - oder feststellen, dass es sie schon gibt.
+#
+# POST /orgs antwortet mit 422, wenn der Name vergeben ist, und "curl -fsS"
+# macht daraus einen Fehler. Beim zweiten Lauf brach das Einrichten hier ab,
+# obwohl alles in Ordnung war. Deshalb zuerst nachsehen.
+if docker compose exec -T forgejo curl -fsS \
+        -H "Authorization: token ${TOKEN}" \
+        http://127.0.0.1:3000/api/v1/orgs/hoerjetzt >/dev/null 2>&1; then
+    info "hoerjetzt - gibt es bereits."
+else
+    docker compose exec -T forgejo curl -fsS -X POST \
+        -H "Authorization: token ${TOKEN}" -H "Content-Type: application/json" \
+        -d '{"username":"hoerjetzt","visibility":"public"}' \
+        http://127.0.0.1:3000/api/v1/orgs >/dev/null \
+        || fail "Organisation hoerjetzt liess sich nicht anlegen."
+    info "hoerjetzt - hier liegen die Abbilder."
+fi
 
 step "Runner anmelden"
 RTOKEN="$(docker compose exec -T forgejo curl -fsS \
@@ -597,9 +617,42 @@ else
     warn "Protokoll: docker compose logs caddy updater"
 fi
 echo
+# Woher dieser Server seinen Stand holt - fuer die Anzeige unten.
+#
+# QUELLBAUM ist das Verzeichnis mit der Arbeitskopie: HIER ist
+# .../main/update-server, eine Ebene hoeher liegt der Zweig.
+QUELLBAUM="$(cd "${HIER}/.." && pwd)"
+HJ_ZWEIG_ANZEIGE="$(git -C "$QUELLBAUM" rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)"
+HJ_QUELLE_ANZEIGE="$(git -C "$QUELLBAUM" remote get-url origin 2>/dev/null \
+                     || echo 'https://github.com/MarcoEckerlin/hoer.jetzt.git')"
+
 info "Naechste Schritte:"
 info "  1. Proxy-Host im NPM anlegen (siehe oben)."
 info "  2. Tresor befuellen:  bash tresor.sh fuellen voll"
 info "                        bash tresor.sh fuellen lavalink"
 info "  3. Release bauen:     Tag v... auf main setzen"
+echo
+
+# Der Aktualisierungsbefehl, fertig zum Kopieren.
+#
+# Dieser Server ist der einzige, der seinen Stand von GitHub holt statt von
+# sich selbst - er IST die Bezugsquelle. Der Weg steht deshalb hier, samt
+# Quelle, damit niemand ihn zusammensuchen muss.
+#
+# Zwei Befehle in einer Zeile: erst den neuen Stand holen, dann die Dienste
+# damit neu starten. "--build" ist noetig, weil der Updater aus dem Quellbaum
+# gebaut wird - ohne ihn liefe der alte Container mit neuem Code daneben.
+cat <<ENDE
+  ----------------------------------------------------------------
+   Diesen Server aktualisieren
+
+   Quelle: ${HJ_QUELLE_ANZEIGE}
+   Stand:  $(git -C "${QUELLBAUM}" rev-parse --short HEAD 2>/dev/null || echo unbekannt)
+
+   git -C ${QUELLBAUM} fetch --depth 1 origin ${HJ_ZWEIG_ANZEIGE} && git -C ${QUELLBAUM} reset --hard origin/${HJ_ZWEIG_ANZEIGE} && docker compose -f ${HIER}/docker-compose.yml up -d --build
+
+   Aendert nichts an der .env, an den Volumes oder an den Passwoertern.
+  ----------------------------------------------------------------
+ENDE
+echo
 echo
