@@ -132,15 +132,43 @@ fi
 PW_ADMIN="$(zufall)"
 
 step "Hash fuer die Oberflaeche"
-docker pull -q caddy:2-alpine >/dev/null 2>&1 || fail "caddy:2-alpine nicht ladbar."
 # Ueber die Standardeingabe, nicht als Argument.
 #
 # "--plaintext $PW_PULT" stellte das Passwort in "ps aux" - fuer jeden
 # lokalen Benutzer lesbar, solange der Container laeuft. Das sind
 # Millisekunden, aber es ist genau die Art Leck, die Abschnitt 10 der
-# Spezifikation ausschliesst, und caddy liest ohne den Schalter von stdin.
-HJ_VERWALTER_HASH="$(printf '%s' "$PW_PULT" | docker run --rm -i caddy:2-alpine caddy hash-password)"
-[[ -n "$HJ_VERWALTER_HASH" ]] || fail "Hashen fehlgeschlagen."
+# Spezifikation ausschliesst.
+#
+# ---------------------------------------------------------------------------
+# Der Zeilenumbruch ist nicht optional.
+#
+# caddy liest ohne --plaintext bis zum ersten \n und schneidet es ab. Ohne
+# Umbruch kommt es nie und der Aufruf endet mit "Error: EOF" - genau da stand
+# die erste Fassung dieses Blocks, und die Installation brach an dieser Stelle
+# ab. printf '%s\n' statt printf '%s'.
+# ---------------------------------------------------------------------------
+docker pull -q caddy:2-alpine >/dev/null 2>&1 || fail "caddy:2-alpine nicht ladbar."
+
+hash_ueber_stdin() {
+    printf '%s\n' "$PW_PULT" | docker run --rm -i caddy:2-alpine caddy hash-password 2>/dev/null
+}
+
+HJ_VERWALTER_HASH="$(hash_ueber_stdin || true)"
+
+# Rueckfall auf das Argument.
+#
+# Aeltere caddy-Fassungen lesen stdin anders oder gar nicht. Ein Installer,
+# der daran haengenbleibt, ist schlimmer als eine kurze Sichtbarkeit in
+# "ps aux" - deshalb wird hier weitergemacht und gesagt, was passiert ist.
+if [[ ! "$HJ_VERWALTER_HASH" =~ ^\$2[aby]\$ ]]; then
+    warn "caddy nimmt das Passwort nicht ueber die Standardeingabe."
+    warn "Rueckfall auf --plaintext: das Passwort ist waehrend des Hashens"
+    warn "kurz in 'ps aux' sichtbar. Auf diesem Host vertretbar, aber vermerkt."
+    HJ_VERWALTER_HASH="$(docker run --rm caddy:2-alpine caddy hash-password --plaintext "$PW_PULT")"
+fi
+
+[[ "$HJ_VERWALTER_HASH" =~ ^\$2[aby]\$ ]] \
+    || fail "Hashen fehlgeschlagen - caddy lieferte: ${HJ_VERWALTER_HASH:-<nichts>}"
 info "bcrypt."
 
 # ------------------------------------------------------------------ 3  Umgebung
