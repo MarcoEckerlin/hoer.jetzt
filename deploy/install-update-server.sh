@@ -56,6 +56,41 @@ sagen()  { printf '[update-server] %s\n' "$*"; }
 warnen() { printf '[update-server] WARNUNG: %s\n' "$*" >&2; }
 fehler() { printf '[update-server] FEHLER: %s\n' "$*" >&2; exit 1; }
 
+# ---------------------------------------------------------------------------
+# Sich selbst nicht unter den Fuessen wegziehen
+#
+# Ab dem zweiten Lauf liegt dieses Skript in ${ARBEIT}/${ZWEIG}/deploy/ - also
+# GENAU in dem Verzeichnis, das es weiter unten per "git reset --hard"
+# ueberschreibt.
+#
+# bash liest ein Skript haeppchenweise waehrend der Ausfuehrung. Aendert sich
+# die Datei mittendrin, liest bash ab dort an einer verschobenen Stelle weiter
+# und fuehrt Bruchstuecke aus - mit Fehlermeldungen, die zu nichts im Skript
+# passen. Beim ersten Lauf faellt das nicht auf, weil es das Verzeichnis noch
+# nicht gibt.
+#
+# Deshalb: in eine Kopie ausserhalb des Baums umziehen und von dort
+# weitermachen.
+#
+# Das steht VOR der Argumentauswertung, und das ist kein Zufall:
+#   - danach waere "$@" bereits leergeshiftet, der zweite Lauf bekaeme also
+#     keine Angaben mehr,
+#   - und --passwort-stdin haette die Standardeingabe schon gelesen. exec
+#     erhaelt die Dateideskriptoren, ein zweiter Leseversuch faende nichts.
+# ---------------------------------------------------------------------------
+if [[ -z "${HJ_UMGEZOGEN:-}" ]]; then
+    EIGEN="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || true)"
+    if [[ -n "$EIGEN" && "$EIGEN" == "${ARBEIT}/"* ]]; then
+        KOPIE="$(mktemp)"
+        cp "$EIGEN" "$KOPIE"
+        export HJ_UMGEZOGEN=1
+        # Kein trap zum Aufraeumen: exec ersetzt diesen Prozess, er kaeme nie
+        # zum Zug. Die Kopie liegt in /tmp, enthaelt nur dieses Skript und
+        # verschwindet beim naechsten Neustart.
+        exec bash "$KOPIE" "$@"
+    fi
+fi
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --zweig)  ZWEIG="${2:?Zweig angeben}"; shift 2 ;;
