@@ -122,17 +122,6 @@ public class Knotenverwaltung {
     }
 
     /**
-     * Loest einen Bootstrap-Token gegen das dauerhafte Geheimnis ein.
-     *
-     * <p>Das Geheimnis wird <em>hier</em> erzeugt und nicht vom Knoten
-     * mitgebracht. Ein Knoten, der sich sein eigenes Passwort aussucht, waehlt
-     * es irgendwann schlecht - und die Guete dieses Werts ist die gesamte
-     * Sicherheit des Verfahrens.</p>
-     *
-     * @return das Geheimnis im Klartext, genau einmal
-     */
-    @Transactional
-    /**
      * Gilt dieser Aufsetz-Token - ohne ihn zu verbrauchen?
      *
      * <p>Fuer den Download unter {@code /knoten/}. Bis dahin oeffnete den nur
@@ -155,6 +144,16 @@ public class Knotenverwaltung {
         return anmeldungen.gueltige(kennung, Zugang.hashen(token)).isPresent();
     }
 
+    /**
+     * Loest einen Bootstrap-Token gegen das dauerhafte Geheimnis ein.
+     *
+     * <p>Das Geheimnis wird <em>hier</em> erzeugt und nicht vom Knoten
+     * mitgebracht. Ein Knoten, der sich sein eigenes Passwort aussucht, waehlt
+     * es irgendwann schlecht - und die Guete dieses Werts ist die gesamte
+     * Sicherheit des Verfahrens.</p>
+     *
+     * @return das Geheimnis im Klartext, genau einmal
+     */
     public Optional<String> anmelden(String kennung, String token,
                                      Selbstauskunft auskunft, String ip) {
         Optional<String> anmeldungId = anmeldungen.gueltige(kennung, Zugang.hashen(token));
@@ -222,6 +221,30 @@ public class Knotenverwaltung {
         protokoll.merken(wer, "Geheimnis getauscht", kennung,
                 "Knoten ist bis zum Nachtragen ausgesperrt", "");
         return neu;
+    }
+
+    /**
+     * Entfernt einen Knoten vollstaendig - Eintrag, Ausweis, Module, Token.
+     *
+     * <p>Das eigentliche "Entfernen". Der Knopf in der Uebersicht loeschte
+     * bisher nur die Zeile aus {@code knoten}; Ausweis und Geheimnis blieben,
+     * der Knoten konnte sich weiter anmelden und stand beim naechsten
+     * Herzschlag wieder da. Der Bestaetigungstext sagte das sogar - was die
+     * Frage aufwirft, wozu der Knopf dann gut war.</p>
+     *
+     * <p>Reihenfolge: erst die offenen Aufsetz-Token widerrufen, dann den
+     * Ausweis, dann den Eintrag. Andersherum bliebe zwischendurch ein Token
+     * gueltig, dessen Knoten es nicht mehr gibt - und der wuerde beim
+     * Einloesen einen Ausweis fuer eine geloeschte Kennung anlegen.</p>
+     */
+    @Transactional
+    public void entfernen(String kennung, String wer) {
+        anmeldungen.alleWiderrufen(kennung);
+        ausweise.entfernen(kennung);
+        knoten.loeschen(kennung);
+        zugang.verwerfen();
+        protokoll.merken(wer, "Knoten entfernt", kennung, "vollstaendig", "");
+        log.warn("Knoten {} vollstaendig entfernt.", kennung);
     }
 
     // -------------------------------------------------------------- Wartung

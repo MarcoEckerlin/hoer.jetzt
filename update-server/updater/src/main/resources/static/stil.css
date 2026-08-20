@@ -268,3 +268,18 @@ legend { color: var(--leise); padding: 0 .4rem; }
 details { margin: .4rem 0; }
 summary { cursor: pointer; color: var(--leise); }
 summary:hover { color: var(--text); }
+
+/* Ein Knopf, der etwas unwiderruflich wegnimmt.
+   Vorher trug "entfernen" die Klasse .schlicht und sah damit aus wie
+   deaktiviert - man traut sich nicht, ihn zu druecken, und haelt ihn fuer
+   kaputt. Genau das ist passiert. */
+button.gefahr {
+    color: var(--schlecht);
+    border-color: color-mix(in srgb, var(--schlecht) 45%, var(--rand));
+    background: transparent;
+}
+button.gefahr:hover {
+    color: var(--grund);
+    background: var(--schlecht);
+    border-color: var(--schlecht);
+}

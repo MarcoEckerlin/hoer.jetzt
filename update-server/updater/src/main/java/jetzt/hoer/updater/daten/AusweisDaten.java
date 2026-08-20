@@ -125,6 +125,21 @@ public class AusweisDaten {
     }
 
     /** Wie viele Knoten schon ein eigenes Geheimnis haben - fuer die Uebersicht. */
+    /**
+     * Entfernt Ausweis und Module eines Knotens vollstaendig.
+     *
+     * <p>Bis dahin gab es nur {@code KnotenDaten.loeschen} - und das nahm
+     * allein die Zeile aus {@code knoten}. Ausweis, Geheimnis und Module
+     * blieben stehen: der Knoten verschwand aus der Liste und konnte sich
+     * weiter anmelden, woraufhin er beim naechsten Herzschlag wieder
+     * auftauchte. "Entfernen" hiess also "kurz ausblenden".</p>
+     */
+    public void entfernen(String kennung) {
+        db.sql("DELETE FROM knoten_modul WHERE kennung = ?").param(kennung).update();
+        db.sql("DELETE FROM knoten_faehigkeit WHERE kennung = ?").param(kennung).update();
+        db.sql("DELETE FROM knoten_ausweis WHERE kennung = ?").param(kennung).update();
+    }
+
     public int mitEigenemGeheimnis() {
         Integer zahl = db.sql("SELECT COUNT(*) FROM knoten WHERE geheimnis <> ''")
                 .query(Integer.class)

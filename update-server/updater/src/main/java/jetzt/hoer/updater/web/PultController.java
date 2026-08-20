@@ -103,10 +103,24 @@ public class PultController {
         return "redirect:/";
     }
 
+    /**
+     * Entfernt einen Knoten - wirklich.
+     *
+     * <p>Bis dahin loeschte das nur die Zeile aus {@code knoten}. Ausweis,
+     * Geheimnis und Module blieben stehen: der Knoten verschwand aus der
+     * Liste, konnte sich weiter anmelden und stand beim naechsten Herzschlag
+     * wieder da. Der Bestaetigungstext sagte das sogar ausdruecklich - was
+     * die Frage aufwirft, wozu der Knopf gut war.</p>
+     */
     @PostMapping("/knoten/{kennung}/loeschen")
-    public String knotenLoeschen(@PathVariable String kennung) {
-        knoten.loeschen(kennung);
-        return "redirect:/";
+    public String knotenLoeschen(@PathVariable String kennung,
+                                 java.security.Principal wer,
+                                 RedirectAttributes hinweis) {
+        verwaltung.entfernen(kennung, name(wer));
+        hinweis.addFlashAttribute("meldung",
+                "Knoten " + kennung + " entfernt - samt Ausweis, Modulen und offenen Token. "
+                + "Er kommt nicht von selbst zurueck.");
+        return "redirect:/knoten";
     }
 
     // ------------------------------------------------------- Knotenverwaltung
@@ -155,6 +169,35 @@ public class PultController {
      * angezeigt: wer ihn hier verpasst, muss einen neuen erzeugen. Das ist
      * unbequem und der Punkt.</p>
      */
+    /**
+     * Der Aufsetzbefehl, fertig zum Kopieren.
+     *
+     * <p>Wird hier gebaut und nicht in der Vorlage. Der erste Versuch stand
+     * als Ausdruck im {@code th:text} und scheiterte am senkrechten Strich in
+     * {@code | bash -s --}: Thymeleaf deutet {@code |} als Beginn einer
+     * Literalersetzung, mitten im Ausdruck. Die Seite antwortete daraufhin
+     * mit 500 - nicht nur diese Zeile, die ganze Seite.</p>
+     *
+     * <p>In Java ist es ohnehin der bessere Ort: hier laesst es sich pruefen,
+     * und die Vorlage bleibt eine Vorlage.</p>
+     */
+    // Sichtbar fuer die Probe: der Befehl ist das Ergebnis der ganzen Seite,
+    // und er ist schon einmal still zerbrochen.
+    String aufsetzBefehl(String kennung, String token,
+                                 String rolle, List<Modul> module) {
+        StringBuilder b = new StringBuilder()
+                .append("curl -fsSL https://").append(updateHost)
+                .append("/bootstrap | bash -s -- --rolle ").append(rolle)
+                .append(" --kennung ").append(kennung)
+                .append(" --token ").append(token);
+        if (module != null && !module.isEmpty()) {
+            b.append(" --modules ")
+             .append(module.stream().map(Enum::name)
+                     .collect(java.util.stream.Collectors.joining(",")));
+        }
+        return b.toString();
+    }
+
     @PostMapping("/knoten")
     public String knotenAnlegen(@RequestParam(defaultValue = "") String kennung,
                                 @RequestParam(defaultValue = "") String name,
@@ -195,6 +238,11 @@ public class PultController {
             var hilfe = verwaltung.anlegen(kennung, name, gewaehlt, name(wer));
             hinweis.addFlashAttribute("neuerToken", hilfe.token());
             hinweis.addFlashAttribute("neueKennung", hilfe.kennung());
+            hinweis.addFlashAttribute("aufsetzBefehl", aufsetzBefehl(
+                    hilfe.kennung(), hilfe.token(),
+                    gewaehlteVorlage.map(v -> v == Knotenvorlage.CONTROLLER ? "controller" : "node")
+                            .orElse("node"),
+                    gewaehlt));
         } catch (IllegalArgumentException falsch) {
             hinweis.addFlashAttribute("fehler", falsch.getMessage());
         }
@@ -206,10 +254,14 @@ public class PultController {
                                 java.security.Principal wer,
                                 RedirectAttributes hinweis) {
         try {
-            hinweis.addFlashAttribute("neuerToken", verwaltung.neuerToken(kennung, name(wer)));
+            String frisch = verwaltung.neuerToken(kennung, name(wer));
+            hinweis.addFlashAttribute("neuerToken", frisch);
             hinweis.addFlashAttribute("neueKennung", kennung);
-            hinweis.addFlashAttribute("updateHost", updateHost);
-            hinweis.addFlashAttribute("neueRolle", "node");
+            // Beim Erneuern ist die Rolle nicht bekannt - die Module stehen
+            // beim Knoten und nicht im Aufruf. "node" passt fuer alles ausser
+            // dem Controller, und der wird selten neu getokent.
+            hinweis.addFlashAttribute("aufsetzBefehl",
+                    aufsetzBefehl(kennung, frisch, "node", ausweise.module(kennung)));
         } catch (IllegalArgumentException falsch) {
             hinweis.addFlashAttribute("fehler", falsch.getMessage());
         }

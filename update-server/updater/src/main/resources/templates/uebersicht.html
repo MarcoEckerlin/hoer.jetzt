@@ -79,8 +79,8 @@
                     <button type="submit" class="vorgemerkt">vorgemerkt &times;</button>
                 </form>
                 <form th:action="@{'/knoten/' + ${k.kennung} + '/loeschen'}" method="post" class="inline"
-                      onsubmit="return confirm('Diesen Knoten aus der Uebersicht entfernen? Er taucht beim naechsten Herzschlag wieder auf.');">
-                    <button type="submit" class="schlicht">entfernen</button>
+                      onsubmit="return confirm('Knoten wirklich entfernen? Ausweis, Module und offene Token werden mitgeloescht - er kommt nicht von selbst zurueck.');">
+                    <button type="submit" class="gefahr">entfernen</button>
                 </form>
             </td>
         </tr>
