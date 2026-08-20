@@ -37,9 +37,39 @@ command -v openssl >/dev/null 2>&1 || fail "openssl fehlt (Paket openssl)."
 docker compose version >/dev/null 2>&1 || fail "docker compose (v2) fehlt."
 
 if [[ -f "$UMGEBUNG" ]]; then
-    warn "${UMGEBUNG} existiert bereits."
-    ja "Alles neu aufsetzen? Der alte Zugang gilt danach nicht mehr." n \
-        || fail "Abgebrochen."
+    # ----------------------------------------------------------------------
+    # Vorhandene Werte uebernehmen, statt alles neu zu erfragen.
+    #
+    # Frueher stand hier nur "Alles neu aufsetzen? j/n" - und ein Ja hiess:
+    # jede Frage noch einmal beantworten, alle vier Passwoerter neu, jeder
+    # Knoten ausgesperrt. Das ist bei einem abgebrochenen Lauf genau die
+    # falsche Antwort. Man will ihn zu Ende bringen, nicht von vorn beginnen.
+    #
+    # Jetzt werden die Werte aus der .env gelesen und als Vorgabe angeboten:
+    # Enter uebernimmt sie. Die Passwoerter bleiben, wie sie sind - erzeugt
+    # wird nur, was fehlt.
+    #
+    # Wer wirklich alles neu will, nimmt neu-aufsetzen.sh.
+    # ----------------------------------------------------------------------
+    alt() { grep "^$1=" "$UMGEBUNG" 2>/dev/null | head -1 | cut -d= -f2- || true; }
+
+    HJ_UPDATE_HOST="$(alt HJ_UPDATE_HOST)"
+    HJ_PORT_INTERN="$(alt HJ_PORT_INTERN)"
+    HJ_CADDY_BIND="$(alt HJ_CADDY_BIND)"
+    HJ_GIT_BIND="$(alt HJ_GIT_BIND)"
+    HJ_PULT_BIND="$(alt HJ_PULT_BIND)"
+    HJ_PULT_PORT="$(alt HJ_PULT_PORT)"
+    HJ_ADMIN="$(alt HJ_VERWALTER_NAME)"
+    ALT_TOKEN_KNOTEN="$(alt HJ_TOKEN_KNOTEN)"
+    ALT_TOKEN_AUFSETZEN="$(alt HJ_TOKEN_AUFSETZEN)"
+    ALT_VERWALTER_HASH="$(alt HJ_VERWALTER_HASH)"
+
+    warn "${UMGEBUNG} gibt es bereits."
+    info "Die vorhandenen Werte werden angeboten - Enter uebernimmt sie."
+    info "Passwoerter bleiben unveraendert; erzeugt wird nur, was fehlt."
+    info ""
+    info "Alles wirklich von vorn:  bash neu-aufsetzen.sh --maschine"
+    echo
 fi
 
 cat <<'KOPF'
@@ -58,17 +88,17 @@ KOPF
 step "Adresse"
 info "Der oeffentliche Name, unter dem der Nginx Proxy Manager diesen"
 info "Dienst veroeffentlicht. Ohne Port und ohne https:// davor."
-frage HJ_UPDATE_HOST "Oeffentlicher Name" "repository.hoer.jetzt"
+frage HJ_UPDATE_HOST "Oeffentlicher Name" "${HJ_UPDATE_HOST:-repository.hoer.jetzt}"
 
 info ""
 info "Port der Repo-Seite - Abbilder, Release, Tresor, Meldestelle."
 info "Hier laeuft unverschluesseltes HTTP. Wird der Port oeffentlich"
 info "erreichbar gemacht, gehoert TLS davor (NPM oder Cloudflare)."
-frage HJ_PORT_INTERN "Port der Repo-Seite" "8091"
+frage HJ_PORT_INTERN "Port der Repo-Seite" "${HJ_PORT_INTERN:-8091}"
 info ""
 info "Auf welcher Adresse. 0.0.0.0 heisst: von ueberall erreichbar."
 info "127.0.0.1 heisst: nur ueber einen Proxy auf demselben Host."
-frage HJ_CADDY_BIND "Lauschadresse" "0.0.0.0"
+frage HJ_CADDY_BIND "Lauschadresse" "${HJ_CADDY_BIND:-0.0.0.0}"
 
 step "Port"
 if command -v ss >/dev/null 2>&1 && ss -ltn 2>/dev/null | grep -q ":${HJ_PORT_INTERN} "; then
@@ -78,8 +108,8 @@ info "Port ${HJ_PORT_INTERN} ist frei. 80 und 443 bleiben dem NPM."
 
 step "Verwaltung"
 info "Forgejo lauscht nur oertlich. Nach aussen geht allein /v2/ ueber Caddy."
-frage HJ_GIT_BIND "Auf welcher Adresse lauschen" "127.0.0.1"
-frage HJ_ADMIN    "Benutzername fuer die Verwaltung" "marco"
+frage HJ_GIT_BIND "Auf welcher Adresse lauschen" "${HJ_GIT_BIND:-127.0.0.1}"
+frage HJ_ADMIN    "Benutzername fuer die Verwaltung" "${HJ_ADMIN:-marco}"
 # Forgejo verlangt beim Anlegen eines Kontos eine Mailadresse. Sie wird nie
 # benutzt - es geht kein Mailversand von hier aus.
 frage HJ_ADMIN_MAIL "Mailadresse fuer das Forgejo-Konto" "system@hoer.jetzt"
@@ -91,8 +121,8 @@ info ""
 info "0.0.0.0 macht sie von ueberall erreichbar. Dann ist das"
 info "Verwalter-Passwort die einzige Huerde - TLS davorschalten und"
 info "ein langes Passwort waehlen."
-frage HJ_PULT_BIND "Auf welcher Adresse soll die Oberflaeche lauschen" "0.0.0.0"
-frage HJ_PULT_PORT "Auf welchem Port" "8090"
+frage HJ_PULT_BIND "Auf welcher Adresse soll die Oberflaeche lauschen" "${HJ_PULT_BIND:-0.0.0.0}"
+frage HJ_PULT_PORT "Auf welchem Port" "${HJ_PULT_PORT:-8090}"
 
 # ------------------------------------------------------------------ 2  Passwoerter
 
@@ -128,7 +158,16 @@ gruppe() {
     done
     printf '%s' "${aus:0:4}"
 }
-PW_AUFSETZEN="hj-$(gruppe)-$(gruppe)-$(gruppe)-$(gruppe)"
+# Vorhandenes behalten. Ein neues Aufsetz-Passwort machte jede offene
+# Anleitung ungueltig; ein neues Knoten-Passwort spektte JEDEN Knoten aus.
+# Beim ersten Lauf sind die Variablen leer, dann wird erzeugt.
+if [[ -n "${ALT_TOKEN_AUFSETZEN:-}" ]]; then
+    PW_AUFSETZEN="$ALT_TOKEN_AUFSETZEN"
+    PW_AUFSETZEN_ALT=true
+else
+    PW_AUFSETZEN="hj-$(gruppe)-$(gruppe)-$(gruppe)-$(gruppe)"
+    PW_AUFSETZEN_ALT=false
+fi
 
 # Sicherheitsnetz: waere an der Erzeugung noch etwas falsch, faellt es hier
 # auf und nicht erst, wenn jemand ein zu kurzes Passwort im Einsatz hat.
@@ -141,7 +180,18 @@ PW_AUFSETZEN="hj-$(gruppe)-$(gruppe)-$(gruppe)-$(gruppe)"
 # Kein bcrypt darauf: der Updater vergleicht es unmittelbar. bcrypt schneidet
 # nach 72 Byte ab, von 4096 Bit blieben also 576 uebrig - und der Hash
 # enthielte Dollarzeichen, die Docker Compose in der .env als Variablen liest.
-PW_KNOTEN="$(openssl rand -base64 512 | tr -d '\n')"
+# Auch hier: vorhandenes behalten.
+#
+# Ein neues Knoten-Passwort sperrt JEDEN Knoten aus, bis er es bekommen hat -
+# und es gibt keine Verbindung von hier zu ihm. Das darf nicht die Nebenwirkung
+# davon sein, dass jemand einen abgebrochenen Lauf zu Ende bringt.
+if [[ -n "${ALT_TOKEN_KNOTEN:-}" ]]; then
+    PW_KNOTEN="$ALT_TOKEN_KNOTEN"
+    PW_KNOTEN_ALT=true
+else
+    PW_KNOTEN="$(openssl rand -base64 512 | tr -d '\n')"
+    PW_KNOTEN_ALT=false
+fi
 
 info "Aufsetzen: ${#PW_AUFSETZEN} Zeichen, tippbar."
 info "Knoten:    ${#PW_KNOTEN} Zeichen, 4096 Bit."
@@ -172,6 +222,25 @@ fi
 PW_ADMIN="$(zufall)"
 
 step "Hash fuer die Oberflaeche"
+
+# Vorhandenen Hash behalten.
+#
+# Der Klartext steht nirgends - gespeichert ist nur der bcrypt-Hash. Waere
+# hier neu gehasht worden, gaelte ab sofort ein neues, frisch erzeugtes
+# Passwort, und das alte waere ohne Vorwarnung ungueltig. Bei einem Lauf, den
+# man nur zu Ende bringen wollte, ist das die letzte Ueberraschung, die man
+# brauchen kann.
+#
+# Ein ausdruecklich uebergebenes Initialpasswort schlaegt das: wer
+# --passwort mitgibt, will es aendern.
+if [[ -n "${ALT_VERWALTER_HASH:-}" && "$PW_PULT_VORGEGEBEN" == "false" ]]; then
+    # Aus der .env kommt der maskierte Hash ($$ statt $) - zurueckdrehen,
+    # sonst wird er beim Schreiben ein zweites Mal maskiert.
+    HJ_VERWALTER_HASH="$(printf '%s' "$ALT_VERWALTER_HASH" | sed 's/\$\$/$/g')"
+    PW_PULT_BEHALTEN=true
+    info "Vorhandenes Passwort bleibt gueltig."
+else
+    PW_PULT_BEHALTEN=false
 # Ueber die Standardeingabe, nicht als Argument.
 #
 # "--plaintext $PW_PULT" stellte das Passwort in "ps aux" - fuer jeden
@@ -210,6 +279,7 @@ fi
 [[ "$HJ_VERWALTER_HASH" =~ ^\$2[aby]\$ ]] \
     || fail "Hashen fehlgeschlagen - caddy lieferte: ${HJ_VERWALTER_HASH:-<nichts>}"
 info "bcrypt."
+fi
 
 # ------------------------------------------------------------------ 3  Umgebung
 
@@ -541,18 +611,19 @@ cat <<ENDE
 
     Wird nicht wieder angezeigt.
 
-      Aufsetz-Passwort  ${PW_AUFSETZEN}
+      Aufsetz-Passwort  ${PW_AUFSETZEN}$(if $PW_AUFSETZEN_ALT; then printf "%s" "   (unveraendert)"; fi)
 
           Neuen Knoten aufsetzen - das ist die ganze Zeile:
 
           curl -fsSLu knoten https://${HJ_UPDATE_HOST}/knoten/aufsetzen.sh -o a.sh && bash a.sh
 
-      Knoten-Passwort   (4096 Bit, steht unten noch einmal einzeln)
+      Knoten-Passwort   (4096 Bit, steht unten noch einmal einzeln)$(if $PW_KNOTEN_ALT; then printf "%s" " - unveraendert"; fi)
 
-      Updater           ${HJ_ADMIN} / $(if $PW_PULT_VORGEGEBEN; then
+      Updater           ${HJ_ADMIN} / $(if $PW_PULT_BEHALTEN; then
+                            printf '%s' "<unveraendert - das bisherige gilt weiter>"
+                        elif $PW_PULT_VORGEGEBEN; then
                             printf '%s' "<das beim Aufruf angegebene Passwort>"
                         else printf '%s' "$PW_PULT"; fi)
-                        Freigaben, Knoten, Verwalten, Zugriffsprotokoll.
 
                         http://$(hostname -I 2>/dev/null | awk '{print $1}'):${HJ_PULT_PORT}/
 

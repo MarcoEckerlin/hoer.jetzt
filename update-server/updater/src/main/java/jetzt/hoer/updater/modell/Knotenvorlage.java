@@ -46,8 +46,22 @@ public enum Knotenvorlage {
             List.of(Modul.KI_RADIO)),
 
     CONTROLLER("Controller", "controller",
-            "Steuer-Node: Core-Stapel mit Datenbank und Sicherungen.",
-            List.of(Modul.CONTROLLER, Modul.LAVALINK));
+            "Steuer-Node: Datenbank, Sicherungen, Shard-Verteilung.",
+            // Nur CONTROLLER.
+            //
+            // Hier stand vorher zusaetzlich LAVALINK - ohne Not. Ein
+            // Steuer-Knoten verteilt Shards und haelt die Datenbank; ob auf
+            // derselben Maschine auch Audio laeuft, ist eine getrennte
+            // Entscheidung und keine Eigenschaft der Rolle.
+            //
+            // Praktische Folge des alten Zuschnitts: der Knoten bekam das
+            // Lavalink-Passwort aus dem Tresor, obwohl er es nicht braucht.
+            // Genau die Sorte stillschweigender Zusatzrechte, gegen die
+            // dieser ganze Umbau gerichtet ist.
+            //
+            // Wer beides will, waehlt "Controller" und schaltet Lavalink in
+            // der Liste darunter dazu - ein Klick, und er steht im Protokoll.
+            List.of(Modul.CONTROLLER));
 
     private final String anzeige;
     private final String praefix;
