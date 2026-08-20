@@ -119,11 +119,27 @@ grep -q '^HJ_VERWALTER_HASH=' "$UMGEBUNG" || {
 if command -v docker >/dev/null 2>&1; then
     GELESEN="$(docker compose -f "${HIER}/docker-compose.yml" config 2>/dev/null \
                | grep -o 'HJ_VERWALTER_HASH: .*' | head -1 | cut -d' ' -f2- || true)"
+
+    # Die Ausgabe von "docker compose config" ist selbst eine Compose-Datei -
+    # ein einzelnes Dollarzeichen erscheint darin wieder verdoppelt, damit
+    # sie sich erneut einlesen laesst. Vor dem Vergleich also zurueckdrehen.
+    #
+    # Die erste Fassung verglich ungefiltert und schlug deshalb IMMER an:
+    #   gelesen:  $$2a$$14$$HD32...
+    #   erwartet: $2a$14$HD32...
+    # Das sah nach einer kaputten .env aus, war aber nur die Fluchtform der
+    # Ausgabe. Die Maskierung selbst ist richtig - Compose liest .env-Werte
+    # mit Variablenersetzung, sonst wuerden $2a und $14 zu Leerstrings.
+    GELESEN="$(printf '%s' "$GELESEN" | sed 's/\$\$/$/g')"
+
     if [[ -n "$GELESEN" && "$GELESEN" != "$HASH" ]]; then
         cp "$SICHERUNG" "$UMGEBUNG"
         fail "Compose liest den Hash veraendert zurueck - zurueckgesetzt.
        gelesen:  ${GELESEN}
        erwartet: ${HASH}"
+    fi
+    if [[ -n "$GELESEN" ]]; then
+        info "Compose liest den Hash unveraendert zurueck."
     fi
 fi
 info "${UMGEBUNG} (0600), Sicherung: ${SICHERUNG}"
