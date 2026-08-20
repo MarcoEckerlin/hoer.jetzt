@@ -189,7 +189,7 @@ liegt als bcrypt-Hash da.
 | | |
 |---|---|
 | Domain | `repository.hoer.jetzt` |
-| Weiterleiten an | `http://<host>:8091` |
+| Weiterleiten an | `http://<LAN-IP des Hosts>:<HJ_PORT_INTERN>` — **nicht** `0.0.0.0`, und der Port ist der beim Einrichten gewählte |
 | Zertifikat | wie üblich über den NPM |
 | Upload-Grenze | **aus** (`client_max_body_size 0`) |
 

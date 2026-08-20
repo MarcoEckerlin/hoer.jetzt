@@ -500,6 +500,23 @@ fi
 # ------------------------------------------------------------------ 7  Ende
 
 step "Jetzt notieren"
+# Welche Adresse der NPM anwaehlen muss.
+#
+# HJ_CADDY_BIND ist die LAUSCH-Adresse. Steht dort 0.0.0.0, heisst das "alle
+# Schnittstellen" - als Ziel eingetragen ist es unbrauchbar, und genau das
+# stand hier vorher: "Weiterleiten an http://0.0.0.0:8082". Wer das liest,
+# raet sich eine Adresse zusammen, und wenn dabei auch noch der Port aus der
+# Anleitung statt der tatsaechliche genommen wird, endet es in 502.
+#
+# Deshalb: bei 0.0.0.0 die erste LAN-Adresse des Hosts anbieten, sonst die
+# Lauschadresse selbst - die ist dann ja eine echte.
+if [[ "$HJ_CADDY_BIND" == "0.0.0.0" ]]; then
+    NPM_ZIEL="$(hostname -I 2>/dev/null | awk '{print $1}')"
+    NPM_ZIEL="${NPM_ZIEL:-<IP dieses Hosts>}"
+else
+    NPM_ZIEL="$HJ_CADDY_BIND"
+fi
+
 cat <<ENDE
 
     Wird nicht wieder angezeigt.
@@ -543,8 +560,14 @@ cat <<ENDE
     Im Nginx Proxy Manager anlegen:
 
       Domain            ${HJ_UPDATE_HOST}
-      Weiterleiten an   http://${HJ_CADDY_BIND}:${HJ_PORT_INTERN}
+      Weiterleiten an   http://${NPM_ZIEL}:${HJ_PORT_INTERN}
       Zertifikat        wie ueblich ueber den NPM
+
+      Der Port ist ${HJ_PORT_INTERN} - nicht die Vorgabe 8091, falls du
+      beim Einrichten einen anderen genommen hast. Stimmen NPM und
+      Caddy hier nicht ueberein, meldet der Browser 502 Bad Gateway,
+      und Cloudflare wie NPM zeigen dabei gruen: der letzte Sprung
+      geht ins Leere.
 
       Wichtig: keine Groessenbegrenzung fuer Uploads (client_max_body_size 0).
       Abbild-Schichten sind gross; NPM bricht sonst mittendrin ab.
