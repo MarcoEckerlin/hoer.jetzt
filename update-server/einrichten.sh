@@ -99,11 +99,41 @@ frage HJ_PULT_PORT "Auf welchem Port" "8090"
 step "Passwoerter"
 
 # Muss von Hand eingetippt werden koennen - deshalb Gruppen statt eines
-# Zufallsbandes, und ein Alphabet ohne 0/O und 1/l/I. Vier Gruppen zu vier
-# Zeichen aus 32 sind rund 80 Bit; das reicht fuer einen Zugang, der nur ein
-# Installationsskript herausgibt und jederzeit gewechselt werden kann.
-gruppe() { head -c 32 /dev/urandom | tr -dc 'ABCDEFGHJKMNPQRSTUVWXYZ23456789' | cut -c1-4; }
+# Zufallsbandes, und ein Alphabet ohne 0/O und 1/l/I.
+#
+# ---------------------------------------------------------------------------
+# Warum hier eine Schleife steht und kein einzelnes "head -c"
+#
+# Die erste Fassung war:
+#
+#   head -c 32 /dev/urandom | tr -dc '<31 Zeichen>' | cut -c1-4
+#
+# Das sieht richtig aus und ist es nicht. Von 256 moeglichen Bytewerten
+# ueberleben nur 31 das tr - jedes Byte also mit rund 12 Prozent. Aus 32 Byte
+# werden im Mittel 3,9 Zeichen, mit erheblicher Streuung: gemessen lieferten
+# nur 54 Prozent der Aufrufe die vollen vier, 1,5 Prozent gar keins.
+#
+# Das Gesamtpasswort schwankte dadurch zwischen 13 und 22 Zeichen, und die im
+# Kommentar behaupteten 80 Bit stimmten in den wenigsten Faellen. Ein Lauf mit
+# 14 Zeichen hatte acht Zufallszeichen - 40 Bit, die Haelfte.
+#
+# Jetzt wird nachgefuellt, bis vier Zeichen beisammen sind. Vier Gruppen zu
+# vier Zeichen aus 31 sind rund 79 Bit, und zwar immer.
+# ---------------------------------------------------------------------------
+VORRAT='ABCDEFGHJKMNPQRSTUVWXYZ23456789'
+gruppe() {
+    local aus=""
+    while [[ ${#aus} -lt 4 ]]; do
+        aus="${aus}$(head -c 64 /dev/urandom | tr -dc "$VORRAT" || true)"
+    done
+    printf '%s' "${aus:0:4}"
+}
 PW_AUFSETZEN="hj-$(gruppe)-$(gruppe)-$(gruppe)-$(gruppe)"
+
+# Sicherheitsnetz: waere an der Erzeugung noch etwas falsch, faellt es hier
+# auf und nicht erst, wenn jemand ein zu kurzes Passwort im Einsatz hat.
+[[ ${#PW_AUFSETZEN} -eq 22 ]] \
+    || fail "Aufsetz-Passwort hat ${#PW_AUFSETZEN} statt 22 Zeichen - Erzeugung pruefen."
 
 # 512 Byte = 4096 Bit. Wird nie abgetippt, sondern von Skripten weitergereicht
 # und einmal in eine Zwischenablage kopiert - also darf es lang sein.
@@ -263,13 +293,41 @@ info "Forgejo ist eingerichtet."
 step "Verwaltungskonto"
 # Die Ausgabe nicht wegwerfen: schlaegt es fehl, steht der Grund darin, und
 # ohne ihn sucht man an der falschen Stelle.
-if ! ANLEGEN="$(docker compose exec -T -u git forgejo forgejo --config "$FJ_INI" admin user create \
+if ANLEGEN="$(docker compose exec -T -u git forgejo forgejo --config "$FJ_INI" admin user create \
         --admin --username "$HJ_ADMIN" --password "$PW_ADMIN" \
         --email "$HJ_ADMIN_MAIL" --must-change-password=false 2>&1)"; then
+    info "$HJ_ADMIN angelegt."
+
+# Das Konto gibt es schon.
+#
+# Genau der Fall, wenn jemand /opt/hoerjetzt loescht und neu installiert: die
+# Quellen sind weg, das Forgejo-Volume nicht. Frueher brach das Einrichten
+# hier ab - nach dem Anlegen der .env, nach dem Start von Forgejo, also mitten
+# in einem halb fertigen Aufbau, und mit einer Meldung, die wie ein Defekt
+# aussieht statt wie ein Zustand.
+#
+# Das Passwort des alten Kontos ist unbekannt - in der neuen .env steht ein
+# frisch erzeugtes. Also wird es gesetzt, nicht geraten.
+elif printf '%s' "$ANLEGEN" | grep -qi "already exists"; then
+    warn "Das Konto ${HJ_ADMIN} gibt es bereits - aus einer frueheren Installation."
+    warn "Das Forgejo-Volume hat den Neuaufbau ueberlebt."
+    if ! WECHSEL="$(docker compose exec -T -u git forgejo forgejo --config "$FJ_INI" \
+            admin user change-password --username "$HJ_ADMIN" \
+            --password "$PW_ADMIN" --must-change-password=false 2>&1)"; then
+        warn "$WECHSEL"
+        fail "Passwort des vorhandenen Kontos liess sich nicht setzen.
+       Entweder das alte Volume entfernen und neu beginnen:
+         bash neu-aufsetzen.sh --maschine
+       oder einen anderen Benutzernamen waehlen."
+    fi
+    info "Passwort von ${HJ_ADMIN} auf den neuen Wert gesetzt."
+    warn "Achtung: die alten Abbilder und Repositories liegen noch in diesem"
+    warn "Volume. Fuer einen wirklich leeren Stand: bash neu-aufsetzen.sh --maschine"
+
+else
     warn "$ANLEGEN"
     fail "Verwaltungskonto liess sich nicht anlegen - siehe Meldung oben."
 fi
-info "$HJ_ADMIN"
 
 # Kein zweites Konto fuer die Knoten: die Abbilder darf lesen, wer bis zur
 # Registry kommt - und dorthin kommt nur, wer Caddy das Knoten-Passwort
