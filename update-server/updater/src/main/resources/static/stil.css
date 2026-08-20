@@ -124,3 +124,147 @@ form.anmeldung { display: grid; gap: .8rem; }
 form.anmeldung label { font-size: .8rem; color: var(--leise); }
 
 a { color: var(--akzent); }
+
+/* ------------------------------------------------------------------------
+   Nachtrag: was die Vorlagen benutzen und hier fehlte.
+
+   Sechs Klassen und acht Elemente hatten gar keine Regel - Auswahlmenues,
+   Befehlskaesten, Modulmarken. Der Browser stellte sie in seinen Vorgaben
+   dar, mitten in einer dunklen Oberflaeche: weisse Kaesten, Serifen,
+   fremde Abstaende. Nicht kaputt, aber unfertig.
+   ------------------------------------------------------------------------ */
+
+/* --- Eingaben: select und textarea sahen wie Fremdkoerper aus ----------- */
+
+select,
+textarea {
+    font: inherit;
+    color: var(--text);
+    background: var(--grund);
+    border: 1px solid var(--rand);
+    border-radius: 4px;
+    padding: .45rem .6rem;
+}
+select:focus,
+textarea:focus {
+    outline: none;
+    border-color: var(--akzent);
+}
+select {
+    /* Der eigene Pfeil kommt als Hintergrundbild - "appearance: none" nimmt
+       den des Systems weg, und ohne Ersatz sieht man nicht mehr, dass es
+       ein Menue ist. */
+    appearance: none;
+    padding-right: 2rem;
+    background-image:
+        linear-gradient(45deg, transparent 50%, var(--leise) 50%),
+        linear-gradient(135deg, var(--leise) 50%, transparent 50%);
+    background-position: right 1.1rem center, right .8rem center;
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+}
+form.anlegen select { width: 100%; }
+
+/* --- Code und Befehle --------------------------------------------------- */
+
+code {
+    font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+    font-size: .92em;
+    background: var(--grund);
+    border: 1px solid var(--rand);
+    border-radius: 3px;
+    padding: .05rem .35rem;
+}
+td code { border: 0; background: none; padding: 0; }
+
+pre {
+    font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+    font-size: .9rem;
+    line-height: 1.6;
+    background: var(--grund);
+    border: 1px solid var(--rand);
+    border-radius: 6px;
+    padding: .8rem 1rem;
+    margin: .6rem 0 0;
+    /* Ein Aufsetzbefehl ist lang. Umbrechen statt abschneiden: er soll
+       vollstaendig kopierbar sein, ohne waagerecht zu scrollen. */
+    white-space: pre-wrap;
+    word-break: break-all;
+    overflow-wrap: anywhere;
+}
+
+/* Der Befehl, den man kopiert. Hebt sich ab, weil er das Ergebnis der
+   ganzen Seite ist - alles andere fuehrt nur dorthin. */
+pre.befehl {
+    border-color: var(--akzent);
+    background: color-mix(in srgb, var(--akzent) 8%, var(--grund));
+    user-select: all;
+}
+
+/* --- Der einmalige Kasten: Token, Geheimnis ---------------------------- */
+
+.einmalig {
+    background: var(--flaeche);
+    border: 1px solid var(--warnung);
+    border-left-width: 4px;
+    border-radius: 6px;
+    padding: 1rem 1.25rem 1.25rem;
+    margin-bottom: 1.5rem;
+}
+.einmalig h2 { margin-top: 0; }
+
+/* Ein Wert, den man abschreibt oder kopiert - gross, monospace, und mit
+   "user-select: all" mit einem Klick vollstaendig markiert. */
+.gross {
+    font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+    font-size: 1.35rem;
+    letter-spacing: .04em;
+    color: var(--warnung);
+    background: var(--grund);
+    border-radius: 5px;
+    padding: .6rem .9rem;
+    margin: .4rem 0 .8rem;
+    user-select: all;
+    word-break: break-all;
+}
+
+/* --- Modulmarken in der Tabelle ---------------------------------------- */
+
+.marke {
+    display: inline-block;
+    background: var(--rand);
+    color: var(--text);
+    border-radius: 3px;
+    padding: .1rem .45rem;
+    margin: .1rem .2rem .1rem 0;
+    font-size: .8rem;
+    white-space: nowrap;
+}
+
+/* --- Knopfreihen -------------------------------------------------------- */
+
+.knopfreihe {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+    align-items: center;
+}
+.knopfreihe form { margin: 0; }
+
+/* --- Was uebernommen wurde --------------------------------------------- */
+
+.uebernehmen { color: var(--gut); }
+
+/* --- Fieldset, falls es wieder eines gibt ------------------------------ */
+
+fieldset {
+    border: 1px solid var(--rand);
+    border-radius: 6px;
+    padding: .8rem 1rem 1rem;
+    margin: 0 0 1rem;
+}
+legend { color: var(--leise); padding: 0 .4rem; }
+
+details { margin: .4rem 0; }
+summary { cursor: pointer; color: var(--leise); }
+summary:hover { color: var(--text); }
