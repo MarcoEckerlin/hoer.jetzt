@@ -395,6 +395,31 @@ if [[ -z "$MODULE" ]]; then
     exit 0
 fi
 
+# An der Registry anmelden, bevor irgendetwas gezogen wird.
+#
+# Ohne das versucht Docker es anonym - und scheitert an unserem Torwaechter
+# mit einer Meldung, die nach einem Problem der Registry aussieht:
+#
+#   failed to fetch anonymous token: 401 Unauthorized
+#
+# Danach faellt Compose auf "bauen" zurueck und meldet
+# "unable to prepare context: path /opt/hoerjetzt/lavalink not found" -
+# drei Irrwege von der eigentlichen Ursache entfernt.
+#
+# Mit der eigenen Kennung, nicht mit einem gemeinsamen Passwort: daran haengt,
+# welche Abbilder dieser Knoten ueberhaupt ziehen darf.
+if ! printf '%s' "$HJ_KNOTEN_GEHEIMNIS" | docker login "$HJ_UPDATE_HOST" \
+        -u "$HJ_KNOTEN_KENNUNG" --password-stdin >/dev/null 2>&1; then
+    fehler "Anmeldung an der Registry ${HJ_UPDATE_HOST} fehlgeschlagen.
+
+       Als: ${HJ_KNOTEN_KENNUNG}
+
+       Ist die Adresse dieses Hosts unter 'Freigaben' eingetragen? Die
+       oeffentliche IPv4 lautet:
+       $(curl -fsS --max-time 5 https://api.ipify.org 2>/dev/null || echo '<nicht ermittelbar>')"
+fi
+gut "an der Registry angemeldet"
+
 dienste=""
 for m in $MODULE; do
     dienste="${dienste} $(dienste_von "$m")"

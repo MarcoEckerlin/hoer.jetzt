@@ -257,13 +257,31 @@ chmod 600 .env
     done
 } >> .env
 
-# Docker meldet sich mit demselben Passwort an. "docker login" schreibt es
-# nach ~/.docker/config.json und haelt es dort - der Aufruf hier ist deshalb
-# in den meisten Naechten ein No-op, kostet aber nichts und heilt den Fall,
-# dass jemand die Datei geleert oder das Passwort gewechselt hat.
-if ! printf '%s' "$HJ_TOKEN_KNOTEN" | docker login "$HJ_UPDATE_HOST" \
-        -u knoten --password-stdin >/dev/null 2>&1; then
-    fehler "Anmeldung an der Registry ${HJ_UPDATE_HOST} fehlgeschlagen - stimmt HJ_TOKEN_KNOTEN?"
+# Anmeldung an der Registry - mit der EIGENEN Kennung.
+#
+# Frueher stand hier "-u knoten" mit dem gemeinsamen Knoten-Passwort. Seit
+# hj.token.gemeinsam-erlauben abgeschaltet ist, wird das abgewiesen - und
+# zwar mit einer Meldung, die nach einem Registry-Problem aussieht:
+#
+#   failed to fetch anonymous token: 401 Unauthorized
+#
+# Der Benutzername traegt die Kennung des Knotens; genau daran haengt, welche
+# Abbilder er ziehen darf. Ein Audio-Knoten kommt so an lavalink und nicht an
+# core - mit dem gemeinsamen Passwort kam er an alles.
+#
+# "docker login" schreibt die Anmeldung nach ~/.docker/config.json und haelt
+# sie dort. Der Aufruf hier ist deshalb meist ein No-op, kostet aber nichts
+# und heilt den Fall, dass jemand die Datei geleert oder das Geheimnis
+# getauscht hat.
+: "${HJ_KNOTEN_KENNUNG:?HJ_KNOTEN_KENNUNG fehlt - Knoten nicht angemeldet}"
+: "${HJ_KNOTEN_GEHEIMNIS:?HJ_KNOTEN_GEHEIMNIS fehlt - Knoten nicht angemeldet}"
+if ! printf '%s' "$HJ_KNOTEN_GEHEIMNIS" | docker login "$HJ_UPDATE_HOST" \
+        -u "$HJ_KNOTEN_KENNUNG" --password-stdin >/dev/null 2>&1; then
+    fehler "Anmeldung an der Registry ${HJ_UPDATE_HOST} als ${HJ_KNOTEN_KENNUNG} fehlgeschlagen.
+
+       Gilt das Geheimnis noch? Wurde der Knoten im Updater neu angelegt,
+       muss er sich mit einem frischen Aufsetz-Token neu anmelden:
+           bash install-node.sh --kennung ${HJ_KNOTEN_KENNUNG} --token hj-... --modules <liste>"
 fi
 
 # Erst laden, dann umschalten. Bricht das Laden ab - Netz weg, Abbild fehlt,

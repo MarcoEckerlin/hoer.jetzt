@@ -192,42 +192,73 @@ public class TorController {
     }
 
     /**
-     * Aus dem Geltungsbereich einer Token-Anfrage den Pfad ableiten.
+     * Aus den Geltungsbereichen einer Token-Anfrage den Pfad ableiten.
      *
      * <p>{@code ?scope=repository:hoerjetzt/core:pull} wird zu
-     * {@code /v2/hoerjetzt/core/} - der Form, die {@link Pfadrechte} kennt.
-     * Gibt es keinen Geltungsbereich, liefert die Methode {@code null}: dann
-     * fragt Docker nur nach der Anmeldung als solcher.</p>
+     * {@code /v2/hoerjetzt/core/manifests/} - der Form, die
+     * {@link Pfadrechte} kennt.</p>
+     *
+     * <h2>Warum ueber ALLE scope-Angaben gelaufen wird</h2>
+     *
+     * Docker schickt mehrere:
+     *
+     * <pre>
+     *   /v2/token?scope=%2A&amp;scope=repository%3Ahoerjetzt%2Fcore%3Apull&amp;service=...
+     * </pre>
+     *
+     * Das erste ist {@code *} - eine Anfrage nach allem. Wer nur den ersten
+     * Treffer liest, bekommt {@code *}, kann es nicht zuordnen, haelt die
+     * Anfrage fuer eine blosse Anmeldung und laesst sie ungeprueft durch.
+     * Genau das tat die erste Fassung: ein Audio-Knoten haette damit einen
+     * Token fuer den Core bekommen.
+     *
+     * <p>Deshalb: jede Angabe ansehen. Die erste, die ein Repository nennt,
+     * bestimmt den Pfad. Steht ueberall nur {@code *}, ist das eine Anfrage
+     * nach der ganzen Registry - die wird abgelehnt, nicht durchgewinkt.</p>
+     *
+     * @return der zu pruefende Pfad, {@code null} bei einer blossen
+     *         Anmeldung ohne Bereich, oder {@link #ALLES} wenn jemand die
+     *         gesamte Registry verlangt
      */
+    static final String ALLES = "/v2/";
+
     static String geltungsbereich(String uri) {
         if (uri == null || !uri.contains("scope=")) {
             return null;
         }
-        String roh = uri.substring(uri.indexOf("scope=") + 6);
-        int ende = roh.indexOf('&');
-        if (ende >= 0) {
-            roh = roh.substring(0, ende);
-        }
-        roh = java.net.URLDecoder.decode(roh, java.nio.charset.StandardCharsets.UTF_8);
+        boolean nachAllem = false;
 
-        // repository:hoerjetzt/core:pull,push
-        String[] teile = roh.split(":");
-        if (teile.length < 2 || !"repository".equals(teile[0]) || teile[1].isBlank()) {
-            return null;
+        for (String teil : uri.split("[?&]")) {
+            if (!teil.startsWith("scope=")) {
+                continue;
+            }
+            String roh = java.net.URLDecoder.decode(
+                    teil.substring(6), java.nio.charset.StandardCharsets.UTF_8);
+
+            if ("*".equals(roh)) {
+                nachAllem = true;
+                continue;
+            }
+
+            // repository:hoerjetzt/core:pull,push
+            String[] stuecke = roh.split(":");
+            if (stuecke.length >= 2 && "repository".equals(stuecke[0])
+                    && !stuecke[1].isBlank()) {
+                // "/manifests/" gehoert dazu, auch wenn es hier nichts abruft.
+                //
+                // Pfadrechte erkennt das Abbild an einem bekannten Endpunkt -
+                // blobs, manifests, tags. Ohne einen davon laesst sich
+                // "/v2/x/y/" keinem Modul zuordnen, und was sich nicht
+                // zuordnen laesst, gilt als gesperrt. Ein Token fuer ein
+                // Repository deckt genau dessen Manifeste und Schichten ab.
+                return "/v2/" + stuecke[1] + "/manifests/";
+            }
         }
 
-        // "/manifests/" gehoert dazu, auch wenn es hier nichts abruft.
-        //
-        // Pfadrechte erkennt das Abbild an einem bekannten Endpunkt im Pfad -
-        // blobs, manifests, tags. Ohne einen davon laesst sich "/v2/x/y/"
-        // keinem Modul zuordnen, und was sich nicht zuordnen laesst, gilt als
-        // gesperrt. Das ist dort richtig so: "/v2/_catalog" listet die ganze
-        // Registry und soll niemandem offenstehen.
-        //
-        // Ein Token fuer ein Repository deckt genau dessen Manifeste und
-        // Schichten ab. "manifests" ist damit die zutreffende Form, nicht ein
-        // Trick, um an der Pruefung vorbeizukommen.
-        return "/v2/" + teile[1] + "/manifests/";
+        // Nur "*" und sonst nichts: das ist die ganze Registry. Pfadrechte
+        // lehnt "/v2/" ab, weil sich daraus kein Modul ergibt - und das ist
+        // hier die richtige Antwort.
+        return nachAllem ? ALLES : null;
     }
 
     @RequestMapping(value = "/pruefen",

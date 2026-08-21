@@ -23,6 +23,43 @@ import static org.junit.jupiter.api.Assertions.*;
 class GeltungsbereichTest {
 
     @Test
+    @DisplayName("Mehrere scope-Angaben: die mit dem Repository zaehlt")
+    void mehrereAngaben() {
+        // Genau das schickt Docker beim Ziehen - und genau daran ist die
+        // erste Fassung gescheitert:
+        //
+        //   ?scope=%2A&scope=repository%3Ahoerjetzt%2Fcore%3Apull&service=...
+        //
+        // Wer nur die erste Angabe liest, bekommt "*", kann es nicht
+        // zuordnen, haelt die Anfrage fuer eine blosse Anmeldung und laesst
+        // sie UNGEPRUEFT durch. Ein Audio-Knoten haette so einen Token fuer
+        // den Core bekommen.
+        assertEquals("/v2/hoerjetzt/core/manifests/",
+                TorController.geltungsbereich(
+                        "/v2/token?scope=%2A&scope=repository%3Ahoerjetzt%2Fcore%3Apull"
+                        + "&service=container_registry"));
+    }
+
+    @Test
+    @DisplayName("Nur Stern: die ganze Registry, und die gibt es nicht")
+    void nurStern() {
+        // Muss einen Pfad liefern, den Pfadrechte ablehnt - nicht null.
+        // null hiesse "blosse Anmeldung" und kaeme durch.
+        assertEquals(TorController.ALLES,
+                TorController.geltungsbereich("/v2/token?scope=%2A&service=container_registry"));
+        assertNotNull(TorController.geltungsbereich("/v2/token?scope=*"));
+    }
+
+    @Test
+    @DisplayName("Der Stern hebt eine echte Angabe nicht auf")
+    void sternUndRepo() {
+        // Reihenfolge darf keine Rolle spielen.
+        assertEquals("/v2/hoerjetzt/lavalink/manifests/",
+                TorController.geltungsbereich(
+                        "/v2/token?scope=repository:hoerjetzt/lavalink:pull&scope=*"));
+    }
+
+    @Test
     @DisplayName("Der uebliche Fall")
     void ziehen() {
         assertEquals("/v2/hoerjetzt/core/manifests/",
