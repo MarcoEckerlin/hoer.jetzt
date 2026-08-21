@@ -9,6 +9,9 @@
 #   --kennung <name>    Kennung dieses Knotens (aus dem Updater)
 #   --token <hj-...>    Aufsetz-Token (aus dem Updater, gilt zwei Stunden)
 #   --update-host <fqdn>  Vorgabe: repository.hoer.jetzt
+#   --web-bind <adr>    Lauschadresse der Weboberflaeche (Vorgabe 0.0.0.0)
+#   --web-port <port>   Host-Port der Weboberflaeche (Vorgabe 8080)
+#   --privat-ip <adr>   Lauschadresse von Lavalink; sonst selbst ermittelt
 #   --pruefen           nur nachsehen, nichts aendern
 #
 # ---------------------------------------------------------------------------
@@ -66,6 +69,12 @@ KENNUNG=""
 TOKEN=""
 HJ_UPDATE_HOST="${HJ_UPDATE_HOST:-repository.hoer.jetzt}"
 NUR_PRUEFEN=false
+# Lauschadresse der Weboberflaeche. 0.0.0.0, weil ein frisch aufgesetzter
+# Knoten erreichbar sein soll - siehe die Begruendung weiter unten.
+WEB_BIND="${HJ_WEB_BIND:-0.0.0.0}"
+WEB_PORT_HOST="${HJ_WEB_PORT_HOST:-8080}"
+# Private Adresse fuer Lavalink. Leer heisst: selbst ermitteln.
+PRIVAT_IP="${HJ_PRIVAT_IP:-}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -73,11 +82,27 @@ while [[ $# -gt 0 ]]; do
         --kennung)          KENNUNG="${2:?Kennung angeben}"; shift 2 ;;
         --token)            TOKEN="${2:?Token angeben}"; shift 2 ;;
         --update-host)      HJ_UPDATE_HOST="${2:?Adresse angeben}"; shift 2 ;;
+        --web-bind)         WEB_BIND="${2:?Adresse angeben}"; shift 2 ;;
+        --web-port)         WEB_PORT_HOST="${2:?Port angeben}"; shift 2 ;;
+        --privat-ip)        PRIVAT_IP="${2:?Adresse angeben}"; shift 2 ;;
         --pruefen)          NUR_PRUEFEN=true; shift ;;
         -h|--help)          sed -n '2,20p' "$0"; exit 0 ;;
         *)                  fehler "Unbekannte Angabe: $1" ;;
     esac
 done
+
+# Die private Adresse einmal ermitteln - sie wird an zwei Stellen gebraucht:
+# beim Melden an den Update-Server und als Lauschadresse von Lavalink.
+#
+# Docker-eigene Bruecken ausschliessen: die liegen selbst im privaten Bereich
+# (172.17.x) und waeren hier die falsche Antwort.
+if [[ -z "$PRIVAT_IP" ]]; then
+    PRIVAT_IP="$(ip -4 -o addr show scope global 2>/dev/null \
+        | awk '$2 !~ /^(docker|br-|veth|lo)/ {print $4}' \
+        | cut -d/ -f1 \
+        | grep -E '^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)' \
+        | head -1 || true)"
+fi
 export HJ_UPDATE_HOST
 
 # ------------------------------------------------------- Module aufloesen
@@ -238,7 +263,7 @@ else
         -H "Content-Type: application/json" \
         -d "$(printf '{"kennung":"%s","token":"%s","rechnername":"%s","privatIp":"%s","ipv4":"%s","agentVersion":"2"}' \
               "$KENNUNG" "$TOKEN" "$(hostname -f 2>/dev/null || hostname)" \
-              "${HJ_PRIVAT_IP:-}" "$(curl -fsS --max-time 5 https://api.ipify.org 2>/dev/null || echo '')")" \
+              "$PRIVAT_IP" "$(curl -fsS --max-time 5 https://api.ipify.org 2>/dev/null || echo '')")" \
         "https://${HJ_UPDATE_HOST}/anmelden")" || fehler \
         "Anmeldung abgewiesen. Token abgelaufen (zwei Stunden) oder schon benutzt? Im Updater neu erzeugen."
 
@@ -268,6 +293,71 @@ fi
 # Drei Meldungen, drei Irrwege, eine fehlende Variable. Die Compose-Dateien
 # verlangen sie jetzt ausdruecklich, statt still auf etwas Fremdes zu zeigen.
 umgebung_setzen HJ_REGISTRY "${HJ_UPDATE_HOST}/hoerjetzt" || true
+
+# ------------------------------------------------- Lauschadresse der Weboberflaeche
+#
+# Die Compose-Datei bindet auf "${HJ_WEB_BIND:-127.0.0.1}". Dieser Vorgabewert
+# ist richtig fuer einen Host mit eigenem Reverse-Proxy davor - und falsch
+# fuer alles andere.
+#
+# install-node.sh hat den Wert nie gesetzt. Ein ueber bootstrap aufgesetzter
+# Knoten lauschte damit nur auf 127.0.0.1: die Weboberflaeche war weder ueber
+# die IP noch ueber einen Loadbalancer erreichbar. Von aussen sah es aus wie
+# ein toter Dienst, dabei lief der Container und antwortete - nur eben
+# ausschliesslich sich selbst.
+#
+# Der Fehler ist still: docker ps zeigt den Container als "Up", und im Log
+# steht nichts. Sichtbar wird er erst in
+#
+#   ss -tlnp | grep 8080     ->   127.0.0.1:8080 statt 0.0.0.0:8080
+#
+# Nur wo die Weboberflaeche ueberhaupt laeuft. Ein Audio-Knoten hat keine,
+# und ein Schluessel in der .env, den nichts liest, ist eine Spur, der
+# irgendwann jemand nachgeht.
+if printf '%s' "$MODULE" | grep -qE '(^| )(core|controller)( |$)'; then
+    umgebung_setzen HJ_WEB_BIND      "$WEB_BIND"      || true
+    umgebung_setzen HJ_WEB_PORT_HOST "$WEB_PORT_HOST" || true
+
+    # Docker umgeht ufw bei veroeffentlichten Ports: -p landet direkt in
+    # iptables, egal was ufw sagt. Bei 0.0.0.0 muss die Grenze deshalb
+    # ausserhalb des Hosts liegen - bei Hetzner die Cloud-Firewall, die
+    # davon unberuehrt ist. Wer stattdessen einen Proxy auf demselben Host
+    # faehrt, gibt "--web-bind 127.0.0.1" an.
+    if [[ "$WEB_BIND" == "0.0.0.0" ]]; then
+        sagen "Weboberflaeche auf 0.0.0.0:${WEB_PORT_HOST} - die Firewall muss"
+        sagen "ausserhalb des Hosts stehen (ufw greift bei Docker-Ports nicht)."
+    else
+        sagen "Weboberflaeche auf ${WEB_BIND}:${WEB_PORT_HOST}."
+    fi
+fi
+
+# ------------------------------------------------- Lauschadresse von Lavalink
+#
+# Dieselbe Falle wie bei der Weboberflaeche, nur eine Ebene tiefer: die
+# Compose-Datei bindet Lavalink auf "${HJ_PRIVAT_IP:-127.0.0.1}:2333", und
+# gesetzt hat den Wert niemand. Ein Audio-Knoten haette also nur sich selbst
+# bedient - der Kern auf einem anderen Host kaeme nicht an ihn heran, und im
+# Adminbereich stuende er als "nicht erreichbar", waehrend der Container
+# laeuft und das Log leer ist.
+#
+# Warum die private Adresse und nicht 0.0.0.0: Lavalinks einziger Schutz ist
+# das Passwort. Docker umgeht ufw bei veroeffentlichten Ports, ein -p landet
+# direkt in iptables. Auf 0.0.0.0 stuende der Dienst damit offen im Netz,
+# egal was ufw sagt.
+#
+# Findet sich keine private Adresse, bricht es ab. Das ist Absicht: ein
+# Knoten, der still auf 127.0.0.1 lauscht, kostet mehr Zeit als eine
+# Fehlermeldung beim Aufsetzen.
+if printf '%s' "$MODULE" | grep -qE '(^| )lavalink( |$)'; then
+    [[ -n "$PRIVAT_IP" ]] || fehler "Keine private Adresse gefunden.
+       Lavalink wuerde auf 127.0.0.1 lauschen und waere fuer den Kern
+       unerreichbar. Adresse angeben: --privat-ip 10.0.0.5
+       Vorhandene Adressen:
+$(ip -4 -o addr show scope global 2>/dev/null | awk '{printf "         %-10s %s\n", $2, $4}')"
+
+    umgebung_setzen HJ_PRIVAT_IP "$PRIVAT_IP" || true
+    sagen "Lavalink auf ${PRIVAT_IP}:2333 - nur aus dem privaten Netz."
+fi
 
 # ------------------------------------------- 4. Schluessel hinterlegen
 

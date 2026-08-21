@@ -343,6 +343,54 @@ jobs:
           done
           exit "$fehler"
 
+
+      # Ist ein frisch aufgesetzter Knoten ueberhaupt erreichbar?
+      #
+      # Die bestehende Pruefung "Wird jeder Pflichtwert gesetzt?" sieht nur
+      # Variablen mit ":?" - die brechen den Start ab, wenn sie fehlen. Genau
+      # deshalb hat sie HJ_WEB_BIND nie beanstandet: der hat einen
+      # Vorgabewert, und der lautet 127.0.0.1.
+      #
+      # install-node.sh setzte ihn nicht. Ein ueber bootstrap aufgesetzter
+      # Knoten lauschte damit nur auf sich selbst - die Weboberflaeche war
+      # weder ueber die IP noch ueber den Loadbalancer zu erreichen. Der
+      # Container lief, das Log war leer, docker ps sagte "Up".
+      #
+      # Ein Vorgabewert, der den Dienst unbrauchbar macht, ist gefaehrlicher
+      # als ein fehlender Wert: fehlt er, bricht es ab und man sucht sofort.
+      - name: Ist ein neuer Knoten erreichbar?
+        run: |
+          set -uo pipefail
+          fehler=0
+
+          # Welche Ports veroeffentlicht die Knoten-Compose, und mit welchem
+          # Vorgabewert als Adresse?
+          while read -r zeile; do
+              adresse="$(printf '%s' "$zeile" | grep -oE '\$\{[A-Z_]+:-[^}]*\}' | head -1 \
+                         | sed 's/.*:-//;s/}//')"
+              schluessel="$(printf '%s' "$zeile" | grep -oE '\$\{[A-Z_]+:-' | head -1 \
+                            | sed 's/\${//;s/:-//')"
+              [ -n "$schluessel" ] || continue
+              case "$adresse" in
+                  127.0.0.1|localhost|::1)
+                      if grep -q "umgebung_setzen ${schluessel}" deploy/install-node.sh; then
+                          printf 'ok   %-20s Vorgabe %s, aber install-node.sh setzt ihn\n' \
+                                 "$schluessel" "$adresse"
+                      else
+                          printf 'FEHL %-20s Vorgabe %s und niemand setzt ihn\n' \
+                                 "$schluessel" "$adresse"
+                          echo "     Der Dienst laeuft dann, ist aber von aussen tot."
+                          fehler=1
+                      fi
+                      ;;
+                  *)
+                      printf 'ok   %-20s Vorgabe %s\n' "$schluessel" "$adresse"
+                      ;;
+              esac
+          done < <(grep -E '^\s+- "\$\{[A-Z_]+:-' deploy/docker/docker-compose.yml)
+
+          exit "$fehler"
+
       # Baut ein Knoten noch selbst?
       #
       # Er kann es nicht: auf einem Knoten liegt kein Quellbaum. Ein
