@@ -603,6 +603,53 @@ eintragen, **ohne** Schreibrecht.
 
 ---
 
+## Datenbank umziehen oder zurückholen
+
+Die Daten liegen im Postgres-Container des Knotens, nicht auf dem Host. Ein
+Umzug ist deshalb Dump und Einspielen, keine Dateikopie.
+
+**1 — Auf dem Quellknoten sichern.**
+
+```bash
+bash /opt/hoerjetzt/main/deploy/sicherung.sh --nur-lokal
+ls -lh /opt/hoerjetzt/sicherungen/
+```
+
+**2 — Datei auf das Ziel bringen.**
+
+```bash
+scp /opt/hoerjetzt/sicherungen/<datei>.sql.gz root@<ziel>:/root/
+```
+
+**3 — Auf dem Ziel einspielen.** Erst nachsehen, dann übernehmen:
+
+```bash
+bash /opt/hoerjetzt/main/deploy/uebernehmen.sh --datei /root/<datei>.sql.gz --pruefen
+```
+
+```bash
+bash /opt/hoerjetzt/main/deploy/uebernehmen.sh --datei /root/<datei>.sql.gz
+```
+
+Das Skript hält `core` und `web` an, sichert den jetzigen Stand, leert das
+Schema und spielt ein — beides in **einer** Transaktion. Bricht das Einspielen
+ab, steht die alte Datenbank unverändert da. Danach fährt es die Dienste wieder
+an und zeigt die Zeilenzahlen der größten Tabellen; daran erkennt man sofort,
+ob die richtige Datei drin ist.
+
+Der Weg zurück ist derselbe Befehl mit der Datei, die es vorher angelegt hat
+(`vor-uebernahme-*.sql.gz`).
+
+> **Nicht von Hand mit `docker compose` hantieren.** Fährt ein Knoten
+> Spock-Replikation, liegen die Daten im Volume `pgdaten-spock`; ohne
+> `-f docker-compose.spock.yml` greift die Basisdatei auf `postgres-daten` und
+> Postgres startet auf einem **leeren** Volume. Es sieht dann aus, als seien die
+> Daten weg. Die Skripte nehmen das Overlay von selbst mit.
+
+> **Nach dem Einspielen auf einem Spock-Knoten** müssen die Replikationssätze
+> neu gebaut werden: `bash deploy/spock-einrichten.sh`. Sonst repliziert er
+> einen Stand, den der andere Knoten nicht kennt. Das Skript weist darauf hin.
+
 ## Nachsehen, wenn etwas klemmt
 
 ```bash
