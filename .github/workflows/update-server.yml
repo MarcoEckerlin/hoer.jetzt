@@ -172,6 +172,40 @@ jobs:
           done < <(find deploy update-server -name "*.sh" | sort)
           exit "$fehler"
 
+
+      # Gibt es jede Tabelle, die der Java-Code anspricht?
+      #
+      # Anlass: AusweisDaten loeschte aus "knoten_ausweis" - eine Tabelle, die
+      # es nie gab. Das Geheimnis liegt als Spalte in "knoten". Die Anweisung
+      # warf, der Aufruf endete mit 500, und in der Oberflaeche sah es aus,
+      # als tue der Loeschknopf schlicht nichts: keine Meldung, und nach dem
+      # Neuladen stand der Knoten wieder da.
+      #
+      # Der Uebersetzer sieht so etwas nicht - SQL ist fuer ihn eine
+      # Zeichenkette. Und in den Proben kommt es nicht vor, weil die
+      # Datenbankschicht dort nicht laeuft.
+      - name: Sprechen die Abfragen vorhandene Tabellen an?
+        run: |
+          set -uo pipefail
+          schema=update-server/updater/src/main/resources/schema.sql
+          vorhanden="$(grep -ioE 'CREATE TABLE (IF NOT EXISTS )?[a-z_]+' "$schema" \
+                       | awk '{print $NF}' | sort -u)"
+          fehler=0
+          benutzt="$(grep -rhoE '(FROM|INTO|UPDATE|DELETE FROM|JOIN) +[a-z_]+' \
+                     update-server/updater/src/main/java --include='*.java' \
+                     | awk '{print $NF}' | sort -u)"
+          for t in $benutzt; do
+              # SQL-Schluesselwoerter und Unterabfragen aussortieren.
+              case "$t" in select|values|set|where|dual|"") continue ;; esac
+              if echo "$vorhanden" | grep -qx "$t"; then
+                  printf 'ok   %s\n' "$t"
+              else
+                  printf 'FEHL %s wird angesprochen, steht aber nicht im Schema\n' "$t"
+                  fehler=1
+              fi
+          done
+          exit "$fehler"
+
       - name: shellcheck
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck

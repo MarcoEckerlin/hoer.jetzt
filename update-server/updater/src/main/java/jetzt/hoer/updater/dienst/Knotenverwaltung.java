@@ -42,11 +42,14 @@ public class Knotenverwaltung {
     private final AnmeldungDaten anmeldungen;
     private final VerwaltungDaten protokoll;
     private final Zugang zugang;
+    private final jetzt.hoer.updater.daten.SchluesselDaten schluessel;
     private final SecureRandom zufall = new SecureRandom();
 
     public Knotenverwaltung(KnotenDaten knoten, AusweisDaten ausweise,
                            AnmeldungDaten anmeldungen, VerwaltungDaten protokoll,
-                           Zugang zugang) {
+                           Zugang zugang,
+                           jetzt.hoer.updater.daten.SchluesselDaten schluessel) {
+        this.schluessel = schluessel;
         this.knoten = knoten;
         this.ausweise = ausweise;
         this.anmeldungen = anmeldungen;
@@ -241,6 +244,7 @@ public class Knotenverwaltung {
     public void entfernen(String kennung, String wer) {
         anmeldungen.alleWiderrufen(kennung);
         ausweise.entfernen(kennung);
+        schluessel.entfernen(kennung);
         knoten.loeschen(kennung);
         zugang.verwerfen();
         protokoll.merken(wer, "Knoten entfernt", kennung, "vollstaendig", "");

@@ -283,3 +283,77 @@ button.gefahr:hover {
     background: var(--schlecht);
     border-color: var(--schlecht);
 }
+
+/* ------------------------------------------------------------------------
+   Das Verwalten-Menue je Knoten.
+
+   Vorher lagen sieben bis zehn Formulare flach in einer Tabellenzelle. Der
+   Browser bricht sie um, wo gerade Platz ist - die Reihenfolge wirkte
+   zufaellig, und "entfernen" stand mitten zwischen "In Wartung" und einem
+   Modulknopf.
+   ------------------------------------------------------------------------ */
+
+details.aktionen > summary {
+    display: inline-block;
+    cursor: pointer;
+    padding: .35rem .8rem;
+    border: 1px solid var(--rand);
+    border-radius: 4px;
+    color: var(--leise);
+    background: var(--flaeche);
+    white-space: nowrap;
+    /* Das Dreieck des Systems weg - es sitzt je nach Browser woanders und
+       macht die Knopfbreite unruhig. Der Zustand ist am offenen Kasten
+       darunter ohnehin ablesbar. */
+    list-style: none;
+}
+details.aktionen > summary::-webkit-details-marker { display: none; }
+details.aktionen > summary:hover { color: var(--text); border-color: var(--akzent); }
+details.aktionen[open] > summary {
+    color: var(--text);
+    border-color: var(--akzent);
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+.aktionen-inhalt {
+    border: 1px solid var(--akzent);
+    border-top: 0;
+    border-radius: 0 4px 4px 4px;
+    padding: .7rem .8rem .8rem;
+    background: var(--flaeche);
+    min-width: 22rem;
+}
+
+.aktionsgruppe {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .35rem;
+    align-items: center;
+    padding: .5rem 0;
+}
+.aktionsgruppe + .aktionsgruppe { border-top: 1px solid var(--rand); }
+.aktionsgruppe form { margin: 0; display: inline-flex; gap: .25rem; align-items: center; }
+
+/* Die Ueberschrift steht auf einer eigenen Zeile - sonst wandert sie beim
+   Umbrechen zwischen die Knoepfe und sieht aus wie einer. */
+.aktionstitel {
+    flex-basis: 100%;
+    font-size: .78rem;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--leise);
+    margin-bottom: .15rem;
+}
+
+/* Was sich nicht zurueckholen laesst, sitzt unten und ist als solches
+   erkennbar - nicht durch eine Warnfarbe auf allem, sondern durch die
+   Ueberschrift und einen roten Rand an der Gruppe. */
+.gefahrbereich { border-top-color: color-mix(in srgb, var(--schlecht) 40%, var(--rand)); }
+.gefahrbereich .aktionstitel { color: var(--schlecht); }
+
+/* Ein aktives Modul ist gesetzt, kein Angebot. */
+button.schlicht.an {
+    color: var(--gut);
+    border-color: color-mix(in srgb, var(--gut) 40%, var(--rand));
+}

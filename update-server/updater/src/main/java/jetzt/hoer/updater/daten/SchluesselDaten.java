@@ -49,6 +49,19 @@ public class SchluesselDaten {
      * Schluesseln, und {@link #aktueller} muesste raten, welcher gemeint
      * ist.</p>
      */
+    /**
+     * Alle Schluessel eines Knotens entfernen.
+     *
+     * <p>Gehoert zum vollstaendigen Entfernen. Bleibt der oeffentliche
+     * Schluessel liegen, bekommt ein spaeter unter demselben Namen angelegter
+     * Knoten einen Tresor, den nur der alte Host oeffnen kann - und niemand
+     * sucht die Ursache in einer Tabelle, die es laengst nicht mehr geben
+     * sollte.</p>
+     */
+    public void entfernen(String kennung) {
+        db.sql("DELETE FROM knoten_schluessel WHERE kennung = ?").param(kennung).update();
+    }
+
     public void hinterlegen(String kennung, Zweck zweck, String oeffentlichPem) {
         String jetzt = Zeiten.text(Instant.now());
         db.sql("""

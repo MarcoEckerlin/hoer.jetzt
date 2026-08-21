@@ -135,9 +135,18 @@ public class AusweisDaten {
      * auftauchte. "Entfernen" hiess also "kurz ausblenden".</p>
      */
     public void entfernen(String kennung) {
+        // Nur die Zuordnungstabellen.
+        //
+        // Hier stand eine dritte Zeile auf "knoten_ausweis" - eine Tabelle,
+        // die es nicht gibt. Das Geheimnis liegt als Spalte in "knoten", und
+        // diese Zeile loescht Knotenverwaltung.entfernen() gleich danach.
+        //
+        // Folge des Fehlers: die Anweisung warf, der Aufruf endete mit 500,
+        // und in der Oberflaeche sah es aus, als tue der Knopf nichts. Kein
+        // Fehler, keine Meldung - der Knoten stand nach dem Neuladen einfach
+        // wieder da.
         db.sql("DELETE FROM knoten_modul WHERE kennung = ?").param(kennung).update();
         db.sql("DELETE FROM knoten_faehigkeit WHERE kennung = ?").param(kennung).update();
-        db.sql("DELETE FROM knoten_ausweis WHERE kennung = ?").param(kennung).update();
     }
 
     public int mitEigenemGeheimnis() {

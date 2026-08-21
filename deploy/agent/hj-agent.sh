@@ -155,9 +155,22 @@ fi
 geaendert=0
 if hat_modul core; then
     # Shards gehen nur den Core etwas an. Ein reiner Audio-Knoten hat keine.
-    umgebung_setzen HJ_SHARDS_GESAMT "$soll_gesamt" && geaendert=1
-    umgebung_setzen HJ_SHARD_VON     "$soll_von"    && geaendert=1
-    umgebung_setzen HJ_SHARD_BIS     "$soll_bis"    && geaendert=1
+    #
+    # Ein Controller ebenfalls nicht: er laeuft im Einzelbetrieb.
+    #
+    # Er betreibt keinen Discord-Bot (HJ_ROLLE=controller schaltet ihn ab),
+    # also gibt es fuer ihn nichts zu shardsen. Bekaeme er trotzdem eine
+    # Zuteilung, zaehlte er in der Gesamtrechnung mit - die uebrigen Knoten
+    # teilten sich dann weniger Shards, als es Bots gibt, und ein Teil der
+    # Discord-Server bliebe unbedient. Der Fehler saehe aus wie ein Ausfall
+    # einzelner Server und nicht wie eine Rechnung, die nicht aufgeht.
+    if [[ "${HJ_ROLLE:-}" == "controller" ]]; then
+        : # Einzelbetrieb - keine Shard-Zuteilung.
+    else
+        umgebung_setzen HJ_SHARDS_GESAMT "$soll_gesamt" && geaendert=1
+        umgebung_setzen HJ_SHARD_VON     "$soll_von"    && geaendert=1
+        umgebung_setzen HJ_SHARD_BIS     "$soll_bis"    && geaendert=1
+    fi
 fi
 
 # ----------------------------------------------------------------- Release

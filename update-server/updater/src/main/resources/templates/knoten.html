@@ -173,52 +173,79 @@
                     <button type="submit" class="schlicht">Neuer Token</button>
                 </form>
 
-                <form th:action="@{'/knoten/' + ${k.kennung} + '/wartung'}" method="post">
-                    <input type="hidden" name="an" th:value="${!k.inWartung}">
-                    <input type="text" name="grund" th:unless="${k.inWartung}"
-                           placeholder="Grund" size="12">
-                    <button type="submit" class="schlicht"
-                            th:text="${k.inWartung} ? 'Wartung beenden' : 'In Wartung'"></button>
-                </form>
-
-                <form th:action="@{'/knoten/' + ${k.kennung} + '/sperren'}" method="post">
-                    <input type="hidden" name="an" th:value="${!k.gesperrt}">
-                    <input type="text" name="grund" th:unless="${k.gesperrt}"
-                           placeholder="Grund" size="12">
-                    <button type="submit" class="schlicht"
-                            th:text="${k.gesperrt} ? 'Entsperren' : 'Sperren'"></button>
-                </form>
-
                 <!--
-                  Module einzeln umschalten. Bewusst je Modul ein Knopf statt
-                  eines Formulars mit Speichern: eine halb ausgefuellte Maske,
-                  die beim Absenden Rechte entzieht, die man gar nicht anfassen
-                  wollte, ist an dieser Stelle die teurere Bequemlichkeit.
-                -->
-                <form th:each="m : ${module}"
-                      th:action="@{'/knoten/' + ${k.kennung} + '/modul'}" method="post">
-                    <input type="hidden" name="modul" th:value="${m.name()}">
-                    <input type="hidden" name="an"
-                           th:value="${!moduleJeKnoten.get(k.kennung).contains(m)}">
-                    <button type="submit" class="schlicht klein"
-                            th:classappend="${moduleJeKnoten.get(k.kennung).contains(m)} ? 'an'"
-                            th:text="(${moduleJeKnoten.get(k.kennung).contains(m)} ? '&minus; ' : '+ ')
-                                     + ${m.anzeige()}"></button>
-                </form>
+                  Alles Handelnde hinter einem Aufklapper.
 
-                <form th:action="@{'/knoten/' + ${k.kennung} + '/geheimnis'}" method="post">
-                    <button type="submit" class="schlicht">Geheimnis tauschen</button>
-                </form>
+                  Vorher lagen sieben bis zehn Formulare flach nebeneinander
+                  in der Zelle - Wartung, Sperren, ein Knopf je Modul,
+                  Geheimnis, Entfernen. Der Browser bricht sie um, wo gerade
+                  Platz ist; die Reihenfolge wirkte zufaellig, und das
+                  Gefaehrlichste stand mitten zwischen dem Alltaeglichen.
 
-                <!--
-                  Entfernen gehoert hierher, nicht nur in die Uebersicht.
-                  Wer einen Knoten anlegt, legt ihn hier an - und wer sich
-                  vertippt hat, sucht den Weg zurueck an derselben Stelle.
+                  <details> statt eigener Klapp-Logik: der Browser kann das,
+                  es funktioniert ohne JavaScript, und die Tastaturbedienung
+                  ist schon richtig.
+
+                  Sortiert nach Haeufigkeit und Tragweite - was man oft tut,
+                  steht oben; was nicht rueckholbar ist, unten und abgesetzt.
                 -->
-                <form th:action="@{'/knoten/' + ${k.kennung} + '/loeschen'}" method="post"
-                      onsubmit="return confirm('Knoten entfernen? Ausweis, Module und offene Token gehen mit - er kommt nicht von selbst zurueck.');">
-                    <button type="submit" class="gefahr">entfernen</button>
-                </form>
+                <details class="aktionen">
+                    <summary>Verwalten</summary>
+                    <div class="aktionen-inhalt">
+
+                        <div class="aktionsgruppe">
+                            <span class="aktionstitel">Betrieb</span>
+                            <form th:action="@{'/knoten/' + ${k.kennung} + '/wartung'}" method="post">
+                                <input type="hidden" name="an" th:value="${!k.inWartung}">
+                                <input type="text" name="grund" th:unless="${k.inWartung}"
+                                       placeholder="Grund" size="14">
+                                <button type="submit" class="schlicht"
+                                        th:text="${k.inWartung} ? 'Wartung beenden' : 'In Wartung'"></button>
+                            </form>
+                            <form th:action="@{'/knoten/' + ${k.kennung} + '/sperren'}" method="post">
+                                <input type="hidden" name="an" th:value="${!k.gesperrt}">
+                                <input type="text" name="grund" th:unless="${k.gesperrt}"
+                                       placeholder="Grund" size="14">
+                                <button type="submit" class="schlicht"
+                                        th:text="${k.gesperrt} ? 'Entsperren' : 'Sperren'"></button>
+                            </form>
+                        </div>
+
+                        <div class="aktionsgruppe">
+                            <span class="aktionstitel">Module</span>
+                            <!--
+                              Je Modul ein Knopf statt eines Formulars mit
+                              Speichern: eine halb ausgefuellte Maske, die beim
+                              Absenden Rechte entzieht, die man gar nicht
+                              anfassen wollte, ist hier die teurere
+                              Bequemlichkeit.
+                            -->
+                            <form th:each="m : ${module}"
+                                  th:action="@{'/knoten/' + ${k.kennung} + '/modul'}" method="post">
+                                <input type="hidden" name="modul" th:value="${m.name()}">
+                                <input type="hidden" name="an"
+                                       th:value="${!moduleJeKnoten.get(k.kennung).contains(m)}">
+                                <button type="submit" class="schlicht klein"
+                                        th:classappend="${moduleJeKnoten.get(k.kennung).contains(m)} ? 'an'"
+                                        th:text="(${moduleJeKnoten.get(k.kennung).contains(m)} ? '&minus; ' : '+ ')
+                                                 + ${m.anzeige()}"></button>
+                            </form>
+                        </div>
+
+                        <div class="aktionsgruppe gefahrbereich">
+                            <span class="aktionstitel">Ohne Rueckweg</span>
+                            <form th:action="@{'/knoten/' + ${k.kennung} + '/geheimnis'}" method="post"
+                                  onsubmit="return confirm('Geheimnis tauschen? Der Knoten ist ausgesperrt, bis der neue Wert bei ihm in der .env steht.');">
+                                <button type="submit" class="schlicht">Geheimnis tauschen</button>
+                            </form>
+                            <form th:action="@{'/knoten/' + ${k.kennung} + '/loeschen'}" method="post"
+                                  onsubmit="return confirm('Knoten entfernen? Module, Schluessel und offene Token gehen mit - er kommt nicht von selbst zurueck.');">
+                                <button type="submit" class="gefahr">entfernen</button>
+                            </form>
+                        </div>
+
+                    </div>
+                </details>
             </td>
         </tr>
         </tbody>
