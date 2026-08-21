@@ -8,6 +8,7 @@ import jetzt.hoer.updater.daten.VerwaltungDaten;
 import jetzt.hoer.updater.daten.ZugriffDaten;
 import jetzt.hoer.updater.dienst.Knotenverwaltung;
 import jetzt.hoer.updater.dienst.Netzbereich;
+import jetzt.hoer.updater.dienst.Releaseverwaltung;
 import jetzt.hoer.updater.dienst.Torwaechter;
 import jetzt.hoer.updater.dienst.Zugang;
 import jetzt.hoer.updater.modell.Knoten;
@@ -43,6 +44,7 @@ public class PultController {
     private final VerwaltungDaten protokoll;
     private final Knotenverwaltung verwaltung;
     private final Zugang zugang;
+    private final Releaseverwaltung releases;
     /**
      * Die Zone, in der die Datumsfelder dieser Oberflaeche gemeint sind.
      *
@@ -62,7 +64,9 @@ public class PultController {
                           AusweisDaten ausweise, AnmeldungDaten anmeldungen,
                           VerwaltungDaten protokoll, Knotenverwaltung verwaltung,
                           Zugang zugang,
-                          @org.springframework.beans.factory.annotation.Value("${hj.update-host:repository.hoer.jetzt}") String updateHost) {
+                          @org.springframework.beans.factory.annotation.Value("${hj.update-host:repository.hoer.jetzt}") String updateHost,
+                          Releaseverwaltung releases) {
+        this.releases = releases;
         this.updateHost = updateHost;
         this.freigaben = freigaben;
         this.knoten = knoten;
@@ -101,16 +105,26 @@ public class PultController {
         return "redirect:/";
     }
 
+    /**
+     * Einen Knoten zum Update vormerken.
+     *
+     * <p>Der Knopf steht auf zwei Seiten - der Uebersicht und den Releases.
+     * Ohne {@code zurueck} landete man von den Releases aus jedesmal auf der
+     * Uebersicht und muesste sich zurueckklicken. Das Ziel wird gegen eine
+     * feste Liste geprueft: ein Formularfeld, das ungeprueft in ein Redirect
+     * geht, ist eine offene Weiterleitung.</p>
+     */
     @PostMapping("/knoten/{kennung}/update")
     public String updateAnfordern(@PathVariable String kennung,
                                   @RequestParam(defaultValue = "true") boolean an,
+                                  @RequestParam(defaultValue = "/") String zurueck,
                                   RedirectAttributes hinweis) {
         knoten.updateAnfordern(kennung, an);
         hinweis.addFlashAttribute("meldung", an
                 ? "Vorgemerkt. Der Knoten holt es beim naechsten Herzschlag ab - "
                   + "es geht keine Verbindung von hier zu ihm."
                 : "Vormerkung zurueckgenommen.");
-        return "redirect:/";
+        return "redirect:" + ("/releases".equals(zurueck) ? "/releases" : "/");
     }
 
     /**
@@ -132,6 +146,110 @@ public class PultController {
                 + "Er kommt nicht von selbst zurueck.");
         return "redirect:/knoten";
     }
+
+    // ------------------------------------------------------------ Releases
+
+    /**
+     * Was gilt, was galt, und wer worauf steht.
+     *
+     * <p>Die Knotenliste steht mit auf der Seite, weil die eine Frage die
+     * andere nach sich zieht: "welcher Stand gilt" ist nur interessant,
+     * wenn man daneben sieht, wer ihn schon hat.</p>
+     */
+    @GetMapping("/releases")
+    public String releases(Model modell) {
+        Instant jetzt = Instant.now();
+        List<Knoten> liste = knoten.alle();
+        String laeuft = releases.laufendeVersion();
+
+        modell.addAttribute("laufend", releases.laufend());
+        modell.addAttribute("verlauf", releases.verlaufListe());
+        modell.addAttribute("knoten", liste);
+        modell.addAttribute("jetzt", jetzt);
+        modell.addAttribute("laeuft", laeuft);
+
+        // Wie viele haengen zurueck? Zahl statt Suchen: das ist die Frage,
+        // wegen der man diese Seite aufmacht.
+        modell.addAttribute("veraltet", liste.stream()
+                .filter(k -> k.version() != null && !k.version().isBlank())
+                .filter(k -> !laeuft.isBlank() && !laeuft.equals(k.version()))
+                .count());
+        modell.addAttribute("unbekannt", liste.stream()
+                .filter(k -> k.version() == null || k.version().isBlank())
+                .count());
+        return "releases";
+    }
+
+    /**
+     * Auf einen frueheren Stand zurueck.
+     *
+     * <p>Schaltet nur das Manifest um. Es geht keine Verbindung von hier zu
+     * den Knoten - sie holen es beim naechsten Herzschlag. Wer es eilig hat,
+     * merkt sie zusaetzlich zum Update vor.</p>
+     */
+    @PostMapping("/releases/{version}/zurueck")
+    public String zurueckrollen(@PathVariable String version,
+                                @RequestParam(defaultValue = "false") boolean vormerken,
+                                java.security.Principal wer,
+                                RedirectAttributes hinweis) {
+        try {
+            releases.zurueckAuf(version, name(wer));
+            String text = "Zurueck auf " + version + ". ";
+            if (vormerken) {
+                text += alleVormerken() + " Knoten sind vorgemerkt und holen es beim "
+                        + "naechsten Herzschlag - sonst waere es erst nach dem "
+                        + "naechtlichen Lauf da.";
+            } else {
+                text += "Die Knoten holen es beim naechsten naechtlichen Lauf. "
+                        + "Schneller geht es mit 'und Knoten vormerken'.";
+            }
+            hinweis.addFlashAttribute("meldung", text);
+        } catch (IllegalArgumentException | IllegalStateException falsch) {
+            hinweis.addFlashAttribute("fehler", falsch.getMessage());
+        }
+        return "redirect:/releases";
+    }
+
+    /** Einen Stand aus dem Verlauf nehmen. Die Abbilder bleiben. */
+    @PostMapping("/releases/{version}/entfernen")
+    public String releaseEntfernen(@PathVariable String version,
+                                   java.security.Principal wer,
+                                   RedirectAttributes hinweis) {
+        try {
+            releases.entfernen(version, name(wer));
+            hinweis.addFlashAttribute("meldung",
+                    version + " ist aus dem Verlauf. Die Abbilder liegen weiter in der "
+                    + "Registry - nur der Zettel, welche zusammengehoerten, ist weg.");
+        } catch (IllegalArgumentException | IllegalStateException falsch) {
+            hinweis.addFlashAttribute("fehler", falsch.getMessage());
+        }
+        return "redirect:/releases";
+    }
+
+    /** Alle Knoten zum Update vormerken. */
+    @PostMapping("/releases/ausrollen")
+    public String ausrollen(RedirectAttributes hinweis) {
+        hinweis.addFlashAttribute("meldung",
+                alleVormerken() + " Knoten vorgemerkt. Sie holen den Stand beim naechsten "
+                + "Herzschlag ab - es geht keine Verbindung von hier zu ihnen.");
+        return "redirect:/releases";
+    }
+
+    /**
+     * Jeden Knoten zum Update vormerken.
+     *
+     * <p>Vormerken und nicht anstossen: von hier geht keine Verbindung zu den
+     * Knoten. Sie stehen hinter fremdem NAT und fragen selbst nach.</p>
+     */
+    private int alleVormerken() {
+        int wieViele = 0;
+        for (Knoten k : knoten.alle()) {
+            knoten.updateAnfordern(k.kennung(), true);
+            wieViele++;
+        }
+        return wieViele;
+    }
+
 
     // ------------------------------------------------------- Knotenverwaltung
 

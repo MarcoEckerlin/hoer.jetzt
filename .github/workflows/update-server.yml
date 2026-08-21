@@ -277,6 +277,49 @@ jobs:
           exit "$fehler"
 
 
+      # Ist die Kennung des Updaters ueberall dieselbe?
+      #
+      # Dem Updater gehoert "release/" im Auslieferungsvolumen - er schaltet
+      # dort beim Zurueckrollen "release/aktuell" um. Die Kennung dafuer steht
+      # an drei Stellen: das Dockerfile legt den Benutzer an, lib.sh setzt die
+      # Rechte beim Veroeffentlichen, update.sh zieht sie bei Bestands-
+      # installationen nach.
+      #
+      # Laufen sie auseinander, faellt das nirgends auf: der Bau geht durch,
+      # die Proben laufen, der Dienst startet. Erst beim Zurueckrollen kommt
+      # ein "Permission denied" aus einer Schicht, in der niemand sucht - und
+      # zwar genau in dem Moment, in dem man zurueckrollen will.
+      - name: Kennung des Updaters
+        run: |
+          set -uo pipefail
+          fehler=0
+
+          docker_uid="$(grep -oE '\-\-uid [0-9]+' update-server/updater/Dockerfile \
+                        | grep -oE '[0-9]+' | head -1)"
+          lib_uid="$(grep -oE '^AUS_BESITZER="\$\{AUS_BESITZER:-[0-9]+\}"' \
+                     update-server/lib.sh | grep -oE '[0-9]+' | head -1)"
+          update_uid="$(grep -oE 'chown -R [0-9]+:[0-9]+ /aus/release' \
+                        update-server/update.sh | grep -oE '[0-9]+' | head -1)"
+
+          for paar in "Dockerfile:$docker_uid" "lib.sh:$lib_uid" "update.sh:$update_uid"; do
+              if [ -z "${paar#*:}" ]; then
+                  echo "FEHL keine Kennung in ${paar%%:*} gefunden - Pruefung anpassen."
+                  fehler=1
+              fi
+          done
+
+          if [ "$fehler" -eq 0 ] \
+             && [ "$docker_uid" = "$lib_uid" ] && [ "$lib_uid" = "$update_uid" ]; then
+              echo "ok   Kennung ${docker_uid} in Dockerfile, lib.sh und update.sh"
+          elif [ "$fehler" -eq 0 ]; then
+              echo "FEHL Kennungen laufen auseinander:"
+              echo "     Dockerfile ${docker_uid}, lib.sh ${lib_uid}, update.sh ${update_uid}"
+              echo "     Zurueckrollen ueber die Oberflaeche scheitert dann an den Rechten."
+              fehler=1
+          fi
+          exit "$fehler"
+
+
       # Sind die Vorlagen strukturell heil?
       #
       # Anlass: eine awk-Ersetzung hat knoten.html von 235 auf 36 Zeilen

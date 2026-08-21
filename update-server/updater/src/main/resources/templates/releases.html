@@ -1,0 +1,138 @@
+<!doctype html>
+<html xmlns:th="http://www.thymeleaf.org" lang="de">
+<head th:replace="~{grund :: kopf('Releases')}"></head>
+<body>
+<nav th:replace="~{grund :: navigation('releases')}"></nav>
+<main>
+    <div th:replace="~{grund :: meldungen}"></div>
+
+    <h1>Releases</h1>
+
+    <!-- Was gerade gilt. Die erste Frage an diese Seite. -->
+    <div th:if="${laufend}" class="einmalig">
+        <h2>Es gilt <span th:text="${laufend.version()}"></span></h2>
+        <p class="klein">
+            Abgelegt <span th:text="${#temporals.format(laufend.abgelegt(), 'dd.MM.yyyy HH:mm')}"></span>
+        </p>
+        <div>
+            <span th:each="t : ${laufend.teile()}" class="marke"
+                  th:text="${t.key} + ' ' + ${t.value}"></span>
+        </div>
+
+        <p class="klein" style="margin-top:.8rem">
+            <strong th:text="${veraltet}"></strong> Knoten stehen auf einem anderen Stand,
+            <strong th:text="${unbekannt}"></strong> haben sich noch nicht gemeldet.
+        </p>
+
+        <!--
+          Vormerken, nicht anstossen. Es geht keine Verbindung von hier zu
+          den Knoten - sie stehen hinter fremdem NAT und fragen selbst nach.
+          Der Knopf setzt also eine Marke, die der Agent beim naechsten Lauf
+          abholt. Das steht auch dabei, weil "Ausrollen" sonst nach einem
+          sofortigen Vorgang aussieht.
+        -->
+        <form th:action="@{/releases/ausrollen}" method="post" class="inline"
+              onsubmit="return confirm('Alle Knoten zum Update vormerken? Sie holen den Stand beim naechsten Herzschlag - hier passiert nichts sofort.');">
+            <button type="submit">Allen Knoten vormerken</button>
+        </form>
+    </div>
+
+    <div th:unless="${laufend}" class="lage">
+        <p class="warnung">
+            Es ist noch nichts veroeffentlicht. Auf dem Update-Server:
+        </p>
+        <pre class="befehl">bash update-server/hoer-update.sh release &lt;version&gt;</pre>
+    </div>
+
+    <!-- --------------------------------------------------- Wer steht wo -->
+    <h2>Wer steht worauf</h2>
+    <table th:unless="${#lists.isEmpty(knoten)}">
+        <thead>
+        <tr><th>Kennung</th><th>Stand</th><th>Zuletzt gesehen</th><th></th></tr>
+        </thead>
+        <tbody>
+        <tr th:each="k : ${knoten}" th:classappend="${k.stumm(jetzt)} ? 'stumm'">
+            <td><code th:text="${k.kennung}"></code></td>
+            <td>
+                <span th:if="${k.version == null or k.version.isEmpty()}" class="klein">
+                    noch nichts gemeldet
+                </span>
+                <span th:unless="${k.version == null or k.version.isEmpty()}"
+                      th:classappend="${k.version == laeuft} ? 'gut' : 'warnung'"
+                      th:text="${k.version}"></span>
+            </td>
+            <td class="klein" th:text="${k.zuletztGesehen} != null
+                    ? ${#temporals.format(k.zuletztGesehen, 'dd.MM. HH:mm')} : '&ndash;'"></td>
+            <td>
+                <form th:action="@{'/knoten/' + ${k.kennung} + '/update'}" method="post" class="inline">
+                    <input type="hidden" name="an" value="true">
+                    <input type="hidden" name="zurueck" value="/releases">
+                    <button type="submit" class="schlicht"
+                            th:disabled="${k.updateAngefordert}"
+                            th:text="${k.updateAngefordert} ? 'vorgemerkt' : 'vormerken'"></button>
+                </form>
+            </td>
+        </tr>
+        </tbody>
+    </table>
+
+    <!-- ------------------------------------------------------- Verlauf -->
+    <h2>Verlauf</h2>
+    <p class="klein">
+        Jedes veroeffentlichte Manifest wird hier abgelegt. Zurueckrollen heisst:
+        eines davon gilt wieder. Die Abbilder liegen ohnehin in der Registry &ndash;
+        was hier steht, ist die Angabe, welche zusammengehoeren.
+    </p>
+
+    <p th:if="${#lists.isEmpty(verlauf)}" class="leer">
+        Noch kein Verlauf. Er entsteht ab dem naechsten Release.
+    </p>
+
+    <table th:unless="${#lists.isEmpty(verlauf)}">
+        <thead>
+        <tr><th>Version</th><th>Abgelegt</th><th>Bestandteile</th><th></th></tr>
+        </thead>
+        <tbody>
+        <tr th:each="s : ${verlauf}">
+            <td>
+                <code th:text="${s.version()}"></code>
+                <span th:if="${s.gilt()}" class="marke gut">gilt</span>
+            </td>
+            <td class="klein" th:text="${s.abgelegt()} != null
+                    ? ${#temporals.format(s.abgelegt(), 'dd.MM.yyyy HH:mm')} : '&ndash;'"></td>
+            <td class="klein">
+                <span th:each="t : ${s.teile()}" class="marke"
+                      th:text="${t.key} + ' ' + ${t.value}"></span>
+            </td>
+            <td>
+                <div class="knopfreihe" th:unless="${s.gilt()}">
+                    <!--
+                      Zurueckrollen mit und ohne Vormerken.
+                      Ohne: das Manifest gilt, die Knoten holen es in der Nacht.
+                      Mit:  sie holen es beim naechsten Herzschlag.
+                      Beides steht als eigener Knopf da, weil "sofort" bei einem
+                      Rueckweg meist gemeint ist - aber nicht immer.
+                    -->
+                    <form th:action="@{'/releases/' + ${s.version()} + '/zurueck'}" method="post"
+                          onsubmit="return confirm('Auf diesen Stand zurueck? Das Manifest gilt sofort, die Knoten holen es in der Nacht.');">
+                        <input type="hidden" name="vormerken" value="false">
+                        <button type="submit" class="schlicht">zurueckrollen</button>
+                    </form>
+                    <form th:action="@{'/releases/' + ${s.version()} + '/zurueck'}" method="post"
+                          onsubmit="return confirm('Auf diesen Stand zurueck UND alle Knoten vormerken? Sie holen ihn dann beim naechsten Herzschlag.');">
+                        <input type="hidden" name="vormerken" value="true">
+                        <button type="submit" class="schlicht">zurueck und vormerken</button>
+                    </form>
+                    <form th:action="@{'/releases/' + ${s.version()} + '/entfernen'}" method="post"
+                          onsubmit="return confirm('Aus dem Verlauf entfernen? Die Abbilder bleiben in der Registry - nur der Zettel, welche zusammengehoerten, ist weg.');">
+                        <button type="submit" class="gefahr">entfernen</button>
+                    </form>
+                </div>
+            </td>
+        </tr>
+        </tbody>
+    </table>
+
+</main>
+</body>
+</html>

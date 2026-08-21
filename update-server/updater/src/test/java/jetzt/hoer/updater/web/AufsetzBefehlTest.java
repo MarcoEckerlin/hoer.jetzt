@@ -25,7 +25,7 @@ class AufsetzBefehlTest {
     /** Nur fuer den Befehlsbau - die Abhaengigkeiten braucht er nicht. */
     private final PultController pult = new PultController(
             null, null, null, null, null, null, null, null, null,
-            "repository.hoer.jetzt");
+            "repository.hoer.jetzt", null);
 
     @Test
     @DisplayName("Ein Befehl, alles drin")

@@ -369,6 +369,22 @@ done
     printf '%s' "$DIGESTS"
 } | aus_schreiben "release/aktuell" || fail "Manifest liess sich nicht schreiben."
 
+# Dasselbe Manifest in den Verlauf.
+#
+# Ohne das ginge Veroeffentlichen nur vorwaerts: "release/aktuell" wird
+# ueberschrieben, und damit ist die Angabe weg, welche Abbild-Marken zum
+# vorherigen Stand gehoerten. Die Abbilder liegen weiter in der Registry -
+# nur wusste niemand mehr, welche zusammengehoerten.
+#
+# Zurueckrollen ist damit das Zurueckkopieren einer Datei. Die Oberflaeche
+# unter /releases macht genau das.
+aus_lesen "release/aktuell" | aus_schreiben "release/verlauf/${VERSION}" \
+    || warn "Verlauf liess sich nicht schreiben - Zurueckrollen auf ${VERSION} geht dann nur von Hand."
+info "Im Verlauf abgelegt: ${VERSION}"
+
+# Beide Dateien gehoeren dem Updater: die Release-Seite rollt darueber zurueck.
+aus_uebergeben release
+
 info "release/aktuell zeigt auf ${VERSION}"
 
 # ------------------------------------------------------------------ 5  Probe

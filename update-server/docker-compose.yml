@@ -161,10 +161,13 @@ services:
       TZ: ${TZ:-Europe/Berlin}
     volumes:
       - updater-daten:/daten
-      # Nur lesend. Der Updater soll den Tresor verschluesseln koennen, aber
-      # nichts im Auslieferungsverzeichnis veraendern - das befuellen
-      # ausschliesslich veroeffentlichen.sh und tresor.sh.
-      - ausliefern:/srv/ausliefern:ro
+      # Schreibbar, aber nur dem Namen nach: dem Updater gehoert dort einzig
+      # "release/" (siehe AUS_BESITZER in lib.sh). Er braucht es fuers
+      # Zurueckrollen - "release/aktuell" ist die Datei, die Caddy an die
+      # Knoten ausliefert, und die muss beim Rollback umschalten. "knoten/"
+      # und "tresor/" gehoeren weiter root; die Dateirechte ziehen die Grenze,
+      # nicht der Mount.
+      - ausliefern:/srv/ausliefern
     ports:
       - "${HJ_PULT_BIND:-0.0.0.0}:${HJ_PULT_PORT:-8090}:8081"
     networks: [hj-update]

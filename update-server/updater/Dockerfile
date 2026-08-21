@@ -23,7 +23,13 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 
-RUN useradd --system --create-home --home-dir /app --shell /usr/sbin/nologin updater
+# Kennung fest, nicht von useradd vergeben. Dem Updater gehoert "release/"
+# im Auslieferungsvolumen (siehe AUS_BESITZER in lib.sh); vergaebe useradd
+# bei jedem Neubau eine andere Nummer, passten die Rechte nach dem naechsten
+# Update nicht mehr und das Zurueckrollen liefe ins Leere.
+RUN groupadd --system --gid 1500 updater \
+    && useradd --system --uid 1500 --gid 1500 --create-home --home-dir /app \
+               --shell /usr/sbin/nologin updater
 WORKDIR /app
 
 COPY --from=bau /bau/target/updater.jar /app/updater.jar

@@ -56,6 +56,26 @@ zufall() { head -c 48 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | cut -c1-32; }
 AUS_VOLUME="${AUS_VOLUME:-hj-update_ausliefern}"
 AUS_HELFER="${AUS_HELFER:-alpine:3}"
 
+# Wem "release/" im Auslieferungsverzeichnis gehoert.
+#
+# Alles dort schreiben sonst nur veroeffentlichen.sh und tresor.sh, beide
+# als root. Seit es die Release-Seite gibt, muss auch der Updater ran: ein
+# Zurueckrollen schaltet "release/aktuell" um, und Caddy liefert genau diese
+# Datei an die Knoten aus. Ueber einen Umweg ginge das nicht.
+#
+# Statt ihm das ganze Verzeichnis zu oeffnen, gehoert ihm nur "release/".
+# "knoten/" und "tresor/" bleiben root - der Mount ist zwar schreibbar, die
+# Rechte sind aber die eigentliche Grenze. Die Kennung steht im Dockerfile
+# des Updaters fest; ohne das vergaebe useradd bei jedem Neubau eine andere
+# und die Rechte passten nach einem Update nicht mehr.
+AUS_BESITZER="${AUS_BESITZER:-1500}"
+
+# aus_uebergeben <pfad>   Pfad dem Updater ueberschreiben.
+aus_uebergeben() {
+    aus_docker sh -c "chown -R ${AUS_BESITZER}:${AUS_BESITZER} '$1'" >/dev/null 2>&1 \
+        || warn "Rechte an '$1' liessen sich nicht setzen - Zurueckrollen ueber die Oberflaeche geht dann nicht."
+}
+
 aus_docker() {
     docker run --rm -i -v "${AUS_VOLUME}:/aus" -w /aus "$AUS_HELFER" "$@"
 }

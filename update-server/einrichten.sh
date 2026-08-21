@@ -526,6 +526,8 @@ rm -rf "$BUENDEL" "${BUENDEL}.tar.gz"
 step "Caddy und Updater starten"
 printf 'noch nichts veroeffentlicht\n' | aus_schreiben release/aktuell \
     || fail "Auslieferungsverzeichnis nicht beschreibbar."
+# "release/" gehoert dem Updater - er schaltet es beim Zurueckrollen um.
+aus_uebergeben release
 info "Der Updater wird beim ersten Mal gebaut - das dauert ein paar Minuten."
 docker compose up -d --build || fail "Start fehlgeschlagen."
 

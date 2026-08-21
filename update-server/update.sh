@@ -144,6 +144,24 @@ if ! docker compose -f "$COMPOSE" up -d --build; then
        docker compose -f ${COMPOSE} logs --tail 40"
 fi
 
+# ------------------------------------------------- Rechte am Auslieferungsort
+#
+# Bestandsinstallationen haben "release/" root gehoerend - es entstand, als
+# dort nur veroeffentlichen.sh schrieb. Seit es die Release-Seite gibt, muss
+# der Updater "release/aktuell" beim Zurueckrollen umschalten koennen, und
+# das scheitert an den Rechten statt an einer Fehlermeldung, die man findet.
+#
+# Einmalig nachziehen. Spaetere Laeufe finden es schon richtig vor, und ein
+# Fehlschlag ist kein Grund, das Update abzubrechen - alles andere laeuft
+# auch ohne.
+sagen "Rechte am Auslieferungsverzeichnis"
+if docker run --rm -v hj-update_ausliefern:/aus alpine:3 \
+        sh -c 'mkdir -p /aus/release && chown -R 1500:1500 /aus/release' >/dev/null 2>&1; then
+    sagen "release/ gehoert dem Updater"
+else
+    warnen "Rechte nicht setzbar - Zurueckrollen ueber die Oberflaeche geht dann nicht"
+fi
+
 # ------------------------------------------------------------ Caddy erneuern
 
 # Der Container muss NEU ANGELEGT werden, nicht nur neu geladen.
