@@ -97,9 +97,51 @@
 	# "route" statt einfach untereinander: Caddy sortiert Direktiven sonst
 	# nach einer festen Rangfolge, und dabei kaeme der reverse_proxy vor die
 	# Pruefung - die liefe dann ins Leere.
+	# ------------------------------------------------------ Registry (/v2/)
+	#
+	# Forgejos Registry spricht den Docker-Token-Fluss, nicht Basic-Auth:
+	#
+	#   1. Docker fragt /v2/ ohne Anmeldung
+	#   2. Forgejo antwortet 401 mit
+	#      WWW-Authenticate: Bearer realm=".../v2/token"
+	#   3. Docker holt unter /v2/token mit Basic-Auth einen Bearer
+	#   4. Alle weiteren Anfragen tragen "Authorization: Bearer ..."
+	#
+	# Vorher stand hier ein einziges "import zugang" fuer alles. Der
+	# Torwaechter verlangt Basic - und wies damit ab Schritt 4 alles ab.
+	# Gemessen: Forgejo mit Bearer antwortet 200, ueber Caddy kam 401. Weder
+	# Pushen noch Ziehen hat je funktioniert.
+	#
+	# Deshalb zwei Wege mit verschiedenen Pruefungen:
+	#
+	#   /v2/token   Basic. Hier haengt die Rechtepruefung - der Bereich der
+	#               Anfrage sagt, um welches Abbild es geht, und
+	#               Pfadrechte entscheidet. Ein Audio-Knoten bekommt keinen
+	#               Token fuer core.
+	#
+	#   /v2/*       Bearer. Nur Adresspruefung. Den Bearer gibt es
+	#               ausschliesslich nach der Pruefung oben; er ist kurzlebig
+	#               und auf sein Repository beschraenkt. Ihn hier erneut zu
+	#               pruefen ginge nicht - er ist kein Passwort, das wir
+	#               kennen, sondern von Forgejo signiert.
+	#
+	# Die Rechtepruefung wird damit nicht schwaecher, sondern genauer: sie
+	# sitzt an der Stelle, an der die Berechtigung vergeben wird.
+	handle /v2/token* {
+		route {
+			forward_auth updater:8080 {
+				uri /intern/pruefen-token
+				copy_headers X-Knoten
+			}
+			reverse_proxy forgejo:3000
+		}
+	}
+
 	handle /v2/* {
 		route {
-			import zugang
+			forward_auth updater:8080 {
+				uri /intern/pruefen-abbild
+			}
 			reverse_proxy forgejo:3000 {
 				# Abbild-Schichten sind gross. Die Vorgabe von 30s wuerde den
 				# Upload beim Veroeffentlichen mittendrin abschneiden.

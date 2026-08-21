@@ -81,6 +81,143 @@ public class TorController {
      * seine Adresse freigeschaltet waere - das waere eine Auskunft ueber die
      * Freigabeliste an jeden, der anklopft.
      */
+    /**
+     * Die Token-Ausgabe der Registry - {@code /v2/token}.
+     *
+     * <h2>Warum es diesen zweiten Pruefpunkt braucht</h2>
+     *
+     * Forgejos Registry spricht den Docker-Token-Fluss. Auf die erste Anfrage
+     * antwortet sie mit
+     *
+     * <pre>
+     *   WWW-Authenticate: Bearer realm="https://.../v2/token", service="container_registry"
+     * </pre>
+     *
+     * Docker holt sich daraufhin unter {@code /v2/token} einen Bearer-Token
+     * und schickt alle weiteren Anfragen damit. Der Torwaechter erwartete
+     * aber ueberall Basic-Auth - und wies die Bearer-Anfragen ab. Weder
+     * Pushen noch Ziehen hat je funktioniert; gemessen: Forgejo antwortet mit
+     * Bearer 200, ueber Caddy kam 401.
+     *
+     * <h2>Wo die Rechtepruefung jetzt sitzt</h2>
+     *
+     * Genau hier. Der Token traegt seinen Geltungsbereich mit:
+     *
+     * <pre>
+     *   /v2/token?service=container_registry&amp;scope=repository:hoerjetzt/core:pull
+     * </pre>
+     *
+     * Daraus laesst sich das Modul lesen, und damit gilt dieselbe Regel wie
+     * fuer jeden anderen Pfad: ein Audio-Knoten bekommt keinen Token fuer
+     * {@code core}. Die Pruefung wandert also vom einzelnen Abruf an die
+     * Stelle, an der die Berechtigung vergeben wird - das ist genauer, nicht
+     * lockerer.
+     *
+     * <p>Was danach mit dem Bearer geholt wird, prueft
+     * {@link #pruefenAbbild} nur noch auf die Adresse. Das genuegt: den
+     * Bearer gibt es ausschliesslich nach dieser Pruefung hier, er ist
+     * kurzlebig und auf sein Repository beschraenkt.</p>
+     */
+    @RequestMapping(value = "/pruefen-token",
+                    method = {RequestMethod.GET, RequestMethod.HEAD})
+    public ResponseEntity<String> pruefenToken(
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String anmeldung,
+            @RequestHeader(value = "CF-Connecting-IP", required = false) String cloudflare,
+            @RequestHeader(value = "X-Forwarded-For", required = false) String weitergereicht,
+            @RequestHeader(value = "X-Forwarded-Uri", required = false) String uri,
+            HttpServletRequest anfrage) {
+
+        Optional<Ausweis> ausweis = zugang.anmelden(anmeldung);
+        if (ausweis.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .header(HttpHeaders.WWW_AUTHENTICATE, FORDERE_ANMELDUNG)
+                    .body("Passwort fehlt oder stimmt nicht.\n");
+        }
+
+        String adresse = vorfeld.adresse(anfrage.getRemoteAddr(), cloudflare, weitergereicht);
+        if (!torwaechter.darf(adresse, "/v2/token")) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body("Diese Adresse (" + adresse + ") ist nicht freigeschaltet.\n");
+        }
+
+        // Aus dem Geltungsbereich den Pfad bauen, den Pfadrechte kennt.
+        //
+        // "repository:hoerjetzt/core:pull" -> "/v2/hoerjetzt/core/"
+        //
+        // Ohne Geltungsbereich fragt Docker nur, ob es ueberhaupt hereindarf
+        // (der Anmeldevorgang). Das ist keine Anfrage nach einem bestimmten
+        // Abbild und wird deshalb durchgelassen - holen kann man damit
+        // nichts, der naechste Schritt nennt den Bereich.
+        String bereich = geltungsbereich(uri);
+        if (bereich != null && !Pfadrechte.darf(ausweis.get(), bereich)) {
+            String wer = ausweis.get().kennung();
+            log.info("Knoten {} abgewiesen fuer {} - fehlende Berechtigung.", wer, bereich);
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body("Dieser Knoten ist fuer " + bereich + " nicht berechtigt.\n");
+        }
+
+        ausweis.get().kennungOptional().ifPresent(knoten::gesehen);
+        return ResponseEntity.noContent()
+                .header(KNOTEN_KOPF, ausweis.get().kennungOptional().orElse(""))
+                .build();
+    }
+
+    /**
+     * Abbild-Schichten - {@code /v2/*} mit Bearer.
+     *
+     * <p>Prueft nur die Adresse. Die Berechtigung wurde bereits bei der
+     * Token-Ausgabe geprueft, und der Bearer gibt es ausschliesslich dort:
+     * er ist kurzlebig, auf ein Repository beschraenkt und von Forgejo
+     * signiert. Ihn hier ein zweites Mal zu pruefen ginge nicht - er ist
+     * kein Passwort, das wir kennen.</p>
+     *
+     * <p>Ohne diesen Weg gaebe es gar keinen: der Torwaechter verlangte
+     * ueberall Basic-Auth, und Docker schickt nach der Anmeldung nur noch
+     * Bearer.</p>
+     */
+    @RequestMapping(value = "/pruefen-abbild",
+                    method = {RequestMethod.GET, RequestMethod.HEAD, RequestMethod.POST})
+    public ResponseEntity<String> pruefenAbbild(
+            @RequestHeader(value = "CF-Connecting-IP", required = false) String cloudflare,
+            @RequestHeader(value = "X-Forwarded-For", required = false) String weitergereicht,
+            @RequestHeader(value = "X-Forwarded-Uri", required = false) String pfad,
+            HttpServletRequest anfrage) {
+
+        String adresse = vorfeld.adresse(anfrage.getRemoteAddr(), cloudflare, weitergereicht);
+        if (!torwaechter.darf(adresse, pfad)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body("Diese Adresse (" + adresse + ") ist nicht freigeschaltet.\n");
+        }
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Aus dem Geltungsbereich einer Token-Anfrage den Pfad ableiten.
+     *
+     * <p>{@code ?scope=repository:hoerjetzt/core:pull} wird zu
+     * {@code /v2/hoerjetzt/core/} - der Form, die {@link Pfadrechte} kennt.
+     * Gibt es keinen Geltungsbereich, liefert die Methode {@code null}: dann
+     * fragt Docker nur nach der Anmeldung als solcher.</p>
+     */
+    static String geltungsbereich(String uri) {
+        if (uri == null || !uri.contains("scope=")) {
+            return null;
+        }
+        String roh = uri.substring(uri.indexOf("scope=") + 6);
+        int ende = roh.indexOf('&');
+        if (ende >= 0) {
+            roh = roh.substring(0, ende);
+        }
+        roh = java.net.URLDecoder.decode(roh, java.nio.charset.StandardCharsets.UTF_8);
+
+        // repository:hoerjetzt/core:pull,push
+        String[] teile = roh.split(":");
+        if (teile.length < 2 || !"repository".equals(teile[0]) || teile[1].isBlank()) {
+            return null;
+        }
+        return "/v2/" + teile[1] + "/";
+    }
+
     @RequestMapping(value = "/pruefen",
                     method = {RequestMethod.GET, RequestMethod.HEAD, RequestMethod.POST})
     public ResponseEntity<String> pruefen(
