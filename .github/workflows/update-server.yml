@@ -141,6 +141,37 @@ jobs:
           fi
           exit "$fehler"
 
+
+      # Faengt jedes ausfuehrbare Skript mit einer Shebang an?
+      #
+      # Anlass: in veroeffentlichen.sh standen die ersten beiden Zeilen einer
+      # docker-build-Zeile ganz oben, und die Shebang war weg. bash fuehrte
+      # die Datei trotzdem aus - es meldete nur
+      #
+      #   veroeffentlichen.sh: line 1: -t: command not found
+      #
+      # und lief weiter. Der Schaden lag Wochen unbemerkt im Zweig, weil eine
+      # Syntaxpruefung ihn nicht sieht: die Datei IST syntaktisch gueltig, sie
+      # beginnt nur mit Unsinn.
+      #
+      # lib.sh ist ausgenommen: die Datei wird eingebunden und nicht
+      # ausgefuehrt, dort gehoert keine Shebang hin.
+      - name: Shebang und kein Vorspann
+        run: |
+          set -uo pipefail
+          fehler=0
+          while read -r f; do
+              case "$f" in */lib.sh|*/agent-lib.sh) continue ;; esac
+              erste="$(head -1 "$f")"
+              if [ "$erste" = "#!/usr/bin/env bash" ]; then
+                  printf 'ok   %s\n' "$f"
+              else
+                  printf 'FEHL %-42s erste Zeile: %s\n' "$f" "$erste"
+                  fehler=1
+              fi
+          done < <(find deploy update-server -name "*.sh" | sort)
+          exit "$fehler"
+
       - name: shellcheck
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
@@ -164,6 +195,14 @@ jobs:
       # Weiterleitung - die Ursache war eine Einrueckungsebene in dieser Datei.
       #
       # Die Umgebungswerte sind nur Platzhalter, damit die Pruefung durchlaeuft.
+      - name: Caddyfile validieren
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -e HJ_PORT_INTERN=8091 \
+            -v "${PWD}/update-server/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            caddy:2-alpine caddy validate --adapter caddyfile --config /etc/caddy/Caddyfile
+          echo "Caddyfile ok."
 
       # Holt bootstrap.sh das, was veroeffentlichen.sh ablegt?
       #
@@ -299,15 +338,6 @@ jobs:
               echo "Ein Knoten mit diesem Stand startet nicht - er bekommt den Wert nie."
           fi
           exit "$fehler"
-
-      - name: Caddyfile validieren
-        run: |
-          set -euo pipefail
-          docker run --rm \
-            -e HJ_PORT_INTERN=8091 \
-            -v "${PWD}/update-server/Caddyfile:/etc/caddy/Caddyfile:ro" \
-            caddy:2-alpine caddy validate --adapter caddyfile --config /etc/caddy/Caddyfile
-          echo "Caddyfile ok."
 
   compose:
     name: Compose-Dateien pruefen

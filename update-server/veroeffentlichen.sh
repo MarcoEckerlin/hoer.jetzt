@@ -1,5 +1,4 @@
-            -t "${REGISTRY_PUSH}/${teil}:${VERSION}" \
-            -t "${REGISTRY_PUSH}/${teil}:latest" \
+#!/usr/bin/env bash
 # hoer.jetzt - ein Release bauen und ausliefern.
 #
 #   bash veroeffentlichen.sh                 Version aus RELEASE nehmen
@@ -94,6 +93,59 @@ step "Release ${VERSION}"
 info "$(printf '%-12s %s' "Registry" "$REGISTRY")"
 info "$(printf '%-12s %s' "Hochladen" "$REGISTRY_PUSH")"
 info "$(printf '%-12s %s' "Quellen" "$QUELLEN")"
+
+# ------------------------------------------------------ 1b  Quellen bereitlegen
+#
+# Die Komponenten liegen in eigenen Zweigen, nicht in main.
+#
+# Auf einem Server, der ueber install-update-server.sh aufgesetzt wurde, ist
+# nur "main" ausgecheckt - der Rest fehlt, und "docker build" endet in
+#
+#   unable to prepare context: path "/opt/hoerjetzt/core" not found
+#
+# Die Forgejo-Pipeline holt sie sich selbst; von Hand aufgerufen tat das
+# niemand. Also holt das Skript sie jetzt selbst, auf genau den Stand, den
+# RELEASE nennt.
+#
+# Auf den Stand aus RELEASE und nicht auf die Zweigspitze: sonst baute ein
+# Release Code mit, der noch gar nicht dazugehoert - und die Versionsnummer
+# behauptete etwas, das nie so zusammen geprueft wurde.
+quellen_bereitlegen() {
+    local teil stand url
+    url="$(git -C "${QUELLEN}/main" remote get-url origin 2>/dev/null || true)"
+    [[ -n "$url" ]] || fail "${QUELLEN}/main ist keine Arbeitskopie - woher sollen die Zweige kommen?"
+
+    for teil in "${ALLE_KOMPONENTEN[@]}"; do
+        stand="$(grep "^${teil}=" "$MANIFEST_QUELLE" | cut -d= -f2- || true)"
+        [[ -n "$stand" ]] || fail "RELEASE nennt keinen Stand fuer ${teil}."
+
+        if [[ ! -d "${QUELLEN}/${teil}/.git" ]]; then
+            info "${teil}: Zweig wird geholt"
+            git clone -q --branch "$teil" --single-branch "$url" "${QUELLEN}/${teil}" \
+                || fail "Zweig ${teil} liess sich nicht holen.
+       Braucht dieser Server einen Lesezugang zu ${url}?"
+        fi
+
+        # Genau den Stand aus RELEASE. --hard, weil der Baum hier eine
+        # Bauflaeche ist und keine Werkstatt: oertliche Aenderungen daran
+        # waeren ohnehin nicht nachvollziehbar.
+        git -C "${QUELLEN}/${teil}" fetch -q origin "$stand" 2>/dev/null \
+            || git -C "${QUELLEN}/${teil}" fetch -q origin "$teil" \
+            || fail "${teil}: konnte ${stand} nicht holen."
+        git -C "${QUELLEN}/${teil}" checkout -q --detach "$stand" \
+            || fail "${teil}: Stand ${stand} gibt es nicht.
+       Steht er wirklich auf dem Server, von dem geklont wird?"
+
+        [[ -f "${QUELLEN}/${teil}/Dockerfile" ]] \
+            || fail "${QUELLEN}/${teil}/Dockerfile fehlt - falscher Zweig?"
+        info "$(printf '%-10s %s' "$teil" "${stand:0:12}")"
+    done
+}
+
+if [[ "$NUR_MANIFEST" -eq 0 ]]; then
+    step "Quellen bereitlegen"
+    quellen_bereitlegen
+fi
 
 # ------------------------------------------------------------------ 2  Bauen
 
