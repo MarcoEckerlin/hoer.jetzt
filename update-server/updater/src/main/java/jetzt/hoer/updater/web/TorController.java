@@ -215,7 +215,19 @@ public class TorController {
         if (teile.length < 2 || !"repository".equals(teile[0]) || teile[1].isBlank()) {
             return null;
         }
-        return "/v2/" + teile[1] + "/";
+
+        // "/manifests/" gehoert dazu, auch wenn es hier nichts abruft.
+        //
+        // Pfadrechte erkennt das Abbild an einem bekannten Endpunkt im Pfad -
+        // blobs, manifests, tags. Ohne einen davon laesst sich "/v2/x/y/"
+        // keinem Modul zuordnen, und was sich nicht zuordnen laesst, gilt als
+        // gesperrt. Das ist dort richtig so: "/v2/_catalog" listet die ganze
+        // Registry und soll niemandem offenstehen.
+        //
+        // Ein Token fuer ein Repository deckt genau dessen Manifeste und
+        // Schichten ab. "manifests" ist damit die zutreffende Form, nicht ein
+        // Trick, um an der Pruefung vorbeizukommen.
+        return "/v2/" + teile[1] + "/manifests/";
     }
 
     @RequestMapping(value = "/pruefen",

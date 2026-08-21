@@ -144,34 +144,34 @@ if ! docker compose -f "$COMPOSE" up -d --build; then
        docker compose -f ${COMPOSE} logs --tail 40"
 fi
 
-# ------------------------------------------------------------ Caddy neu laden
+# ------------------------------------------------------------ Caddy erneuern
 
-# Das Caddyfile ist ein Bind-Mount, kein Abbildinhalt.
+# Der Container muss NEU ANGELEGT werden, nicht nur neu geladen.
 #
-# Der Container sieht die geaenderte Datei sofort - Caddy liest sie aber nur
-# beim Start. "docker compose up -d" startet den Dienst nicht neu, weil sich
-# an seiner Definition nichts geaendert hat. Ergebnis: der Quellstand ist neu,
-# die laufende Konfiguration alt, und niemand sieht einen Unterschied.
+# Das Caddyfile ist ein Bind-Mount einer einzelnen Datei. "git reset --hard"
+# ersetzt die Datei, statt sie zu aendern - der Bind-Mount haengt danach am
+# alten Inode, und im Container steht weiter die alte Fassung. Ein "reload"
+# liest dann brav die alte Datei und meldet Erfolg.
 #
-# Genau das ist passiert: ein frisch ergaenzter Pfad (/bootstrap) blieb nach
-# dem Update auf 404, weil Caddy noch die Fassung von vorher fuhr.
+# Nachgemessen: auf dem Host stand der neue Pfad, im Container nicht:
 #
-# "reload" statt "restart": kein Verbindungsabbruch, und eine unbrauchbare
-# Konfiguration wird abgelehnt - die alte laeuft dann weiter, statt dass der
-# Dienst in eine Neustartschleife faellt.
-sagen "Caddy-Konfiguration neu laden"
-if docker compose -f "$COMPOSE" exec -T caddy \
-        caddy validate --adapter caddyfile --config /etc/caddy/Caddyfile >/dev/null 2>&1; then
+#   grep -c pruefen-token Caddyfile              -> 2
+#   docker compose exec caddy grep -c ... -> 0
+#
+# Das kostete eine Runde Fehlersuche an der falschen Stelle, weil "reload"
+# ohne Beanstandung durchlief.
+sagen "Caddy erneuern"
+if docker compose -f "$COMPOSE" up -d --force-recreate caddy >/dev/null 2>&1; then
+    sleep 4
     if docker compose -f "$COMPOSE" exec -T caddy \
-            caddy reload --config /etc/caddy/Caddyfile >/dev/null 2>&1; then
-        sagen "  uebernommen."
+            caddy validate --adapter caddyfile --config /etc/caddy/Caddyfile >/dev/null 2>&1; then
+        sagen "  Konfiguration gueltig."
     else
-        warnen "Neuladen fehlgeschlagen - Caddy wird neu gestartet."
-        docker compose -f "$COMPOSE" restart caddy >/dev/null 2>&1 || true
+        warnen "Caddy laeuft, aber die Konfiguration ist unbrauchbar:"
+        warnen "  docker compose -f ${COMPOSE} exec caddy caddy validate --adapter caddyfile --config /etc/caddy/Caddyfile"
     fi
 else
-    warnen "Das Caddyfile ist unbrauchbar - die laufende Konfiguration bleibt."
-    warnen "  docker compose -f ${COMPOSE} exec caddy caddy validate --adapter caddyfile --config /etc/caddy/Caddyfile"
+    warnen "Caddy liess sich nicht neu anlegen - alte Fassung laeuft weiter."
 fi
 
 # ------------------------------------------------------------ Werkzeug

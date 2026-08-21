@@ -25,7 +25,7 @@ class GeltungsbereichTest {
     @Test
     @DisplayName("Der uebliche Fall")
     void ziehen() {
-        assertEquals("/v2/hoerjetzt/core/",
+        assertEquals("/v2/hoerjetzt/core/manifests/",
                 TorController.geltungsbereich(
                         "/v2/token?service=container_registry&scope=repository:hoerjetzt/core:pull"));
     }
@@ -36,7 +36,7 @@ class GeltungsbereichTest {
         // Beim Veroeffentlichen fragt Docker "pull,push" an. Fuer den Pfad
         // macht das keinen Unterschied - welches Recht gilt, entscheidet
         // Forgejo anhand des Kontos.
-        assertEquals("/v2/hoerjetzt/core/",
+        assertEquals("/v2/hoerjetzt/core/manifests/",
                 TorController.geltungsbereich(
                         "/v2/token?scope=repository:hoerjetzt/core:pull,push"));
     }
@@ -44,7 +44,7 @@ class GeltungsbereichTest {
     @Test
     @DisplayName("Reihenfolge der Parameter ist egal")
     void reihenfolge() {
-        assertEquals("/v2/hoerjetzt/lavalink/",
+        assertEquals("/v2/hoerjetzt/lavalink/manifests/",
                 TorController.geltungsbereich(
                         "/v2/token?scope=repository:hoerjetzt/lavalink:pull&service=container_registry"));
     }
@@ -56,7 +56,7 @@ class GeltungsbereichTest {
         // Entschluesselung stuende hier "repository%3Ahoerjetzt..." und die
         // Zerlegung am Doppelpunkt ginge ins Leere - der Bereich waere
         // unlesbar und die Anfrage kaeme ungeprueft durch.
-        assertEquals("/v2/hoerjetzt/core/",
+        assertEquals("/v2/hoerjetzt/core/manifests/",
                 TorController.geltungsbereich(
                         "/v2/token?scope=repository%3Ahoerjetzt%2Fcore%3Apull"));
     }
