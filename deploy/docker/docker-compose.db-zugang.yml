@@ -1,0 +1,61 @@
+# Postgres von aussen erreichbar machen - fuer HeidiSQL, pgAdmin, psql.
+#
+#   In die .env:   HJ_DB_ZUGANG=true
+#                  HJ_DB_BIND=<adresse>
+#
+# Danach nehmen compose() und auto-update.sh diese Datei von selbst mit.
+#
+# ---------------------------------------------------------------------------
+# Warum eine eigene Datei und kein Handgriff in docker-compose.yml
+#
+# Der Knoten holt seinen Deploy-Stand als Tarball und packt ihn ueber das
+# vorhandene Verzeichnis (bootstrap.sh: tar -C "${ARBEIT}" -xzf). Eine
+# Aenderung an docker-compose.yml ist beim naechsten Aufsetzen weg - und zwar
+# lautlos: der Port ist dann einfach wieder zu, und man sucht ihn beim
+# Datenbankwerkzeug statt im Deploy.
+#
+# Die .env bleibt dagegen erhalten. Was hier steht, wird von dort gesteuert.
+#
+# ---------------------------------------------------------------------------
+# HJ_DB_BIND hat mit Absicht keinen Vorgabewert
+#
+# Ein Vorgabewert waere hier entweder nutzlos (127.0.0.1 - dafuer braucht es
+# diese Datei nicht) oder gefaehrlich (0.0.0.0, ohne dass es jemand gesagt
+# hat). Fehlt der Wert, bricht Compose ab und nennt ihn. Das ist die richtige
+# Reaktion bei etwas, das eine Datenbank oeffnet.
+#
+# ---------------------------------------------------------------------------
+# Was diese Datei NICHT schuetzt
+#
+# Docker umgeht ufw. Ein veroeffentlichter Port landet unmittelbar in iptables,
+# und zwar VOR den ufw-Ketten - "ufw deny 5432" hat darauf keine Wirkung,
+# meldet aber Erfolg. Wer hier 0.0.0.0 eintraegt, hat die Datenbank im Netz
+# stehen, egal was ufw sagt. Port 5432 wird durchgehend abgescannt.
+#
+# Wirksam sind nur:
+#
+#   - eine Firewall ausserhalb des Hosts. Bei Hetzner die Cloud-Firewall,
+#     mit der Quelle auf die eigene Adresse begrenzt. Sie sitzt vor der
+#     Maschine und weiss von Docker nichts.
+#   - HJ_DB_BIND auf die private Adresse (10.x) statt auf 0.0.0.0.
+#
+# Der sicherste Weg braucht diese Datei gar nicht: HeidiSQL kann SSH-Tunnel.
+# Siehe BEFEHLE.md, "Datenbank mit einem Werkzeug ansehen".
+#
+# ---------------------------------------------------------------------------
+# Zusammen mit dem Spock-Overlay
+#
+# docker-compose.spock.yml veroeffentlicht 5432 bereits auf HJ_PRIVAT_IP.
+# Beide zusammen ergeben zwei Bindungen auf verschiedenen Adressen - das geht,
+# solange sie verschieden sind. Setzt man HJ_DB_BIND auf dieselbe Adresse,
+# streiten sich beide um den Port. Dann diese Datei weglassen: mit Spock ist
+# Postgres im privaten Netz ohnehin schon erreichbar.
+#
+# listen_addresses steht hier bewusst nicht. Das Abbild postgres:16-alpine
+# setzt es selbst; nur das pgedge-Abbild im Spock-Overlay braucht die Angabe,
+# und dort steht sie.
+
+services:
+  postgres:
+    ports:
+      - "${HJ_DB_BIND:?HJ_DB_BIND fehlt - auf welcher Adresse soll Postgres lauschen?}:${HJ_DB_PORT_HOST:-5432}:5432"

@@ -387,5 +387,9 @@ compose() {
     local dateien=(-f docker-compose.yml)
     [[ "${HJ_SPOCK:-}" == "true" || -f "${ARBEIT}/.spock" ]] \
         && dateien+=(-f docker-compose.spock.yml)
+    # Postgres nach aussen - nur wenn ausdruecklich gewuenscht.
+    # Siehe docker-compose.db-zugang.yml.
+    [[ "${HJ_DB_ZUGANG:-}" == "true" || -f "${ARBEIT}/.db-zugang" ]] \
+        && dateien+=(-f docker-compose.db-zugang.yml)
     ( cd "${ARBEIT}/main/deploy/docker" && docker compose "${dateien[@]}" "$@" )
 }

@@ -603,6 +603,76 @@ eintragen, **ohne** Schreibrecht.
 
 ---
 
+## Datenbank mit einem Werkzeug ansehen
+
+HeidiSQL, pgAdmin oder `psql` auf die Postgres eines Knotens. Zwei Wege — der
+erste öffnet nichts.
+
+### Weg 1: SSH-Tunnel (empfohlen)
+
+HeidiSQL bringt das mit. Neue Sitzung anlegen:
+
+| Reiter | Feld | Wert |
+|---|---|---|
+| Einstellungen | Netzwerktyp | **PostgreSQL (SSH tunnel)** |
+| Einstellungen | Hostname | `127.0.0.1` |
+| Einstellungen | Benutzer / Passwort | `HJ_DB_USER` / `HJ_DB_PASSWORD` aus der `.env` |
+| Einstellungen | Datenbank | `discordbot` |
+| SSH-Tunnel | SSH-Host / Port | Adresse des Knotens, `22` |
+| SSH-Tunnel | Benutzer | `root` |
+| SSH-Tunnel | Privater Schlüssel | dein Schlüssel (`.ppk`) |
+| SSH-Tunnel | Lokaler Port | z. B. `55432` |
+
+Damit ist nichts offen: die Verbindung läuft durch SSH, das ohnehin erreichbar
+ist. Auf dem Knoten muss dafür der Port lokal veröffentlicht sein — das tut
+Weg 2 mit `HJ_DB_BIND=127.0.0.1`.
+
+Ohne HeidiSQL geht es genauso von Hand:
+
+```bash
+ssh -N -L 55432:127.0.0.1:5432 root@<knoten>
+```
+
+### Weg 2: Port veröffentlichen
+
+In die `.env` des Knotens (`/opt/hoerjetzt/.env`):
+
+```
+HJ_DB_ZUGANG=true
+HJ_DB_BIND=127.0.0.1
+```
+
+Dann:
+
+```bash
+cd /opt/hoerjetzt && bash main/deploy/auto-update.sh
+```
+
+`HJ_DB_BIND` bestimmt, wer herankommt:
+
+| Wert | Wer erreicht die Datenbank |
+|---|---|
+| `127.0.0.1` | nur der Host selbst — zusammen mit dem SSH-Tunnel oben |
+| `10.x.x.x` | die Maschinen im privaten Netz |
+| `0.0.0.0` | **alle** |
+
+> **`ufw` schützt hier nicht.** Docker veröffentlicht Ports direkt in iptables,
+> vor den ufw-Ketten. `ufw deny 5432` meldet Erfolg und bewirkt nichts. Bei
+> `0.0.0.0` steht die Datenbank im Netz — Port 5432 wird durchgehend
+> abgescannt, und der einzige Schutz ist dann das Passwort.
+>
+> Wirksam ist nur eine Firewall **außerhalb** des Hosts: bei Hetzner die
+> Cloud-Firewall, mit der Quelle auf die eigene Adresse begrenzt. Die sitzt vor
+> der Maschine und weiß von Docker nichts.
+
+Die Einstellung steht in der `.env` und nicht in der Compose-Datei: der
+Deploy-Stand wird als Tarball über das Verzeichnis gepackt, eine Änderung an
+`docker-compose.yml` wäre beim nächsten Aufsetzen lautlos weg.
+
+Zentral über *Vorgaben* lässt sich das **nicht** setzen — es würde sonst alle
+Knoten gleichzeitig öffnen. Der Katalog lehnt die Schlüssel ab, und der Knoten
+lehnt sie ein zweites Mal ab.
+
 ## Datenbank umziehen oder zurückholen
 
 Die Daten liegen im Postgres-Container des Knotens, nicht auf dem Host. Ein

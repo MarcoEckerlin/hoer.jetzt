@@ -268,6 +268,12 @@ COMPOSE=(-f docker-compose.yml)
 if grep -q '^HJ_SPOCK=true' "$UMGEBUNG" 2>/dev/null; then
     COMPOSE+=(-f docker-compose.spock.yml)
 fi
+# Dasselbe fuer den Datenbankzugang von aussen: steht er nur in der .env und
+# nicht hier, macht jedes Update ihn rueckgaengig - der Port ist dann wieder
+# zu, und man sucht ihn beim Datenbankwerkzeug statt im Deploy.
+if grep -q '^HJ_DB_ZUGANG=true' "$UMGEBUNG" 2>/dev/null || [[ -f "${ARBEIT}/.db-zugang" ]]; then
+    COMPOSE+=(-f docker-compose.db-zugang.yml)
+fi
 for zusatz in $(wert HJ_COMPOSE_EXTRA); do
     [[ -f "${DOCKER}/${zusatz}" ]] || fehler "In HJ_COMPOSE_EXTRA steht ${zusatz}, die Datei gibt es nicht."
     COMPOSE+=(-f "$zusatz")
@@ -356,6 +362,7 @@ if [[ -n "$VORGABEN" ]]; then
               HJ_NODE_TOKEN HJ_AGENT_TOKEN HJ_CONTROLLER_TOKEN HJ_TOKEN_KNOTEN
               HJ_SHARD_VON HJ_SHARD_BIS HJ_SHARDS_GESAMT HJ_NODE_NR HJ_NODE_NAME
               HJ_PRIVAT_IP HJ_ROLLE HJ_PROFIL HJ_UPDATE_HOST
+              HJ_DB_ZUGANG HJ_DB_BIND HJ_DB_PORT_HOST HJ_WEB_BIND HJ_WEB_PORT_HOST
               HJ_REGISTRY CORE_TAG WEB_TAG LAVALINK_TAG KI_RADIO_TAG AI_RADIO_TAG"
 
     uebernommen=0

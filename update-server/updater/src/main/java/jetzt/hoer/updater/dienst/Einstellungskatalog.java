@@ -246,6 +246,10 @@ public final class Einstellungskatalog {
             "HJ_NODE_NR", "HJ_NODE_NAME", "HJ_NODE_BIND", "HJ_PRIVAT_IP",
             "HJ_SHARD_VON", "HJ_SHARD_BIS", "HJ_BOT_ID",
             "LAVALINK_BIND", "LAVALINK_TIER", "HJ_WEB_BIND", "HJ_WEB_PORT_HOST",
+            // Oeffnet die Datenbank nach aussen. Zentral gesetzt hiesse: auf
+            // allen Knoten gleichzeitig, und auf einem davon vielleicht auf
+            // einer oeffentlichen Adresse. Das entscheidet man je Maschine.
+            "HJ_DB_ZUGANG", "HJ_DB_BIND", "HJ_DB_PORT_HOST",
             "HJ_NETZ",
             // Geheimnisse und Ausweise
             "HJ_BOT_TOKEN", "HJ_DB_PASSWORD", "HJ_DISCORD_CLIENT_SECRET",
