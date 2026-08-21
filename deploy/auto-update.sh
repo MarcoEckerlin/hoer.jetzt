@@ -25,6 +25,17 @@
 
 set -euo pipefail
 
+# Nur wegen module_lesen und dienste_von: welche Dienste dieser Knoten faehrt,
+# steht in agent-lib.sh und soll nur dort stehen.
+#
+# Bewusst VOR den eigenen Zuweisungen und Funktionen weiter unten - die sollen
+# gewinnen. agent-lib.sh setzt seine Pfade mit ":-" und tut beim Einbinden
+# sonst nichts; die Meldefunktionen definiert dieses Skript danach neu, damit
+# das Protokoll seine Zeitstempel behaelt.
+_HIER_AU="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+# shellcheck source=agent/agent-lib.sh
+. "${_HIER_AU}/agent/agent-lib.sh"
+
 ARBEIT="${ARBEIT:-/opt/hoerjetzt}"
 UMGEBUNG="${ARBEIT}/.env"
 STAND="${ARBEIT}/.installiert"
@@ -152,10 +163,20 @@ hole() {
 # will, faellt nur hier an - naemlich ob das Update selbst durchgelaufen ist
 # und auf welchem Stand dieser Host danach steht.
 #
-# Die Kennung ist dieselbe wie beim Agenten, damit sich beide Ansichten
-# ueber einen Namen zusammenbringen lassen und nicht zwei Listen entstehen,
-# die dasselbe meinen.
-KENNUNG="$(wert HJ_NODE_NAME)"
+# Die Kennung dieses Knotens - dieselbe wie beim Agenten und bei sicherung.sh.
+#
+# Hier stand HJ_NODE_NAME mit Rueckfall auf den Rechnernamen. Der Update-Server
+# vergleicht die gemeldete Kennung aber mit der, unter der sich der Knoten
+# angemeldet hat, und weist sie sonst ab:
+#
+#   403 {"fehler":"Kennung passt nicht zur Anmeldung"}
+#
+# Auf einer Hetzner-Maschine heisst der Rechner "ubuntu-4gb-hel1-1" und der
+# Knoten "controller-1" - der Herzschlag kam also nie an. Sichtbar war davon
+# nur "Herzschlag nicht durchgekommen", und das steht auch da, wenn das Netz
+# weg ist.
+KENNUNG="$(wert HJ_KNOTEN_KENNUNG)"
+KENNUNG="${KENNUNG:-$(wert HJ_NODE_NAME)}"
 KENNUNG="${KENNUNG:-$(hostname -s 2>/dev/null || echo unbekannt)}"
 PROFIL="$(wert HJ_PROFIL)"
 
@@ -174,7 +195,21 @@ melden() {
             "$(cat "$VORHER" 2>/dev/null || echo '')" \
             "$zustand" "$ergebnis")" \
         "https://${HJ_UPDATE_HOST}/melden" 2>/dev/null)" || {
-        sagen "Herzschlag an ${HJ_UPDATE_HOST} nicht durchgekommen - weiter im Ablauf."
+        # Warum genau? "Nicht durchgekommen" steht sonst auch da, wenn der
+        # Server 403 antwortet - und dann sucht man das Netz ab, waehrend es
+        # an der Kennung liegt. Der zweite Aufruf kostet nichts und nennt den
+        # Grund beim Namen.
+        local code
+        code="$(curl -s -o /dev/null -w '%{http_code}' -m 15 -X POST \
+            -u "${ANMELDE_BENUTZER}:${ANMELDE_PASSWORT}" \
+            -H "Content-Type: application/json" -d '{}' \
+            "https://${HJ_UPDATE_HOST}/melden" 2>/dev/null || echo "000")"
+        case "$code" in
+            401) sagen "Herzschlag abgewiesen (401) - ${ANMELDE_BENUTZER} ist dem Update-Server unbekannt oder das Geheimnis stimmt nicht." ;;
+            403) sagen "Herzschlag abgewiesen (403) - die gemeldete Kennung passt nicht zur Anmeldung (${KENNUNG} vs ${ANMELDE_BENUTZER})." ;;
+            000) sagen "Herzschlag an ${HJ_UPDATE_HOST} nicht durchgekommen - keine Antwort. Weiter im Ablauf." ;;
+            *)   sagen "Herzschlag an ${HJ_UPDATE_HOST} abgewiesen (${code}) - weiter im Ablauf." ;;
+        esac
         printf ''
         return 0
     }
@@ -375,7 +410,41 @@ fi
 # Erst laden, dann umschalten. Bricht das Laden ab - Netz weg, Abbild fehlt,
 # Platte voll - hat der laufende Stack davon nichts mitbekommen. Das war
 # frueher der Build an dieser Stelle und dauerte Minuten statt Sekunden.
-if ! docker compose "${COMPOSE[@]}" pull >>"$PROTOKOLL" 2>&1; then
+
+# ------------------------------------------------- Nur die eigenen Dienste
+#
+# "docker compose pull" ohne Dienstnamen zieht ALLES, was in der Datei steht.
+# Auf einem Controller heisst das auch lavalink, ai-radio und yt-cipher - und
+# an genau der Stelle bricht es ab:
+#
+#   failed to fetch oauth token: ... scope=repository:hoerjetzt/lavalink:pull
+#   403 Forbidden
+#
+# Und zwar zu Recht: der Knoten hat fuer dieses Abbild keine Faehigkeit. Die
+# Registry tut, was sie soll; falsch war die Frage. Der ganze Pull scheiterte
+# daran, auch fuer die Abbilder, die er sehr wohl holen darf.
+#
+# Dasselbe bei "up -d": ohne Dienstnamen startete ein Controller den
+# Audio-Stack mit, den er ausdruecklich nicht faehrt.
+#
+# Die Zuordnung Modul -> Dienste steht in agent-lib.sh und nur dort. Ein
+# zweites Verzeichnis derselben Liste liefe frueher oder spaeter auseinander.
+DIENSTE=""
+for _m in $(module_lesen); do
+    DIENSTE="${DIENSTE} $(dienste_von "$_m")"
+done
+# shellcheck disable=SC2086
+DIENSTE="$(printf '%s\n' $DIENSTE | grep -v '^$' | sort -u | paste -sd' ' -)"
+
+if [[ -z "${DIENSTE// /}" ]]; then
+    fehler "Dieser Knoten hat keine Module (${MODULDATEI}).
+       Ohne Module gibt es nichts zu aktualisieren. Einmal aufsetzen:
+           bash ${ARBEIT}/main/deploy/install-node.sh --modules <liste> ..."
+fi
+sagen "Dienste dieses Knotens: ${DIENSTE}"
+
+# shellcheck disable=SC2086
+if ! docker compose "${COMPOSE[@]}" pull $DIENSTE >>"$PROTOKOLL" 2>&1; then
     fehler "Abbilder liessen sich nicht laden - alter Stand laeuft weiter. Siehe ${PROTOKOLL}."
 fi
 
@@ -431,7 +500,8 @@ else
     sagen "Das Manifest nennt keine Digests - Abbilder ungeprueft uebernommen."
 fi
 
-if ! docker compose "${COMPOSE[@]}" up -d >>"$PROTOKOLL" 2>&1; then
+# shellcheck disable=SC2086
+if ! docker compose "${COMPOSE[@]}" up -d $DIENSTE >>"$PROTOKOLL" 2>&1; then
     fehler "Start fehlgeschlagen - siehe ${PROTOKOLL}."
 fi
 

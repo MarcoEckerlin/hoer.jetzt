@@ -409,6 +409,45 @@ jobs:
               echo "ok   .env wird vor 'compose up' uebertragen (Zeile $u vor $c)"
           fi
 
+          # Zieht der Knoten nur seine eigenen Abbilder?
+          #
+          # "docker compose pull" ohne Dienstnamen zieht ALLES aus der Datei.
+          # Auf einem Controller heisst das auch lavalink - und dafuer hat er
+          # keine Faehigkeit:
+          #
+          #   failed to fetch oauth token: ... hoerjetzt/lavalink:pull
+          #   403 Forbidden
+          #
+          # Die Registry tut damit, was sie soll. Falsch war die Frage. Der
+          # ganze Pull scheiterte daran, auch fuer die Abbilder, die er holen
+          # darf. Dasselbe bei "up -d": ohne Dienstnamen startet ein Controller
+          # den Audio-Stack mit.
+          if grep -qF 'pull $DIENSTE' deploy/auto-update.sh; then
+              echo "ok   pull laeuft nur ueber die eigenen Dienste"
+          else
+              echo "FEHL pull laeuft ohne Dienstliste - zieht alles, auch Fremdes"
+              fehler=1
+          fi
+          if grep -qF 'up -d $DIENSTE' deploy/auto-update.sh; then
+              echo "ok   up -d laeuft nur ueber die eigenen Dienste"
+          else
+              echo "FEHL up -d laeuft ohne Dienstliste - startet auch Fremdes"
+              fehler=1
+          fi
+
+          # Meldet der Knoten sich unter seiner eigenen Kennung?
+          #
+          # Der Update-Server vergleicht die gemeldete Kennung mit der
+          # Anmeldung und antwortet sonst 403. auto-update.sh schickte
+          # HJ_NODE_NAME mit Rueckfall auf den Rechnernamen - auf einer
+          # Hetzner-Maschine also "ubuntu-4gb-hel1-1" statt "controller-1".
+          if grep -qF 'KENNUNG="$(wert HJ_KNOTEN_KENNUNG)"' deploy/auto-update.sh; then
+              echo "ok   der Herzschlag nennt die Knotenkennung"
+          else
+              echo "FEHL auto-update.sh meldet nicht HJ_KNOTEN_KENNUNG - das gibt 403."
+              fehler=1
+          fi
+
           # Meldet sich der Knoten im laufenden Betrieb mit seiner eigenen
           # Kennung an?
           #
