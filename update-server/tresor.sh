@@ -16,7 +16,21 @@
 #               auf jedem Knoten der vollstaendige Quellbaum; wer einen davon
 #               aufmachte, hatte alles.
 #   ki-radio    Nur, was das KI-Radio braucht.
-#   controller  Zusaetzlich das, was nur die Steuer-Node kennen muss.
+#   controller  Dasselbe wie "voll".
+#
+#               Das sieht nach fehlender Trennung aus und ist eine bewusste
+#               Entscheidung. Der Controller haelt die Datenbank - dort steht
+#               alles drin, was der Bot je gespeichert hat. Ihm den Bot-Token
+#               vorzuenthalten waere eine Grenze, die auf der anderen Seite
+#               ohnehin offen steht.
+#
+#               Client-ID und Client-Secret braucht er wirklich: er bedient
+#               die Webseite, und deren Discord-Anmeldung laeuft darueber.
+#
+#               Was ihn vom Core-Knoten unterscheidet, steht nicht im Tresor,
+#               sondern in HJ_ROLLE=controller: damit bleibt der Discord-Bot
+#               aus. Uebrig bleiben Webseite, Datenbank und die Steuerung der
+#               uebrigen Knoten.
 #
 # Welches Profil ein Knoten bekommt, entscheidet nicht er selbst, sondern
 # seine Module im Updater - siehe Faehigkeit.java.
@@ -126,7 +140,10 @@ geheim HJ_LAVALINK_PASSWORD "Passwort Lavalink"
 INHALT="${INHALT}
 HJ_LAVALINK_PASSWORD=${HJ_LAVALINK_PASSWORD}"
 
-if [[ "$PROFIL" == "voll" ]]; then
+# Controller und Core brauchen fast dasselbe: Datenbank, oeffentliche Adresse,
+# Lavalink-Passwort. Der Unterschied steht weiter unten beim Discord-Block -
+# ein Controller betreibt keinen Bot und bekommt dessen Token deshalb nicht.
+if [[ "$PROFIL" == "voll" || "$PROFIL" == "controller" ]]; then
     step "Datenbank"
     info "Die Datenbank laeuft als Container IM Stack des Knotens."
     info "Die Adresse ist deshalb der Dienstname aus der Compose-Datei und"

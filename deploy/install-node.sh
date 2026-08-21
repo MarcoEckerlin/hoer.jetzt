@@ -105,9 +105,22 @@ module_aufloesen() {
                 # danach im Updater zuschalten.
                 ;;
             controller)
-                # Der Controller ist der Core-Stapel in einer anderen Rolle -
-                # kein eigenes Programm. Siehe Kollision K2.
-                ergebnis="${ergebnis} core"
+                # Der Controller bleibt "controller" - nicht "core".
+                #
+                # Frueher wurde er hier auf core abgebildet. Das war zu grob:
+                # der Tresor gab ihm daraufhin das Core-Profil, und der Knoten
+                # galt ueberall als gewoehnlicher Core-Knoten.
+                #
+                # Er faehrt zwar dieselben Container (siehe dienste_von), aber
+                # in anderer Rolle: HJ_ROLLE=controller schaltet den
+                # Discord-Bot ab. Uebrig bleiben Webseite, Datenbank und die
+                # Steuerung der uebrigen Knoten.
+                #
+                # Ohne diese Unterscheidung meldete sich der Controller mit
+                # demselben Bot-Token bei Discord an wie die Core-Knoten -
+                # Discord verteilt die Ereignisse dann auf beide, und Befehle
+                # landen mal hier, mal dort.
+                ergebnis="${ergebnis} controller"
                 umgebung_setzen HJ_ROLLE controller || true
                 ;;
             *) fehler "Unbekanntes Modul: ${m} (moeglich: core, lavalink, ki-radio, controller, agent)" ;;
@@ -249,6 +262,10 @@ for m in $MODULE; do
         core)     profil="core" ;;
         lavalink) profil="lavalink" ;;
         ki-radio) profil="ki-radio" ;;
+        # Der Controller bekommt sein eigenes Profil - tresor.sh kennt es
+        # bereits. Es enthaelt zusaetzlich, was nur die Steuer-Node braucht,
+        # und laesst weg, was nur der Bot braucht.
+        controller) profil="controller" ;;
         *)        continue ;;
     esac
     teil="${ARBEIT}/tresor-${profil}.env"

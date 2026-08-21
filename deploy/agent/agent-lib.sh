@@ -105,6 +105,22 @@ hat_modul() {
 dienste_von() {
     case "$1" in
         core)     echo "core web postgres redis" ;;
+        # Ein Controller faehrt dieselben Container wie ein Core-Knoten.
+        #
+        # Was ihn unterscheidet, ist HJ_ROLLE=controller in der .env: damit
+        # laesst BotStartupRunner den Discord-Bot aus. Uebrig bleiben
+        # Webseite, Datenbank und die Knotensteuerung - genau das, was ein
+        # Controller sein soll.
+        #
+        # Warum nicht weniger Container: die Steuerlogik (Paket "verbund")
+        # liegt im selben Programm wie der Bot und braucht dessen Webschicht.
+        # Sie herauszuloesen hiesse, ein zweites Programm zu bauen - genau
+        # das, wovor Abschnitt 71 warnt.
+        #
+        # Warum nicht MEHR: kein Lavalink. Ob auf derselben Maschine Audio
+        # laeuft, ist eine getrennte Entscheidung und keine Eigenschaft der
+        # Rolle.
+        controller) echo "core web postgres redis" ;;
         lavalink) echo "lavalink-free-1 yt-cipher" ;;
         ki-radio) echo "ki-radio" ;;
         *)        echo "" ;;
