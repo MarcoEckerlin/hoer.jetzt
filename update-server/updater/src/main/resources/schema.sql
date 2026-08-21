@@ -141,3 +141,16 @@ CREATE TABLE IF NOT EXISTS verwaltung_protokoll (
 
 CREATE INDEX IF NOT EXISTS verwaltung_protokoll_zeit
     ON verwaltung_protokoll (zeit DESC);
+
+-- Zentral gepflegte Vorgaben fuer die Knoten.
+--
+-- Nur was der Katalog kennt (Einstellungskatalog) landet hier - Geheimnisse
+-- gehoeren in den Tresor, Knotenspezifisches in die .env des Knotens. Ein
+-- fehlender Eintrag heisst "Vorgabe": der Schluessel wird dann gar nicht
+-- ausgeliefert und der Knoten nimmt, was in seiner Compose-Datei steht.
+CREATE TABLE IF NOT EXISTS voreinstellung (
+    schluessel TEXT PRIMARY KEY,
+    wert       TEXT NOT NULL DEFAULT '',
+    geaendert  TEXT NOT NULL,
+    wer        TEXT NOT NULL DEFAULT ''
+);

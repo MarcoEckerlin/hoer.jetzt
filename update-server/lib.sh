@@ -63,7 +63,8 @@ AUS_HELFER="${AUS_HELFER:-alpine:3}"
 # Zurueckrollen schaltet "release/aktuell" um, und Caddy liefert genau diese
 # Datei an die Knoten aus. Ueber einen Umweg ginge das nicht.
 #
-# Statt ihm das ganze Verzeichnis zu oeffnen, gehoert ihm nur "release/".
+# Statt ihm das ganze Verzeichnis zu oeffnen, gehoeren ihm nur "release/"
+# und "voreinstellungen/" - beide schreibt die Oberflaeche.
 # "knoten/" und "tresor/" bleiben root - der Mount ist zwar schreibbar, die
 # Rechte sind aber die eigentliche Grenze. Die Kennung steht im Dockerfile
 # des Updaters fest; ohne das vergaebe useradd bei jedem Neubau eine andere

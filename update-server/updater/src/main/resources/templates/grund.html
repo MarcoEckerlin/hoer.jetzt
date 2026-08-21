@@ -15,6 +15,7 @@
     <a th:href="@{/}" th:classappend="${hier == 'uebersicht'} ? 'hier'">Knoten</a>
     <a th:href="@{/knoten}" th:classappend="${hier == 'verwalten'} ? 'hier'">Verwalten</a>
     <a th:href="@{/releases}" th:classappend="${hier == 'releases'} ? 'hier'">Releases</a>
+    <a th:href="@{/voreinstellungen}" th:classappend="${hier == 'voreinstellungen'} ? 'hier'">Vorgaben</a>
     <a th:href="@{/freigaben}" th:classappend="${hier == 'freigaben'} ? 'hier'">Freigaben</a>
     <a th:href="@{/protokoll}" th:classappend="${hier == 'protokoll'} ? 'hier'">Protokoll</a>
     <form th:action="@{/abmelden}" method="post" class="rechts">

@@ -161,10 +161,10 @@ if rechte_setzen hj-update_updater-daten 'chown -R 1500:1500 /v'; then
 else
     warnen "  /daten nicht setzbar - der Updater startet moeglicherweise nicht"
 fi
-if rechte_setzen hj-update_ausliefern 'mkdir -p /v/release && chown -R 1500:1500 /v/release'; then
-    sagen "  release/ gehoert dem Updater"
+if rechte_setzen hj-update_ausliefern 'mkdir -p /v/release /v/voreinstellungen && chown -R 1500:1500 /v/release /v/voreinstellungen'; then
+    sagen "  release/ und voreinstellungen/ gehoeren dem Updater"
 else
-    warnen "  release/ nicht setzbar - Zurueckrollen ueber die Oberflaeche geht dann nicht"
+    warnen "  nicht setzbar - Zurueckrollen und Vorgaben ueber die Oberflaeche gehen dann nicht"
 fi
 
 # ------------------------------------------------------------------ bauen

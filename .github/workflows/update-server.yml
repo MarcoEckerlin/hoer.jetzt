@@ -277,6 +277,72 @@ jobs:
           exit "$fehler"
 
 
+
+      # Katalog gegen Tresor und Compose.
+      #
+      # Drei Fehler, die der Uebersetzer nicht sehen kann, weil es fuer ihn
+      # Zeichenketten sind:
+      #
+      #   1. Ein Schluessel steht im Katalog UND im Tresor. Dann gibt es zwei
+      #      Quellen fuer denselben Wert, und man merkt es an dem Tag, an dem
+      #      sie auseinanderlaufen.
+      #   2. Ein Schluessel im Katalog, den keine Compose-Datei liest. Ein
+      #      Tippfehler wie LAVALINK_QUALITAT wird stillschweigend ignoriert:
+      #      der Knoten nimmt seinen Vorgabewert, alles laeuft, nur eben
+      #      anders als gedacht.
+      #   3. Die Sperrliste im Knoten (auto-update.sh) faellt hinter die des
+      #      Servers zurueck. Sie ist die zweite Schicht - wenn sie nicht
+      #      mindestens die Geheimnisse kennt, ist sie keine.
+      - name: Voreinstellungen bleiben in ihrer Spur
+        run: |
+          set -uo pipefail
+          fehler=0
+          KAT=update-server/updater/src/main/java/jetzt/hoer/updater/dienst/Einstellungskatalog.java
+
+          # Die Schluessel des Katalogs: erstes Argument der Eintrags-Bauer.
+          grep -oE '^\s+(text|schalter|zahl|auswahl)\("[A-Z][A-Z0-9_]*"' "$KAT" \
+              | grep -oE '"[A-Z][A-Z0-9_]*"' | tr -d '"' | sort -u > /tmp/katalog.txt
+          echo "Katalog: $(wc -l < /tmp/katalog.txt) Schluessel"
+          [ -s /tmp/katalog.txt ] || { echo "FEHL keine Schluessel gefunden - Pruefung anpassen."; exit 1; }
+
+          # 1) Ueberschneidung mit dem Tresor
+          grep -oE '^[A-Z][A-Z0-9_]*=\$\{[A-Z_]+\}' update-server/tresor.sh \
+              | cut -d= -f1 | sort -u > /tmp/tresor.txt
+          echo "Tresor:  $(wc -l < /tmp/tresor.txt) Schluessel"
+          if doppelt="$(comm -12 /tmp/katalog.txt /tmp/tresor.txt)" && [ -n "$doppelt" ]; then
+              echo "FEHL diese Schluessel liefert der Tresor schon:"
+              echo "$doppelt" | sed 's/^/     /'
+              fehler=1
+          else
+              echo "ok   keine Ueberschneidung mit dem Tresor"
+          fi
+
+          # 2) Liest ueberhaupt jemand diese Schluessel?
+          grep -ohE '\$\{[A-Z][A-Z0-9_]*[:?-]' deploy/docker/*.yml \
+              | sed 's/\${//;s/[:?-]$//' | sort -u > /tmp/compose.txt
+          while read -r s; do
+              if grep -qx "$s" /tmp/compose.txt; then
+                  printf 'ok   %s\n' "$s"
+              else
+                  printf 'FEHL %s liest keine Compose-Datei - Tippfehler?\n' "$s"
+                  fehler=1
+              fi
+          done < /tmp/katalog.txt
+
+          # 3) Die Sperrliste im Knoten
+          for s in HJ_BOT_TOKEN HJ_DB_PASSWORD HJ_LAVALINK_PASSWORD \
+                   HJ_DISCORD_CLIENT_SECRET HJ_SHARD_VON HJ_SHARD_BIS \
+                   HJ_REGISTRY HJ_GEHEIMNIS_SCHLUESSEL; do
+              if grep -q "\b${s}\b" deploy/auto-update.sh; then
+                  printf 'ok   Knoten sperrt %s\n' "$s"
+              else
+                  printf 'FEHL auto-update.sh sperrt %s nicht\n' "$s"
+                  echo "     Die zweite Schicht ist nur eine, wenn sie das Wichtigste kennt."
+                  fehler=1
+              fi
+          done
+          exit "$fehler"
+
       # Baut ein Knoten noch selbst?
       #
       # Er kann es nicht: auf einem Knoten liegt kein Quellbaum. Ein

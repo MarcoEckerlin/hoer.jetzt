@@ -184,6 +184,24 @@
 		}
 	}
 
+
+	# ------------------------------------------------- Voreinstellungen
+	#
+	# Zentrale Vorgaben je Profil. Wie das Release-Manifest eine schlichte
+	# Datei aus dem Auslieferungsverzeichnis - und ausdruecklich NICHT wie
+	# der Tresor: hier steht nichts Geheimes drin. Der Katalog laesst
+	# Geheimnisse gar nicht erst zu (Einstellungskatalog.VERBOTEN), und der
+	# Weg hierher ist derselbe wie beim Manifest.
+	#
+	# "import zugang" trotzdem: es geht niemanden ausser den Knoten etwas
+	# an, welche Modelle und Schwellen dieser Verbund faehrt.
+	handle /voreinstellungen/* {
+		route {
+			import zugang
+			root * /srv/ausliefern
+			file_server
+		}
+	}
 	# ------------------------------------------------------------- Tresor
 	#
 	# Kein file_server mehr.

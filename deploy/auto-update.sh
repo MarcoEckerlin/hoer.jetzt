@@ -257,6 +257,56 @@ chmod 600 .env
     done
 } >> .env
 
+# ------------------------------------------------------- Zentrale Vorgaben
+#
+# Werte, die auf allen Knoten gleich sind - Lavalink-Qualitaet, Plugin-
+# Version, Schwellen. Gepflegt wird das auf der Oberflaeche des
+# Update-Servers, nicht auf jeder Maschine einzeln.
+#
+# Sie kommen NACH der uebernommenen .env, also gewinnen sie: fuer diese
+# Schluessel ist der Update-Server die Quelle. Was je Knoten verschieden
+# sein muss, steht gar nicht erst darin.
+#
+# Fehlt die Datei, laeuft alles weiter. Ein Update darf nicht daran
+# scheitern, dass noch niemand eine Vorgabe gesetzt hat.
+VORGABEN="$(hole "/voreinstellungen/${PROFIL}.env" 2>/dev/null || true)"
+if [[ -n "$VORGABEN" ]]; then
+    # Die Datei kommt ueber das Netz. Der Katalog auf dem Server laesst
+    # Geheimnisse und Knotenspezifisches nicht zu - aber darauf verlaesst
+    # sich der Knoten nicht. Er hat seine eigene Sperrliste, und sie
+    # entscheidet hier.
+    #
+    # Ohne sie liesse sich ueber diese Datei ein HJ_BOT_TOKEN oder eine
+    # Shard-Grenze in die .env schreiben, und der Knoten uebernaehme es
+    # wortlos.
+    gesperrt="HJ_BOT_TOKEN HJ_DB_PASSWORD HJ_DISCORD_CLIENT_SECRET
+              HJ_DISCORD_CLIENT_ID HJ_LAVALINK_PASSWORD YT_CIPHER_PASSWORD
+              YOUTUBE_REFRESH_TOKEN HJ_HETZNER_TOKEN HJ_GEHEIMNIS_SCHLUESSEL
+              HJ_NODE_TOKEN HJ_AGENT_TOKEN HJ_CONTROLLER_TOKEN HJ_TOKEN_KNOTEN
+              HJ_SHARD_VON HJ_SHARD_BIS HJ_SHARDS_GESAMT HJ_NODE_NR HJ_NODE_NAME
+              HJ_PRIVAT_IP HJ_ROLLE HJ_PROFIL HJ_UPDATE_HOST
+              HJ_REGISTRY CORE_TAG WEB_TAG LAVALINK_TAG KI_RADIO_TAG AI_RADIO_TAG"
+
+    uebernommen=0
+    abgelehnt=0
+    while IFS= read -r zeile; do
+        [[ -z "$zeile" || "$zeile" == \#* ]] && continue
+        schluessel="${zeile%%=*}"
+        # Nur echte Zuweisungen. Alles andere ist kein Wert, sondern Unrat.
+        [[ "$zeile" == *=* ]] || continue
+        [[ "$schluessel" =~ ^[A-Z][A-Z0-9_]*$ ]] || { abgelehnt=$((abgelehnt+1)); continue; }
+        if printf '%s' "$gesperrt" | tr -s ' \n' '\n\n' | grep -qx "$schluessel"; then
+            sagen "WARNUNG: Vorgabe ${schluessel} abgelehnt - gehoert nicht in eine zentrale Datei."
+            abgelehnt=$((abgelehnt+1))
+            continue
+        fi
+        printf '%s\n' "$zeile" >> .env
+        uebernommen=$((uebernommen+1))
+    done <<< "$VORGABEN"
+
+    sagen "Zentrale Vorgaben: ${uebernommen} uebernommen, ${abgelehnt} abgelehnt."
+fi
+
 # Anmeldung an der Registry - mit der EIGENEN Kennung.
 #
 # Frueher stand hier "-u knoten" mit dem gemeinsamen Knoten-Passwort. Seit

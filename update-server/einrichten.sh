@@ -526,8 +526,14 @@ rm -rf "$BUENDEL" "${BUENDEL}.tar.gz"
 step "Caddy und Updater starten"
 printf 'noch nichts veroeffentlicht\n' | aus_schreiben release/aktuell \
     || fail "Auslieferungsverzeichnis nicht beschreibbar."
-# "release/" gehoert dem Updater - er schaltet es beim Zurueckrollen um.
+# "release/" und "voreinstellungen/" gehoeren dem Updater: er schaltet das
+# Manifest beim Zurueckrollen um und schreibt die Vorgaben.
+#
+# Anlegen muss es hier passieren. Der Updater laeuft als 1500, das
+# Auslieferungsverzeichnis gehoert root - ein mkdir darin scheitert.
+aus_docker sh -c "mkdir -p release voreinstellungen" >/dev/null 2>&1 || true
 aus_uebergeben release
+aus_uebergeben voreinstellungen
 info "Der Updater wird beim ersten Mal gebaut - das dauert ein paar Minuten."
 docker compose up -d --build || fail "Start fehlgeschlagen."
 

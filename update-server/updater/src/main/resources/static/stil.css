@@ -357,3 +357,41 @@ button.schlicht.an {
     color: var(--gut);
     border-color: color-mix(in srgb, var(--gut) 40%, var(--rand));
 }
+
+/* --------------------------------------------------- Voreinstellungen
+   Eine Zeile je Wert: Beschriftung, Feld, Erklaerung darunter. Die
+   Erklaerung steht bewusst dabei und nicht in einem Aufklapper - wer
+   LAVALINK_QUALITAET auf "sparsam" stellt, soll im selben Blick lesen,
+   was das kostet. */
+.feldzeile {
+    display: grid;
+    grid-template-columns: minmax(14rem, 22rem) 1fr;
+    gap: .35rem 1rem;
+    align-items: baseline;
+    padding: .55rem 0;
+    border-top: 1px solid var(--rand);
+}
+
+.feldzeile:first-of-type { border-top: 0; }
+
+.feldzeile label {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: .35rem;
+}
+
+.feldzeile input,
+.feldzeile select { width: 100%; }
+
+/* Ueber die volle Breite unter beiden Spalten. */
+.feldzeile .hinweis {
+    grid-column: 1 / -1;
+    margin: 0;
+    color: var(--leise);
+}
+
+/* Schmale Anzeige: Beschriftung ueber das Feld statt daneben. */
+@media (max-width: 40rem) {
+    .feldzeile { grid-template-columns: 1fr; }
+}

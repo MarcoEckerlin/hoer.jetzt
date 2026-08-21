@@ -1,0 +1,84 @@
+<!doctype html>
+<html xmlns:th="http://www.thymeleaf.org" lang="de">
+<head th:replace="~{grund :: kopf('Voreinstellungen')}"></head>
+<body>
+<nav th:replace="~{grund :: navigation('voreinstellungen')}"></nav>
+<main>
+    <div th:replace="~{grund :: meldungen}"></div>
+
+    <h1>Voreinstellungen</h1>
+
+    <p class="klein">
+        Werte, die auf allen Knoten gleich sind. Sie werden je Profil abgelegt und
+        beim naechsten Lauf des Agenten abgeholt &ndash; es geht keine Verbindung von
+        hier zu den Knoten.
+    </p>
+    <p class="klein">
+        <strong>Nicht hier:</strong> Geheimnisse (die liegen im Tresor) und alles,
+        was je Knoten verschieden sein muss &ndash; Shard-Grenzen, Knotennummer,
+        Bind-Adressen. Beides steht deshalb gar nicht erst zur Auswahl.
+    </p>
+    <p class="klein">
+        Ein leeres Feld heisst <em>Vorgabe</em>: der Schluessel wird dann nicht
+        ausgeliefert und es gilt, was in der Compose-Datei steht.
+    </p>
+
+    <form th:action="@{/voreinstellungen}" method="post">
+
+        <div th:each="gruppe : ${gruppen}" class="lage">
+            <h2 th:text="${gruppe.key}"></h2>
+
+            <div th:each="e : ${gruppe.value}" class="feldzeile">
+                <label th:for="${e.schluessel()}">
+                    <code th:text="${e.schluessel()}"></code>
+                    <span th:each="p : ${e.profile()}" class="marke klein" th:text="${p}"></span>
+                </label>
+
+                <select th:if="${e.art().name() == 'AUSWAHL' or e.art().name() == 'SCHALTER'}"
+                        th:id="${e.schluessel()}" th:name="${e.schluessel()}">
+                    <!--
+                      Ein Auswahlfeld und kein Haken: ein nicht angehakter
+                      Haken wird gar nicht abgeschickt, und dann liesse sich
+                      "aus" nicht von "nicht gesetzt" unterscheiden. Genau
+                      dieser Unterschied entscheidet hier aber, ob der Wert
+                      ausgeliefert wird.
+                    -->
+                    <option value="" th:text="'(Vorgabe: ' + ${e.vorgabe()} + ')'"></option>
+                    <option th:each="w : ${e.auswahl()}"
+                            th:value="${w}" th:text="${w}"
+                            th:selected="${gesetzt.get(e.schluessel())} == ${w}"></option>
+                </select>
+
+                <input th:unless="${e.art().name() == 'AUSWAHL' or e.art().name() == 'SCHALTER'}"
+                       th:id="${e.schluessel()}" th:name="${e.schluessel()}"
+                       th:type="${e.art().name() == 'ZAHL'} ? 'number' : 'text'"
+                       th:value="${gesetzt.get(e.schluessel())}"
+                       th:placeholder="${e.vorgabe().isEmpty()} ? 'nicht gesetzt'
+                                       : 'Vorgabe: ' + ${e.vorgabe()}">
+
+                <p class="klein hinweis" th:text="${e.erklaerung()}"></p>
+            </div>
+        </div>
+
+        <div class="knopfreihe">
+            <button type="submit">Uebernehmen</button>
+        </div>
+    </form>
+
+    <!-- ------------------------------------------------ Was ankommt -->
+    <h2>Was ein Knoten bekommt</h2>
+    <p class="klein">
+        Genau diese Dateien holt der Agent ab. Steht ein Wert nicht darin, gilt
+        beim Knoten die Vorgabe seiner Compose-Datei.
+    </p>
+
+    <div th:each="v : ${vorschau}" class="lage">
+        <h3><code th:text="'voreinstellungen/' + ${v.key} + '.env'"></code></h3>
+        <pre class="befehl" th:text="${v.value.isEmpty()}
+                ? 'noch nicht geschrieben - beim ersten Uebernehmen entsteht sie'
+                : ${v.value}"></pre>
+    </div>
+
+</main>
+</body>
+</html>
