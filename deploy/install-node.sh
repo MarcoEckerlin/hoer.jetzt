@@ -516,8 +516,19 @@ for m in $MODULE; do
 done
 sagen "Dienste: ${dienste# }"
 
+# Die Werte dorthin bringen, wo Compose sie liest. Ohne das wirkt nichts,
+# was dieses Skript in die .env geschrieben hat - siehe
+# umgebung_uebertragen in agent-lib.sh.
+umgebung_uebertragen
+sagen "Umgebung ins Compose-Verzeichnis uebertragen."
+
 if [[ -n "${dienste// /}" ]]; then
     # shellcheck disable=SC2086
+    #
+    # up -d und nicht restart: Portbindungen entstehen beim ANLEGEN des
+    # Containers. Ein Neustart behaelt die alten - eine geaenderte
+    # Lauschadresse wird damit nie wirksam, und es sieht aus, als haette
+    # die Aenderung nichts bewirkt.
     compose up -d $dienste
 fi
 

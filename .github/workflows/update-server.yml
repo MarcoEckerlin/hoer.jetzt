@@ -389,6 +389,26 @@ jobs:
               esac
           done < <(grep -E '^\s+- "\$\{[A-Z_]+:-' deploy/docker/docker-compose.yml)
 
+          # Und kommt die .env dort an, wo Compose sie liest?
+          #
+          # Es gibt zwei: ${ARBEIT}/.env schreibt der Installer,
+          # ${ARBEIT}/main/deploy/docker/.env liest Compose. Wer nur die
+          # erste fuellt und dann "compose up" ruft, aendert nichts - und
+          # sieht eine korrekte .env neben einem Container, der sie nicht
+          # kennt.
+          u="$(grep -n 'umgebung_uebertragen' deploy/install-node.sh | grep -v '^.*#' | head -1 | cut -d: -f1)"
+          c="$(grep -n 'compose up -d' deploy/install-node.sh | head -1 | cut -d: -f1)"
+          if [ -z "$u" ]; then
+              echo "FEHL install-node.sh uebertraegt die .env nicht ins Compose-Verzeichnis"
+              fehler=1
+          elif [ "$u" -ge "$c" ]; then
+              echo "FEHL install-node.sh uebertraegt die .env erst NACH 'compose up'"
+              echo "     (Zeile $u nach Zeile $c) - beim Start gilt dann noch der alte Stand."
+              fehler=1
+          else
+              echo "ok   .env wird vor 'compose up' uebertragen (Zeile $u vor $c)"
+          fi
+
           exit "$fehler"
 
       # Baut ein Knoten noch selbst?

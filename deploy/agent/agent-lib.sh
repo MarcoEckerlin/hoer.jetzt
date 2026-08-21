@@ -73,6 +73,46 @@ umgebung_setzen() {
     return 0
 }
 
+# umgebung_uebertragen   Die Knoten-.env in das Verzeichnis bringen, in dem
+#                        Compose sie tatsaechlich liest.
+#
+# Es gibt zwei .env-Dateien, und das ist die Falle:
+#
+#   ${ARBEIT}/.env                        die bleibende. Hier schreiben
+#                                         install-node.sh und der Agent.
+#   ${ARBEIT}/main/deploy/docker/.env     die, die Compose liest - denn
+#                                         compose() wechselt in dieses
+#                                         Verzeichnis, und Compose nimmt die
+#                                         .env von dort.
+#
+# Abgeglichen hat sie bisher nur auto-update.sh. install-node.sh setzte also
+# HJ_WEB_BIND, HJ_PRIVAT_IP und alles andere in die bleibende Datei - und rief
+# danach "compose up" in einem Verzeichnis, dessen .env davon nichts wusste.
+# Die Werte wirkten erst beim naechsten Lauf des Agenten, oder nie.
+#
+# Von aussen sah das aus, als haette der Installer nichts getan: die .env
+# stimmte, der Container lief, und trotzdem lauschte er auf 127.0.0.1. Auch
+# ein Neustart half nicht - Portbindungen entstehen beim Anlegen des
+# Containers, nicht beim Start.
+#
+# Uebertragen wird Schluessel fuer Schluessel und nicht per cp: was
+# auto-update.sh dort ergaenzt hat - die Abbild-Marken aus dem Manifest und
+# die zentralen Vorgaben - soll stehen bleiben.
+umgebung_uebertragen() {
+    local ziel="${ARBEIT}/main/deploy/docker/.env"
+    [[ -f "$UMGEBUNG" ]] || return 0
+    [[ -d "$(dirname "$ziel")" ]] || return 0
+
+    [[ -f "$ziel" ]] || : > "$ziel"
+    chmod 600 "$ziel" 2>/dev/null || true
+
+    local zeile
+    while IFS= read -r zeile; do
+        [[ -z "$zeile" || "$zeile" == \#* || "$zeile" != *=* ]] && continue
+        umgebung_setzen "${zeile%%=*}" "${zeile#*=}" "$ziel" >/dev/null || true
+    done < "$UMGEBUNG"
+}
+
 # ------------------------------------------------------------------ Module
 
 # Welche Module auf diesem Host laufen sollen.
