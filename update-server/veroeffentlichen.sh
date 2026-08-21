@@ -147,6 +147,46 @@ if [[ "$NUR_MANIFEST" -eq 0 ]]; then
     quellen_bereitlegen
 fi
 
+# ------------------------------------------------------ 1c  An der Registry anmelden
+#
+# Nicht voraussetzen, sondern herstellen.
+#
+# Bis hierher verliess sich das Skript darauf, dass einrichten.sh einmal
+# "docker login" gemacht hat. Das haelt nicht: die Anmeldung haengt am Port
+# (127.0.0.1:8091), und der aendert sich beim Umkonfigurieren. Ausserdem
+# raeumt neu-aufsetzen.sh sie bewusst weg.
+#
+# Ergebnis war eine Meldung, die nach einem Rechteproblem der Registry
+# aussieht, obwohl nur eine Anmeldung fehlt:
+#
+#   no basic auth credentials
+#
+# Das Passwort steht in derselben .env, die dieses Skript ohnehin liest -
+# es gibt keinen Grund, danach zu fragen oder es vorauszusetzen.
+step "An der Registry anmelden"
+PW_KNOTEN_LOKAL="$(grep '^HJ_TOKEN_KNOTEN=' "${HIER}/.env" 2>/dev/null | cut -d= -f2- || true)"
+[[ -n "$PW_KNOTEN_LOKAL" ]] \
+    || fail "Kein HJ_TOKEN_KNOTEN in ${HIER}/.env - erst einrichten.sh laufen lassen."
+
+# Ueber die Standardeingabe, nicht als Argument: sonst stuende das Passwort
+# in "ps aux", solange der Aufruf laeuft.
+if printf '%s' "$PW_KNOTEN_LOKAL" \
+        | docker login "127.0.0.1:${HJ_PORT_INTERN}" -u knoten --password-stdin >/dev/null 2>&1; then
+    info "127.0.0.1:${HJ_PORT_INTERN}"
+else
+    fail "Anmeldung an der eigenen Registry fehlgeschlagen.
+
+       Laeuft Caddy, und stimmt der Port?
+           docker compose -f ${HIER}/docker-compose.yml ps
+           curl -sI http://127.0.0.1:${HJ_PORT_INTERN}/v2/ | head -1
+
+       Ein 401 dort ist richtig - das ist die Passwortabfrage. Kommt gar
+       nichts, laeuft Caddy nicht oder lauscht woanders.
+
+       (Ein Eintrag in /etc/docker/daemon.json ist hierfuer nicht noetig:
+       127.0.0.1 gilt fuer Docker ohnehin als unsichere Registry.)"
+fi
+
 # ------------------------------------------------------------------ 2  Bauen
 
 if [[ "$NUR_MANIFEST" -eq 0 ]]; then
