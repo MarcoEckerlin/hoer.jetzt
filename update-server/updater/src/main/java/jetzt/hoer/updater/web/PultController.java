@@ -383,6 +383,24 @@ public class PultController {
             // "10.1.2.3/8" in der Liste und passte auf sich selbst nicht.
             String normal = Netzbereich.aus(bereich).toString();
 
+            // Zwei Eingaben, die nicht das tun, was sie sollen.
+            //
+            // "0.0.0.0/32" sieht nach "alles" aus und trifft genau eine
+            // Adresse: die 0.0.0.0, die kein Knoten hat. Wer das eintraegt,
+            // haelt danach alles fuer freigeschaltet und sucht den Fehler
+            // anderswo - genau das ist passiert.
+            //
+            // "0.0.0.0/0" trifft dagegen wirklich alles. Das ist zulaessig,
+            // aber es hebt die Adresspruefung als Ganzes auf. Wer es will,
+            // soll es wissen.
+            if ("0.0.0.0/32".equals(normal) || "::/128".equals(normal)) {
+                hinweis.addFlashAttribute("fehler",
+                        normal + " trifft genau eine Adresse - die Null-Adresse, "
+                        + "die kein Knoten hat. Gemeint war vermutlich 0.0.0.0/0 "
+                        + "(alles) oder die tatsaechliche Adresse des Hosts.");
+                return "redirect:/freigaben";
+            }
+
             Instant ablauf = null;
             if (!laeuftAb.isBlank()) {
                 // Ende des gewaehlten Tages in DEUTSCHER Zeit, nicht in UTC.

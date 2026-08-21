@@ -196,9 +196,41 @@ schritt "Anmeldung beim Update-Server"
 
 umgebung_lesen 2>/dev/null || true
 
-if [[ -n "${HJ_KNOTEN_GEHEIMNIS:-}" ]]; then
+# Gilt das gespeicherte Geheimnis ueberhaupt noch?
+#
+# Frueher wurde die Anmeldung uebersprungen, sobald irgendein Geheimnis in
+# der .env stand. Das ist die haeufigste Falle beim Neuanlegen: der Knoten
+# wird im Updater entfernt und neu angelegt, der Host behaelt aber sein altes
+# Geheimnis. Der Installer meldete dann "bereits angemeldet" und lief in den
+# naechsten Schritt - der mit 401 abbrach.
+#
+# Die Meldung dort zeigte auf die Adressfreigabe. Sie ist aber nicht das
+# Problem: 401 heisst "Anmeldung stimmt nicht", eine gesperrte Adresse waere
+# 403. Wer der Meldung folgt, sucht am falschen Ende.
+#
+# Also nachsehen, statt zu vermuten. Ein Abruf, der Anmeldung braucht,
+# genuegt - er kostet nichts und beantwortet die Frage eindeutig.
+GEHEIMNIS_GILT=false
+if [[ -n "${HJ_KNOTEN_GEHEIMNIS:-}" && -n "${HJ_KNOTEN_KENNUNG:-}" ]]; then
+    if us_holen "/release/aktuell" >/dev/null 2>&1; then
+        GEHEIMNIS_GILT=true
+    fi
+fi
+
+if $GEHEIMNIS_GILT; then
     gut "bereits angemeldet als ${HJ_KNOTEN_KENNUNG}"
 else
+    if [[ -n "${HJ_KNOTEN_GEHEIMNIS:-}" ]]; then
+        # Es lag eines da, es gilt nur nicht mehr.
+        warnen "Das gespeicherte Geheimnis von ${HJ_KNOTEN_KENNUNG:-diesem Host} gilt nicht mehr."
+        warnen "Der Knoten wurde vermutlich im Updater entfernt und neu angelegt."
+        [[ -n "$TOKEN" ]] || fehler \
+            "Ohne --token laesst sich das nicht heilen.
+       Im Updater unter 'Verwalten' einen neuen Aufsetz-Token erzeugen und
+       diesen Befehl damit erneut ausfuehren."
+        warnen "Wird mit dem angegebenen Token neu angemeldet."
+    fi
+
     [[ -n "$KENNUNG" ]] || fehler "--kennung fehlt. Im Updater unter Verwalten anlegen."
     [[ -n "$TOKEN" ]]   || fehler "--token fehlt. Im Updater unter Verwalten erzeugen."
 
@@ -248,7 +280,23 @@ if us_senden "/schluessel" "$(printf '{"zweck":"TRESOR","oeffentlich":%s}' \
         "$(printf '%s' "$OEFFENTLICH" | sed ':a;N;$!ba;s/\n/\\n/g;s/^/"/;s/$/"/')")" >/dev/null; then
     gut "hinterlegt"
 else
-    fehler "Schluessel liess sich nicht hinterlegen - ist die Adresse dieses Hosts freigeschaltet?"
+    # Was hier schiefgehen kann, und wie man es auseinanderhaelt:
+    #
+    #   401  Die Anmeldung stimmt nicht. Meist ein Geheimnis, das nicht mehr
+    #        gilt - der Knoten wurde im Updater neu angelegt.
+    #   403  Die Anmeldung stimmt, die Adresse ist gesperrt oder nicht frei.
+    #   404  Der Pfad gibt es nicht - falscher Update-Server oder alter Stand.
+    #
+    # Die alte Meldung nannte nur die Adresse. Wer 401 bekam, suchte
+    # daraufhin in den Freigaben - und fand dort nichts, weil dort nichts war.
+    fehler "Schluessel liess sich nicht hinterlegen.
+
+       Bei 401 stimmt die Anmeldung nicht: im Updater unter 'Verwalten' einen
+       neuen Aufsetz-Token erzeugen und diesen Befehl damit wiederholen.
+
+       Bei 403 ist die Adresse dieses Hosts nicht freigeschaltet. Unter
+       'Freigaben' eintragen - die oeffentliche IPv4 dieses Hosts lautet:
+       $(curl -fsS --max-time 5 https://api.ipify.org 2>/dev/null || echo '<nicht ermittelbar>')"
 fi
 
 # ------------------------------------------------------------ 5. Tresor
