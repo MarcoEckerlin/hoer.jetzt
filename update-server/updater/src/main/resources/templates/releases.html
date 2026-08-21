@@ -10,12 +10,12 @@
 
     <!-- Was gerade gilt. Die erste Frage an diese Seite. -->
     <div th:if="${laufend}" class="einmalig">
-        <h2>Es gilt <span th:text="${laufend.version()}"></span></h2>
+        <h2>Es gilt <span th:text="${laufend.version}"></span></h2>
         <p class="klein">
-            Abgelegt <span th:text="${#temporals.format(laufend.abgelegt(), 'dd.MM.yyyy HH:mm')}"></span>
+            Abgelegt <span th:text="${#temporals.format(laufend.abgelegt, 'dd.MM.yyyy HH:mm')}"></span>
         </p>
         <div>
-            <span th:each="t : ${laufend.teile()}" class="marke"
+            <span th:each="t : ${laufend.teile}" class="marke"
                   th:text="${t.key} + ' ' + ${t.value}"></span>
         </div>
 
@@ -61,8 +61,8 @@
                       th:classappend="${k.version == laeuft} ? 'gut' : 'warnung'"
                       th:text="${k.version}"></span>
             </td>
-            <td class="klein" th:text="${k.zuletztGesehen} != null
-                    ? ${#temporals.format(k.zuletztGesehen, 'dd.MM. HH:mm')} : '&ndash;'"></td>
+            <td class="klein" th:text="${k.zuletztGesehen == null} ? '&ndash;'
+                                     : ${#temporals.format(k.zuletztGesehen, 'dd.MM. HH:mm')}"></td>
             <td>
                 <form th:action="@{'/knoten/' + ${k.kennung} + '/update'}" method="post" class="inline">
                     <input type="hidden" name="an" value="true">
@@ -95,17 +95,17 @@
         <tbody>
         <tr th:each="s : ${verlauf}">
             <td>
-                <code th:text="${s.version()}"></code>
-                <span th:if="${s.gilt()}" class="marke gut">gilt</span>
+                <code th:text="${s.version}"></code>
+                <span th:if="${s.gilt}" class="marke gut">gilt</span>
             </td>
-            <td class="klein" th:text="${s.abgelegt()} != null
-                    ? ${#temporals.format(s.abgelegt(), 'dd.MM.yyyy HH:mm')} : '&ndash;'"></td>
+            <td class="klein" th:text="${s.abgelegt == null} ? '&ndash;'
+                                       : ${#temporals.format(s.abgelegt, 'dd.MM.yyyy HH:mm')}"></td>
             <td class="klein">
-                <span th:each="t : ${s.teile()}" class="marke"
+                <span th:each="t : ${s.teile}" class="marke"
                       th:text="${t.key} + ' ' + ${t.value}"></span>
             </td>
             <td>
-                <div class="knopfreihe" th:unless="${s.gilt()}">
+                <div class="knopfreihe" th:unless="${s.gilt}">
                     <!--
                       Zurueckrollen mit und ohne Vormerken.
                       Ohne: das Manifest gilt, die Knoten holen es in der Nacht.
@@ -113,17 +113,17 @@
                       Beides steht als eigener Knopf da, weil "sofort" bei einem
                       Rueckweg meist gemeint ist - aber nicht immer.
                     -->
-                    <form th:action="@{'/releases/' + ${s.version()} + '/zurueck'}" method="post"
+                    <form th:action="@{'/releases/' + ${s.version} + '/zurueck'}" method="post"
                           onsubmit="return confirm('Auf diesen Stand zurueck? Das Manifest gilt sofort, die Knoten holen es in der Nacht.');">
                         <input type="hidden" name="vormerken" value="false">
                         <button type="submit" class="schlicht">zurueckrollen</button>
                     </form>
-                    <form th:action="@{'/releases/' + ${s.version()} + '/zurueck'}" method="post"
+                    <form th:action="@{'/releases/' + ${s.version} + '/zurueck'}" method="post"
                           onsubmit="return confirm('Auf diesen Stand zurueck UND alle Knoten vormerken? Sie holen ihn dann beim naechsten Herzschlag.');">
                         <input type="hidden" name="vormerken" value="true">
                         <button type="submit" class="schlicht">zurueck und vormerken</button>
                     </form>
-                    <form th:action="@{'/releases/' + ${s.version()} + '/entfernen'}" method="post"
+                    <form th:action="@{'/releases/' + ${s.version} + '/entfernen'}" method="post"
                           onsubmit="return confirm('Aus dem Verlauf entfernen? Die Abbilder bleiben in der Registry - nur der Zettel, welche zusammengehoerten, ist weg.');">
                         <button type="submit" class="gefahr">entfernen</button>
                     </form>

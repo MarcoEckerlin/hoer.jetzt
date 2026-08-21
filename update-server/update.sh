@@ -133,6 +133,40 @@ git -C "$QUELLBAUM" reset -q --hard "origin/${ZWEIG}" \
 # Wagenruecklauf endet in "set: Illegal option -".
 find "$QUELLBAUM" -name "*.sh" -exec sed -i 's/\r$//' {} + 2>/dev/null || true
 
+# ------------------------------------------------------- Rechte nachziehen
+#
+# Der Updater laeuft unter einer festen Kennung (1500). Vorher vergab
+# useradd sie automatisch - meist 999. Beide Volumen tragen aber noch die
+# alte Kennung, und ein Mount bringt seine Rechte mit:
+#
+#   /daten            die SQLite-Datei. Gehoert sie 999, kann der Prozess
+#                     sie nicht oeffnen. Spring bricht beim Start ab
+#                     ("attempt to write a readonly database"), der
+#                     Container laeuft in eine Schleife - und das nach
+#                     einem Update, das sonst durchlief.
+#
+#   /srv/ausliefern   nur "release/". Dort schaltet die Release-Seite
+#                     "release/aktuell" um; Caddy liefert genau diese Datei
+#                     an die Knoten aus. "knoten/" und "tresor/" bleiben
+#                     root - die Dateirechte ziehen die Grenze, nicht der
+#                     Mount.
+#
+# Beides ist einmalig. Spaetere Laeufe finden es schon richtig vor.
+sagen "Rechte an den Volumen"
+rechte_setzen() {
+    docker run --rm -v "${1}:/v" alpine:3 sh -c "$2" >/dev/null 2>&1
+}
+if rechte_setzen hj-update_updater-daten 'chown -R 1500:1500 /v'; then
+    sagen "  /daten gehoert dem Updater"
+else
+    warnen "  /daten nicht setzbar - der Updater startet moeglicherweise nicht"
+fi
+if rechte_setzen hj-update_ausliefern 'mkdir -p /v/release && chown -R 1500:1500 /v/release'; then
+    sagen "  release/ gehoert dem Updater"
+else
+    warnen "  release/ nicht setzbar - Zurueckrollen ueber die Oberflaeche geht dann nicht"
+fi
+
 # ------------------------------------------------------------------ bauen
 
 sagen "Bauen und starten"
@@ -144,23 +178,6 @@ if ! docker compose -f "$COMPOSE" up -d --build; then
        docker compose -f ${COMPOSE} logs --tail 40"
 fi
 
-# ------------------------------------------------- Rechte am Auslieferungsort
-#
-# Bestandsinstallationen haben "release/" root gehoerend - es entstand, als
-# dort nur veroeffentlichen.sh schrieb. Seit es die Release-Seite gibt, muss
-# der Updater "release/aktuell" beim Zurueckrollen umschalten koennen, und
-# das scheitert an den Rechten statt an einer Fehlermeldung, die man findet.
-#
-# Einmalig nachziehen. Spaetere Laeufe finden es schon richtig vor, und ein
-# Fehlschlag ist kein Grund, das Update abzubrechen - alles andere laeuft
-# auch ohne.
-sagen "Rechte am Auslieferungsverzeichnis"
-if docker run --rm -v hj-update_ausliefern:/aus alpine:3 \
-        sh -c 'mkdir -p /aus/release && chown -R 1500:1500 /aus/release' >/dev/null 2>&1; then
-    sagen "release/ gehoert dem Updater"
-else
-    warnen "Rechte nicht setzbar - Zurueckrollen ueber die Oberflaeche geht dann nicht"
-fi
 
 # ------------------------------------------------------------ Caddy erneuern
 
