@@ -36,14 +36,16 @@ services:
 
   core:
     logging: *protokoll
-    # Bauplan UND Abbildname.
+    # Nur "image", kein Bauplan.
     #
-    # "image" allein reicht nur dort, wo ein Update-Server die Abbilder
-    # liefert. Auf einem Host, der aus dem Quelltext baut, fehlt sonst der
-    # Kontext - "docker compose build" bricht ab, und genau das ist die
-    # Lage, solange der Update-Server noch nicht steht.
-    build:
-      context: ../../../core
+    # Hier stand ein build-Block mit dem Quellbaum daneben - gedacht fuer die
+    # Zeit, in der es noch keinen Update-Server gab. Auf einem Knoten gibt es
+    # diesen Baum nicht, und Compose bricht schon beim Einlesen ab:
+    #
+    #   unable to prepare context: path "/opt/hoerjetzt/<teil>" not found
+    #
+    # Abbilder kommen fertig aus der Registry; HJ_REGISTRY und die *_TAG-
+    # Marken setzt auto-update.sh aus dem Release-Manifest.
     image: ${HJ_REGISTRY:?Registry fehlt - install-node.sh oder auto-update.sh setzt sie}/core:${CORE_TAG:-latest}
     restart: unless-stopped
     environment:
@@ -170,8 +172,18 @@ services:
       - 8.8.8.8
 
     depends_on:
-      lavalink-free-1:
-        condition: service_healthy
+      # Kein Lavalink. Es stand hier mit "condition: service_healthy", und
+      # damit zog jedes "compose up core" den Audio-Dienst mit hoch - auch
+      # auf einem Controller, der ausdruecklich keinen hat (dienste_von in
+      # agent-lib.sh). Auf einem Knoten ohne Quellbaum endete das in
+      #
+      #   unable to prepare context: path "/opt/hoerjetzt/lavalink" not found
+      #
+      # Sachlich war die Abhaengigkeit ohnehin falsch: Audio-Knoten stehen auf
+      # eigenen Hosts und werden im Adminbereich eingetragen, nicht ueber
+      # Compose verdrahtet. Ein Startzwang kann sie dort gar nicht erreichen.
+      # Der Kern prueft sie selbst (HJ_LAVALINK_WATCH_SECONDS) und verbindet
+      # sich neu, sobald einer da ist.
       postgres:
         condition: service_healthy
       redis:
@@ -215,14 +227,16 @@ services:
   # Der Port der Weboberflaeche wandert damit von core hierher.
   web:
     logging: *protokoll
-    # Bauplan UND Abbildname.
+    # Nur "image", kein Bauplan.
     #
-    # "image" allein reicht nur dort, wo ein Update-Server die Abbilder
-    # liefert. Auf einem Host, der aus dem Quelltext baut, fehlt sonst der
-    # Kontext - "docker compose build" bricht ab, und genau das ist die
-    # Lage, solange der Update-Server noch nicht steht.
-    build:
-      context: ../../../web
+    # Hier stand ein build-Block mit dem Quellbaum daneben - gedacht fuer die
+    # Zeit, in der es noch keinen Update-Server gab. Auf einem Knoten gibt es
+    # diesen Baum nicht, und Compose bricht schon beim Einlesen ab:
+    #
+    #   unable to prepare context: path "/opt/hoerjetzt/<teil>" not found
+    #
+    # Abbilder kommen fertig aus der Registry; HJ_REGISTRY und die *_TAG-
+    # Marken setzt auto-update.sh aus dem Release-Manifest.
     image: ${HJ_REGISTRY:?Registry fehlt - install-node.sh oder auto-update.sh setzt sie}/web:${WEB_TAG:-latest}
     restart: unless-stopped
     environment:
@@ -287,14 +301,16 @@ services:
 
   lavalink-free-1:
     logging: *protokoll
-    # Bauplan UND Abbildname.
+    # Nur "image", kein Bauplan.
     #
-    # "image" allein reicht nur dort, wo ein Update-Server die Abbilder
-    # liefert. Auf einem Host, der aus dem Quelltext baut, fehlt sonst der
-    # Kontext - "docker compose build" bricht ab, und genau das ist die
-    # Lage, solange der Update-Server noch nicht steht.
-    build:
-      context: ../../../lavalink
+    # Hier stand ein build-Block mit dem Quellbaum daneben - gedacht fuer die
+    # Zeit, in der es noch keinen Update-Server gab. Auf einem Knoten gibt es
+    # diesen Baum nicht, und Compose bricht schon beim Einlesen ab:
+    #
+    #   unable to prepare context: path "/opt/hoerjetzt/<teil>" not found
+    #
+    # Abbilder kommen fertig aus der Registry; HJ_REGISTRY und die *_TAG-
+    # Marken setzt auto-update.sh aus dem Release-Manifest.
     image: ${HJ_REGISTRY:?Registry fehlt - install-node.sh oder auto-update.sh setzt sie}/lavalink:${LAVALINK_TAG:-latest}
     restart: unless-stopped
     environment:

@@ -277,6 +277,63 @@ jobs:
           exit "$fehler"
 
 
+      # Baut ein Knoten noch selbst?
+      #
+      # Er kann es nicht: auf einem Knoten liegt kein Quellbaum. Ein
+      # build-Block bricht deshalb schon beim Einlesen ab -
+      #
+      #   unable to prepare context: path "/opt/hoerjetzt/lavalink" not found
+      #
+      # - und zwar auch dann, wenn der betroffene Dienst gar nicht gestartet
+      # werden sollte: Compose loest depends_on auf, bevor es irgendetwas
+      # tut. Genau so ist ein Controller gescheitert, der ausdruecklich kein
+      # Lavalink faehrt.
+      #
+      # Die Bloecke stammen aus der Zeit vor dem Update-Server. Sie sind weg,
+      # und sie sollen wegbleiben.
+      - name: Knoten bauen nicht selbst
+        run: |
+          set -uo pipefail
+          fehler=0
+          for f in deploy/docker/docker-compose.yml \
+                   deploy/docker/docker-compose.lavalink.yml \
+                   deploy/docker/docker-compose.nodes.yml; do
+              [ -f "$f" ] || continue
+              if treffer="$(grep -nE '^\s*build:' "$f")"; then
+                  echo "FEHL $f baut noch selbst:"
+                  echo "$treffer"
+                  fehler=1
+              else
+                  echo "ok   $f"
+              fi
+          done
+
+          # Und niemand darf einen Dienst erzwingen, den seine Rolle nicht hat.
+          # depends_on zieht ihn sonst mit hoch.
+          #
+          # Kommentarzeilen zaehlen nicht - der Block oben erklaert ja gerade,
+          # warum Lavalink dort NICHT mehr steht.
+          treffer="$(awk '
+              /^[[:space:]]*#/          { next }
+              /^[[:space:]]*depends_on:/{ drin=1; next }
+              drin && /^[[:space:]]*[a-z0-9_-]+:[[:space:]]*$/ && /lavalink/ {
+                  printf "%d: %s\n", NR, $0 }
+              drin && /^[[:space:]]*-[[:space:]]*lavalink/ {
+                  printf "%d: %s\n", NR, $0 }
+              /^[[:space:]]*(networks|ports|environment|volumes|image|restart):/ { drin=0 }
+          ' deploy/docker/docker-compose.yml)"
+          if [ -n "$treffer" ]; then
+              echo "FEHL ein Dienst haengt per depends_on an Lavalink:"
+              echo "$treffer"
+              echo "     Audio-Knoten stehen auf eigenen Hosts - ein Startzwang"
+              echo "     erreicht sie dort nicht und zieht sie hier faelschlich hoch."
+              fehler=1
+          else
+              echo "ok   nichts haengt per depends_on an Lavalink"
+          fi
+          exit "$fehler"
+
+
       # Ist die Kennung des Updaters ueberall dieselbe?
       #
       # Dem Updater gehoert "release/" im Auslieferungsvolumen - er schaltet
