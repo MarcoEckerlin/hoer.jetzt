@@ -133,6 +133,28 @@
 				uri /intern/pruefen-token
 				copy_headers X-Knoten
 			}
+
+			# Fuer Knoten die Anmeldung abstreifen, fuer den Veroeffentlicher nicht.
+			#
+			# Forgejo prueft unabhaengig von uns. Ein Knoten heisst dort nicht -
+			# er hat kein Forgejo-Konto und soll auch keines bekommen. Reichte
+			# man seine Anmeldung weiter, antwortete Forgejo mit 401, und die
+			# Meldung zeigte auf die Adressfreigabe:
+			#
+			#   failed to fetch anonymous token: 401 Unauthorized
+			#
+			# Ohne Anmeldung gibt Forgejo einen anonymen Token aus. Der genuegt:
+			# die Organisation ist oeffentlich, und anonym heisst lesen. Wer
+			# ueberhaupt bis hierher kommt, hat die Pruefung oben bestanden -
+			# Kennung, Geheimnis, Adresse und Berechtigung fuer dieses Abbild.
+			#
+			# Der Veroeffentlicher braucht dagegen Schreibrecht, also seine
+			# echte Forgejo-Anmeldung. Er ist der einzige mit einem Konto dort,
+			# und sein Name kommt aus der Pruefung oben - nicht aus der
+			# Anfrage.
+			@knoten not header X-Knoten veroeffentlichen
+			request_header @knoten -Authorization
+
 			reverse_proxy forgejo:3000
 		}
 	}
