@@ -222,6 +222,24 @@ else
 fi
 PW_ADMIN="$(zufall)"
 
+# Die eigene oeffentliche Adresse ermitteln.
+#
+# Sie kommt in die Freigaben, weil der Token-Umweg beim Veroeffentlichen von
+# aussen zurueckkommt - siehe EigeneFreigabe.java. Ohne sie scheitert das
+# Veroeffentlichen mit "Adresse nicht freigeschaltet", und zwar auf genau dem
+# Rechner, auf dem man gerade sitzt.
+#
+# Schlaegt die Abfrage fehl, bleibt der Wert leer: das ist kein Grund, das
+# Einrichten abzubrechen. Der Updater weist dann beim Start darauf hin.
+HJ_EIGENE_IP="$(curl -fsS --max-time 8 https://api.ipify.org 2>/dev/null || true)"
+if [[ -n "$HJ_EIGENE_IP" ]]; then
+    info "Eigene Adresse: ${HJ_EIGENE_IP} (kommt in die Freigaben)"
+else
+    warn "Eigene oeffentliche Adresse nicht ermittelbar."
+    warn "Falls das Veroeffentlichen spaeter an der Adresspruefung scheitert,"
+    warn "die genannte Adresse unter 'Freigaben' eintragen."
+fi
+
 # Das Passwort, mit dem dieser Server in seine eigene Registry schiebt.
 #
 # Er ist kein Knoten: keine Kennung, keine Module, kein Geheimnis aus einer
@@ -317,6 +335,7 @@ cat > "$UMGEBUNG" <<ENV
 # Klartext verglichen. Wer diese Datei lesen kann, steht ohnehin auf dem
 # Server. Das Passwort der Oberflaeche steht dagegen nur als Hash da.
 HJ_UPDATE_HOST=${HJ_UPDATE_HOST}
+HJ_EIGENE_IP=${HJ_EIGENE_IP}
 HJ_PORT_INTERN=${HJ_PORT_INTERN}
 HJ_CADDY_BIND=${HJ_CADDY_BIND}
 HJ_GIT_BIND=${HJ_GIT_BIND}

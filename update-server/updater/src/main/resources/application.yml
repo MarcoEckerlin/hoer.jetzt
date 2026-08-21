@@ -16,6 +16,16 @@ hj:
   # Ohne ihn stuende dort ein Platzhalter, und wer ihn kopiert, bekaeme einen
   # Befehl, der nirgendwohin zeigt.
   update-host: ${HJ_UPDATE_HOST:repository.hoer.jetzt}
+  # Die oeffentliche Adresse dieses Servers.
+  #
+  # Beim Veroeffentlichen folgt Docker dem Bearer-Realm, den Forgejo nennt -
+  # der zeigt auf den oeffentlichen Namen. Die Token-Anfrage geht also hinaus
+  # und kommt von aussen zurueck; fuer den Torwaechter stammt sie damit von
+  # dieser Adresse und nicht von localhost.
+  #
+  # Ohne sie scheitert das Veroeffentlichen an "Adresse nicht freigeschaltet"
+  # - auf demselben Rechner, auf dem man gerade sitzt.
+  eigene-ip: ${HJ_EIGENE_IP:}
 
   # Wessen Weiterleitungs-Koepfen geglaubt wird.
   #

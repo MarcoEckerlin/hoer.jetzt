@@ -151,6 +151,8 @@ services:
       # Der oeffentliche Name - nur fuer die Anzeige: die Knotenseite baut
       # daraus den Aufsetz-Einzeiler.
       HJ_UPDATE_HOST: ${HJ_UPDATE_HOST:?Kein oeffentlicher Name - einrichten.sh laufen lassen}
+      # Die eigene oeffentliche Adresse - siehe EigeneFreigabe.
+      HJ_EIGENE_IP: ${HJ_EIGENE_IP:-}
       HJ_PROTOKOLL_TAGE: ${HJ_PROTOKOLL_TAGE:-21}
       HJ_DATEN: /daten
       # Wo die Tresor-Klartexte liegen. Der Updater liest sie und richtet sie
