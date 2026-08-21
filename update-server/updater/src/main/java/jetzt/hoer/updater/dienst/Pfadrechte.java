@@ -46,6 +46,22 @@ public final class Pfadrechte {
     private static boolean fuerAlle(String pfad) {
         return pfad.equals("/v2/") || pfad.equals("/v2")
                 || pfad.startsWith("/release/aktuell")
+                // Die zentralen Vorgaben. Dieselbe Ueberlegung wie beim
+                // Manifest: ohne sie weiss ein Knoten nicht, wie er sich
+                // einstellen soll.
+                //
+                // Ohne Faehigkeitspruefung, weil dort nichts Geheimes steht -
+                // der Katalog laesst Geheimnisse gar nicht erst zu
+                // (Einstellungskatalog.VERBOTEN), und der Knoten hat noch eine
+                // eigene Sperrliste. Was schuetzenswert ist, geht durch den
+                // Tresor, und der richtet sich an einen einzelnen Knoten.
+                //
+                // Waere der Pfad nicht hier, faende ihn noetig() nicht und
+                // darf() lehnte ab: unbekannte Pfade sind gesperrt. Die
+                // Vorgaben kaemen dann nie an, ohne dass irgendwo ein Fehler
+                // stuende - der Knoten bekaeme schlicht 403 und liefe mit
+                // seinen Vorgabewerten weiter.
+                || pfad.startsWith("/voreinstellungen/")
                 // Seinen eigenen oeffentlichen Schluessel darf jeder Knoten
                 // hinterlegen. Es an eine Faehigkeit zu binden waere ein
                 // Zirkel: ohne Schluessel bekommt er keinen Tresor, und ohne

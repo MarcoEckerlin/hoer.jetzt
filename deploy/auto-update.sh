@@ -81,9 +81,31 @@ flock -n 9 || ende "Ein Update laeuft bereits - dieser Lauf entfaellt."
 
 # ------------------------------------------------------------------ Zugang
 #
-# den Reverse-Proxy, ein Zertifikat nicht. Es steht in der .env (0600).
+# Der Knoten weist sich mit seiner EIGENEN Kennung aus, nicht mehr mit dem
+# gemeinsamen Passwort.
+#
+# Hier standen drei Fehler uebereinander, und zusammen haben sie jedes
+# Update verhindert:
+#
+#   1. Das Skript verlangte HJ_TOKEN_KNOTEN und brach ohne ihn ab. Gesetzt
+#      hat den Wert nur der alte interaktive Weg (knoten-aufsetzen.sh) -
+#      ein ueber bootstrap aufgesetzter Knoten hat ihn nie.
+#   2. hole() und melden() meldeten sich als Benutzer "knoten" mit diesem
+#      gemeinsamen Passwort an. Der Updater weist das ab, seit
+#      hj.token.gemeinsam-erlauben auf false steht - also 401, selbst wenn
+#      der Wert dagewesen waere.
+#   3. HJ_KNOTEN_KENNUNG und HJ_KNOTEN_GEHEIMNIS wurden weiter unten fuer
+#      "docker login" benutzt, aber nirgends aus der .env gelesen. Die .env
+#      wird nicht in die Umgebung geladen; beide waren leer, und ":?" brach
+#      ab mit "Knoten nicht angemeldet" - obwohl er angemeldet war.
+#
+# Das gemeinsame Passwort bleibt als Rueckfallweg, aber nur wenn es keine
+# eigene Kennung gibt: Knoten aus der Zeit davor sollen nicht stehen
+# bleiben, bloss weil sie noch nicht umgestellt sind.
 
 HJ_UPDATE_HOST="$(wert HJ_UPDATE_HOST)"
+HJ_KNOTEN_KENNUNG="$(wert HJ_KNOTEN_KENNUNG)"
+HJ_KNOTEN_GEHEIMNIS="$(wert HJ_KNOTEN_GEHEIMNIS)"
 HJ_TOKEN_KNOTEN="$(wert HJ_TOKEN_KNOTEN)"
 
 if [[ -z "$HJ_UPDATE_HOST" ]]; then
@@ -91,10 +113,24 @@ if [[ -z "$HJ_UPDATE_HOST" ]]; then
        Dieser Host haengt noch am alten GitHub-Weg. Umstellen:
            curl -fsSLu knoten https://<update-server>/knoten/aufsetzen.sh -o a.sh && bash a.sh"
 fi
-if [[ -z "$HJ_TOKEN_KNOTEN" ]]; then
-    fehler "In ${UMGEBUNG} fehlt HJ_TOKEN_KNOTEN - ohne Passwort kein Zugang.
-       Dieser Host stammt noch aus der Zeit mit Client-Zertifikaten.
-       Einmal neu aufsetzen holt das nach; die vorhandene .env bleibt erhalten."
+
+if [[ -n "$HJ_KNOTEN_KENNUNG" && -n "$HJ_KNOTEN_GEHEIMNIS" ]]; then
+    ANMELDE_BENUTZER="$HJ_KNOTEN_KENNUNG"
+    ANMELDE_PASSWORT="$HJ_KNOTEN_GEHEIMNIS"
+elif [[ -n "$HJ_TOKEN_KNOTEN" ]]; then
+    # Uebergang. Der Updater nimmt das nur an, solange
+    # HJ_GEMEINSAM_ERLAUBEN=true gesetzt ist - sonst antwortet er 401 und
+    # die Meldung weiter unten sagt, was zu tun ist.
+    ANMELDE_BENUTZER="knoten"
+    ANMELDE_PASSWORT="$HJ_TOKEN_KNOTEN"
+    sagen "WARNUNG: noch am gemeinsamen Passwort. Einmal install-node.sh mit"
+    sagen "         frischem Aufsetz-Token gibt diesem Knoten eine eigene Kennung."
+else
+    fehler "Dieser Knoten hat keinen Zugang zum Update-Server.
+       Weder HJ_KNOTEN_KENNUNG/HJ_KNOTEN_GEHEIMNIS noch HJ_TOKEN_KNOTEN
+       stehen in ${UMGEBUNG}. Mit einem frischen Aufsetz-Token anmelden:
+           bash ${ARBEIT}/main/deploy/install-node.sh \\
+                --kennung <name> --token hj-... --modules <liste>"
 fi
 
 DOCKER="${ARBEIT}/main/deploy/docker"
@@ -104,7 +140,7 @@ DOCKER="${ARBEIT}/main/deploy/docker"
 
 hole() {
     curl -fsS -m 30 \
-        -u "knoten:${HJ_TOKEN_KNOTEN}" \
+        -u "${ANMELDE_BENUTZER}:${ANMELDE_PASSWORT}" \
         "https://${HJ_UPDATE_HOST}$1"
 }
 
@@ -130,7 +166,7 @@ melden() {
     local ergebnis="$1" zustand="${2:-}" antwort
 
     antwort="$(curl -fsS -m 15 -X POST \
-        -u "knoten:${HJ_TOKEN_KNOTEN}" \
+        -u "${ANMELDE_BENUTZER}:${ANMELDE_PASSWORT}" \
         -H "Content-Type: application/json" \
         -d "$(printf '{"kennung":"%s","name":"%s","profil":"%s","version":"%s","vorher":"%s","zustand":"%s","ergebnis":"%s"}' \
             "$KENNUNG" "$KENNUNG" "$PROFIL" \
@@ -323,15 +359,17 @@ fi
 # sie dort. Der Aufruf hier ist deshalb meist ein No-op, kostet aber nichts
 # und heilt den Fall, dass jemand die Datei geleert oder das Geheimnis
 # getauscht hat.
-: "${HJ_KNOTEN_KENNUNG:?HJ_KNOTEN_KENNUNG fehlt - Knoten nicht angemeldet}"
-: "${HJ_KNOTEN_GEHEIMNIS:?HJ_KNOTEN_GEHEIMNIS fehlt - Knoten nicht angemeldet}"
-if ! printf '%s' "$HJ_KNOTEN_GEHEIMNIS" | docker login "$HJ_UPDATE_HOST" \
-        -u "$HJ_KNOTEN_KENNUNG" --password-stdin >/dev/null 2>&1; then
-    fehler "Anmeldung an der Registry ${HJ_UPDATE_HOST} als ${HJ_KNOTEN_KENNUNG} fehlgeschlagen.
+# Dieselbe Anmeldung wie oben - kein zweites Paar Werte, das auseinander-
+# laufen kann. Die ":?"-Pruefungen, die hier standen, brachen ab, obwohl der
+# Knoten angemeldet war: sie lasen Shell-Variablen, die niemand gefuellt
+# hatte, weil die .env nicht in die Umgebung geladen wird.
+if ! printf '%s' "$ANMELDE_PASSWORT" | docker login "$HJ_UPDATE_HOST" \
+        -u "$ANMELDE_BENUTZER" --password-stdin >/dev/null 2>&1; then
+    fehler "Anmeldung an der Registry ${HJ_UPDATE_HOST} als ${ANMELDE_BENUTZER} fehlgeschlagen.
 
        Gilt das Geheimnis noch? Wurde der Knoten im Updater neu angelegt,
        muss er sich mit einem frischen Aufsetz-Token neu anmelden:
-           bash install-node.sh --kennung ${HJ_KNOTEN_KENNUNG} --token hj-... --modules <liste>"
+           bash install-node.sh --kennung ${ANMELDE_BENUTZER} --token hj-... --modules <liste>"
 fi
 
 # Erst laden, dann umschalten. Bricht das Laden ab - Netz weg, Abbild fehlt,

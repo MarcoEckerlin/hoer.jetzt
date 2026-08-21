@@ -409,6 +409,41 @@ jobs:
               echo "ok   .env wird vor 'compose up' uebertragen (Zeile $u vor $c)"
           fi
 
+          # Meldet sich der Knoten im laufenden Betrieb mit seiner eigenen
+          # Kennung an?
+          #
+          # auto-update.sh benutzte "-u knoten:${HJ_TOKEN_KNOTEN}" - den
+          # gemeinsamen Zugang. Der Updater weist ihn ab, seit
+          # hj.token.gemeinsam-erlauben auf false steht: 401, und kein Knoten
+          # zog je ein Update. Gesetzt hat den Wert ohnehin nur der alte
+          # interaktive Weg.
+          #
+          # knoten-aufsetzen.sh ist ausgenommen: das ist der Weg VOR der
+          # Anmeldung. Dort gibt es noch keine eigene Kennung, und das kurze
+          # Passwort fuer /knoten/ heisst weiterhin so.
+          if grep -nE '\-u "knoten:\$\{HJ_TOKEN_KNOTEN\}' \
+                 deploy/auto-update.sh deploy/install-node.sh deploy/agent/*.sh 2>/dev/null; then
+              echo "FEHL im laufenden Betrieb meldet sich noch jemand als 'knoten' an."
+              echo "     Der gemeinsame Zugang ist abgeschaltet - das gibt 401."
+              fehler=1
+          else
+              echo "ok   der laufende Betrieb benutzt die eigene Kennung"
+          fi
+
+          # Und liest auto-update.sh die eigene Kennung ueberhaupt aus der .env?
+          #
+          # Sie stand dort als Shell-Variable im Zugriff, ohne je gelesen zu
+          # werden - die .env wird nicht in die Umgebung geladen. Das ":?"
+          # brach dann ab mit "Knoten nicht angemeldet", obwohl er es war.
+          for v in HJ_KNOTEN_KENNUNG HJ_KNOTEN_GEHEIMNIS; do
+              if grep -q "${v}=\"\$(wert ${v})\"" deploy/auto-update.sh; then
+                  printf 'ok   auto-update.sh liest %s\n' "$v"
+              else
+                  printf 'FEHL auto-update.sh liest %s nicht aus der .env\n' "$v"
+                  fehler=1
+              fi
+          done
+
           exit "$fehler"
 
       # Baut ein Knoten noch selbst?

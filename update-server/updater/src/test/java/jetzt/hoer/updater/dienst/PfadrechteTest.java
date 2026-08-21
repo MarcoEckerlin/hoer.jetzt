@@ -69,12 +69,25 @@ class PfadrechteTest {
     // ------------------------------------------------------------------------
 
     @ParameterizedTest
-    @ValueSource(strings = {"/v2/", "/v2", "/release/aktuell", "/melden"})
-    @DisplayName("Versionspruefung, Manifest und Herzschlag stehen jedem offen")
+    @ValueSource(strings = {"/v2/", "/v2", "/release/aktuell", "/melden",
+                            "/voreinstellungen/lavalink.env",
+                            "/voreinstellungen/controller.env"})
+    @DisplayName("Versionspruefung, Manifest, Vorgaben und Herzschlag stehen jedem offen")
     void grundpfade(String pfad) {
         assertTrue(Pfadrechte.darf(AUDIO, pfad),
                 pfad + " muss jeder angemeldete Knoten erreichen - sonst weiss er "
                 + "nicht einmal, ob es fuer ihn etwas zu tun gibt.");
+    }
+
+    @Test
+    @DisplayName("Die Vorgaben stehen offen, der Tresor nicht")
+    void vorgabenOffenTresorNicht() {
+        // Der Unterschied ist der Inhalt, nicht der Weg: in den Vorgaben steht
+        // nichts Geheimes - der Katalog laesst es nicht zu. Im Tresor steht
+        // alles Geheime, und der richtet sich an einen einzelnen Knoten.
+        assertTrue(Pfadrechte.darf(AUDIO, "/voreinstellungen/lavalink.env"));
+        assertFalse(Pfadrechte.darf(AUDIO, "/tresor/controller"),
+                "Ein Audio-Knoten darf nicht an den Tresor des Controllers");
     }
 
     // ------------------------------------------------------------------------
