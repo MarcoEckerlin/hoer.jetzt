@@ -164,15 +164,20 @@ fi
 # Das Passwort steht in derselben .env, die dieses Skript ohnehin liest -
 # es gibt keinen Grund, danach zu fragen oder es vorauszusetzen.
 step "An der Registry anmelden"
-PW_KNOTEN_LOKAL="$(grep '^HJ_TOKEN_KNOTEN=' "${HIER}/.env" 2>/dev/null | cut -d= -f2- || true)"
-[[ -n "$PW_KNOTEN_LOKAL" ]] \
-    || fail "Kein HJ_TOKEN_KNOTEN in ${HIER}/.env - erst einrichten.sh laufen lassen."
+PW_VEROE="$(grep '^HJ_TOKEN_VEROEFFENTLICHEN=' "${HIER}/.env" 2>/dev/null | cut -d= -f2- || true)"
+[[ -n "$PW_VEROE" ]] || fail "Kein HJ_TOKEN_VEROEFFENTLICHEN in ${HIER}/.env.
+
+       Dieser Zugang kam mit dem Umbau dazu - aeltere .env-Dateien haben ihn
+       nicht. einrichten.sh ergaenzt ihn und laesst alles Uebrige stehen:
+
+           bash ${HIER}/einrichten.sh"
 
 # Ueber die Standardeingabe, nicht als Argument: sonst stuende das Passwort
 # in "ps aux", solange der Aufruf laeuft.
-if printf '%s' "$PW_KNOTEN_LOKAL" \
-        | docker login "127.0.0.1:${HJ_PORT_INTERN}" -u knoten --password-stdin >/dev/null 2>&1; then
-    info "127.0.0.1:${HJ_PORT_INTERN}"
+if printf '%s' "$PW_VEROE" \
+        | docker login "127.0.0.1:${HJ_PORT_INTERN}" \
+          -u veroeffentlichen --password-stdin >/dev/null 2>&1; then
+    info "127.0.0.1:${HJ_PORT_INTERN} als veroeffentlichen"
 else
     fail "Anmeldung an der eigenen Registry fehlgeschlagen.
 

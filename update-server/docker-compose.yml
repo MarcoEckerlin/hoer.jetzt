@@ -140,6 +140,8 @@ services:
     environment:
       HJ_TOKEN_KNOTEN:    ${HJ_TOKEN_KNOTEN:?Kein Knoten-Passwort - einrichten.sh laufen lassen}
       HJ_TOKEN_AUFSETZEN: ${HJ_TOKEN_AUFSETZEN:?Kein Aufsetz-Passwort - einrichten.sh laufen lassen}
+      # Der Update-Server schiebt damit in seine eigene Registry.
+      HJ_TOKEN_VEROEFFENTLICHEN: ${HJ_TOKEN_VEROEFFENTLICHEN:-}
       HJ_VERWALTER_NAME: ${HJ_VERWALTER_NAME:-verwalter}
       HJ_VERWALTER_HASH: ${HJ_VERWALTER_HASH:?Kein Verwalter-Hash - einrichten.sh laufen lassen}
       # Wem die Weiterleitungs-Koepfe geglaubt werden. Siehe application.yml -

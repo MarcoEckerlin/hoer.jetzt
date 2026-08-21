@@ -62,6 +62,7 @@ if [[ -f "$UMGEBUNG" ]]; then
     HJ_ADMIN="$(alt HJ_VERWALTER_NAME)"
     ALT_TOKEN_KNOTEN="$(alt HJ_TOKEN_KNOTEN)"
     ALT_TOKEN_AUFSETZEN="$(alt HJ_TOKEN_AUFSETZEN)"
+    ALT_TOKEN_VEROEFFENTLICHEN="$(alt HJ_TOKEN_VEROEFFENTLICHEN)"
     ALT_VERWALTER_HASH="$(alt HJ_VERWALTER_HASH)"
 
     warn "${UMGEBUNG} gibt es bereits."
@@ -221,6 +222,21 @@ else
 fi
 PW_ADMIN="$(zufall)"
 
+# Das Passwort, mit dem dieser Server in seine eigene Registry schiebt.
+#
+# Er ist kein Knoten: keine Kennung, keine Module, kein Geheimnis aus einer
+# Anmeldung. Bis hierher benutzte er dafuer den Benutzer "knoten" mit dem
+# gemeinsamen Knoten-Passwort - seit das abgeschaltet ist, geht das nicht
+# mehr, und das Veroeffentlichen scheiterte mit "no basic auth credentials".
+#
+# Bleibt auf diesem Host. Wird nirgends ausgeliefert und steht in keinem
+# Tresorprofil.
+if [[ -n "${ALT_TOKEN_VEROEFFENTLICHEN:-}" ]]; then
+    PW_VEROEFFENTLICHEN="$ALT_TOKEN_VEROEFFENTLICHEN"
+else
+    PW_VEROEFFENTLICHEN="$(zufall)"
+fi
+
 step "Hash fuer die Oberflaeche"
 
 # Vorhandenen Hash behalten.
@@ -306,6 +322,7 @@ HJ_CADDY_BIND=${HJ_CADDY_BIND}
 HJ_GIT_BIND=${HJ_GIT_BIND}
 HJ_TOKEN_KNOTEN=${PW_KNOTEN}
 HJ_TOKEN_AUFSETZEN=${PW_AUFSETZEN}
+HJ_TOKEN_VEROEFFENTLICHEN=${PW_VEROEFFENTLICHEN}
 HJ_VERWALTER_NAME=${HJ_ADMIN}
 HJ_VERWALTER_HASH=$(schuetzen "$HJ_VERWALTER_HASH")
 HJ_PULT_BIND=${HJ_PULT_BIND}
@@ -534,8 +551,16 @@ if ! grep -q "$REGISTRY_LOKAL" "$DAEMON" 2>/dev/null; then
     fi
 fi
 
-if printf '%s' "$PW_KNOTEN" | docker login "$REGISTRY_LOKAL" \
-        -u knoten --password-stdin >/dev/null 2>&1; then
+# Anmeldung an der eigenen Registry.
+#
+# Als "veroeffentlichen", nicht als "knoten". Der Update-Server ist kein
+# Knoten - er hat keine Kennung, keine Module und kein Geheimnis aus einer
+# Anmeldung. Frueher benutzte er dafuer das gemeinsame Knoten-Passwort; seit
+# das abgeschaltet ist (hj.token.gemeinsam-erlauben=false), wird es
+# abgewiesen, und das Veroeffentlichen scheiterte mit
+# "no basic auth credentials".
+if printf '%s' "$PW_VEROEFFENTLICHEN" | docker login "$REGISTRY_LOKAL" \
+        -u veroeffentlichen --password-stdin >/dev/null 2>&1; then
     info "Angemeldet an ${REGISTRY_LOKAL}."
 else
     warn "docker login fehlgeschlagen - die Registry-Probe wird scheitern."

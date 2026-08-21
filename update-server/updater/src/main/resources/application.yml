@@ -45,6 +45,11 @@ hj:
   token:
     knoten:    ${HJ_TOKEN_KNOTEN:?Kein Knoten-Passwort - einrichten.sh laufen lassen}
     aufsetzen: ${HJ_TOKEN_AUFSETZEN:?Kein Aufsetz-Passwort - einrichten.sh laufen lassen}
+    # Das Passwort, mit dem der Update-Server in seine EIGENE Registry
+    # schiebt. Er ist kein Knoten - keine Kennung, keine Module -, braucht
+    # aber Zugang zu /v2/. Steht nur in der .env dieses Servers und wird
+    # nirgends ausgeliefert.
+    veroeffentlichen: ${HJ_TOKEN_VEROEFFENTLICHEN:}
     # Das gemeinsame Passwort: aus.
     #
     # Es war als Uebergang gedacht, damit bestehende Knoten beim ersten Start

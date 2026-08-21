@@ -67,6 +67,10 @@ public class Zugang {
 
     private final byte[] gemeinsamesGeheimnis;
     private final byte[] aufsetzen;
+
+    /** Der Name, unter dem der Update-Server selbst in seine Registry schiebt. */
+    public static final String VEROEFFENTLICHER = "veroeffentlichen";
+    private final byte[] veroeffentlichen;
     private final boolean gemeinsamErlaubt;
     private final AusweisDaten ausweise;
 
@@ -74,12 +78,14 @@ public class Zugang {
 
     public Zugang(@Value("${hj.token.knoten}") String knoten,
                   @Value("${hj.token.aufsetzen}") String aufsetzen,
+                  @Value("${hj.token.veroeffentlichen:}") String veroeffentlichen,
                   // Vorgabe aus. Ein Knoten ohne eigenes Geheimnis kommt
                   // damit nirgends durch - siehe application.yml.
                   @Value("${hj.token.gemeinsam-erlauben:false}") boolean gemeinsamErlaubt,
                   AusweisDaten ausweise) {
         this.gemeinsamesGeheimnis = knoten.trim().getBytes(StandardCharsets.UTF_8);
         this.aufsetzen = aufsetzen.trim().getBytes(StandardCharsets.UTF_8);
+        this.veroeffentlichen = veroeffentlichen.trim().getBytes(StandardCharsets.UTF_8);
         this.gemeinsamErlaubt = gemeinsamErlaubt;
         this.ausweise = ausweise;
     }
@@ -115,6 +121,31 @@ public class Zugang {
     }
 
     private Ausweis pruefen(Anmeldedaten daten) {
+        // Der Veroeffentlicher.
+        //
+        // Der Update-Server schiebt seine eigenen Abbilder ueber
+        // 127.0.0.1 in die eigene Registry. Er ist dabei kein Knoten - er
+        // hat keine Kennung, keine Module und kein Geheimnis aus der
+        // Anmeldung.
+        //
+        // Vorher benutzte er dafuer den Benutzer "knoten" mit dem
+        // gemeinsamen Knoten-Passwort. Seit hj.token.gemeinsam-erlauben auf
+        // false steht, wird das abgewiesen - und das Veroeffentlichen
+        // scheiterte mit "no basic auth credentials". Richtig so: das
+        // gemeinsame Passwort soll nicht mehr gelten.
+        //
+        // Also ein eigener Zugang mit eigenem Passwort. Er darf alles, was
+        // die Registry braucht, und existiert nur auf diesem Host: das
+        // Passwort steht in der .env des Update-Servers und wird nirgends
+        // ausgeliefert.
+        if (VEROEFFENTLICHER.equals(daten.benutzer())
+                && veroeffentlichen.length > 0
+                && MessageDigest.isEqual(daten.passwort().getBytes(StandardCharsets.UTF_8),
+                                         veroeffentlichen)) {
+            return Ausweis.fuer(VEROEFFENTLICHER,
+                    java.util.EnumSet.allOf(jetzt.hoer.updater.modell.Faehigkeit.class));
+        }
+
         if (!daten.benutzer().isBlank()) {
             Optional<String> hash = ausweise.geheimnisHash(daten.benutzer());
             if (hash.isPresent()) {
