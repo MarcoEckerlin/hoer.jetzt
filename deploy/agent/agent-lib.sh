@@ -263,14 +263,37 @@ us_holen() {
         "https://${HJ_UPDATE_HOST}${pfad}"
 }
 
+# us_senden <pfad> <koerper>
+#
+# Bei einem Fehler steht der Grund im Antwortkoerper des Servers - etwa
+#
+#   Diese Adresse (2a01:4f9:c015:b874::1) ist nicht freigeschaltet.
+#
+# "curl -f" wirft genau diesen Koerper weg. Uebrig blieb "error 22", und das
+# aufrufende Skript riet die Adresse danach selbst mit api.ipify.org - was
+# die IPv4 liefert, waehrend die Verbindung ueber IPv6 lief. Freigeschaltet
+# wurde dann die falsche Adresse, und die Meldung blieb dieselbe.
+#
+# Also ohne -f: der Koerper wird gelesen, der Status getrennt geprueft. Der
+# Grund landet in US_ANTWORT, damit der Aufrufer ihn zeigen kann.
+US_ANTWORT=""
+US_STATUS=""
 us_senden() {
-    local pfad="$1" koerper="$2"
+    local pfad="$1" koerper="$2" alles
     : "${HJ_UPDATE_HOST:?HJ_UPDATE_HOST fehlt}"
-    curl -fsS --max-time 30 \
+    alles="$(curl -sS --max-time 30 -w '\n%{http_code}' \
         -u "${HJ_KNOTEN_KENNUNG}:${HJ_KNOTEN_GEHEIMNIS}" \
         -H "Content-Type: application/json" \
         -d "$koerper" \
-        "https://${HJ_UPDATE_HOST}${pfad}"
+        "https://${HJ_UPDATE_HOST}${pfad}" 2>&1)" || true
+
+    US_STATUS="${alles##*$'\n'}"
+    US_ANTWORT="${alles%$'\n'*}"
+
+    case "$US_STATUS" in
+        2*) printf '%s' "$US_ANTWORT"; return 0 ;;
+        *)  return 1 ;;
+    esac
 }
 
 # ------------------------------------------------------------------ Tresor
@@ -373,6 +396,28 @@ zustand_sammeln() {
 
     printf '{"dienste":"%s","module":"%s","last":"%s","speicher":"%s","platte_prozent":%s}' \
         "$laufend" "$(module_lesen | tr ' ' ',')" "$last" "$speicher" "${platte:-0}"
+}
+
+# json_text <text>   Text so aufbereiten, dass er als JSON-Zeichenkette passt.
+#
+# Gebraucht fuer den Herzschlag an den Update-Server: dort ist "zustand" ein
+# String (Knoten.java), waehrend die Controller-API mit "zustandJson" ein
+# Objekt erwartet. hj-agent.sh hat lange dasselbe Objekt an beide geschickt,
+# und der Updater wies jeden Herzschlag ab:
+#
+#   JSON parse error: Cannot deserialize value of type `java.lang.String`
+#                     from Object value (token `JsonToken.START_OBJECT`)
+#
+# Sichtbar war davon nichts - der Agent verwirft die Antwort. Im Log des
+# Updaters stand es im Minutentakt, je Knoten.
+json_text() {
+    # Parameterersetzung statt sed: die Muster bestehen fast nur aus
+    # Backslashes, und die ueberleben den Weg durch Heredocs und Editoren
+    # erfahrungsgemaess schlecht. In bash steht hier, was gemeint ist.
+    local s="$1"
+    s="${s//\\/\\\\}"
+    s="${s//\"/\\\"}"
+    printf '%s' "$s"
 }
 
 # ------------------------------------------------------------------ Docker

@@ -131,9 +131,9 @@ fi
 # entscheidet er darueber, ob dieser Knoten ein Update angeboten bekommt.
 if [[ -n "${HJ_KNOTEN_GEHEIMNIS:-}" ]]; then
     us_senden "/melden" "$(printf \
-        '{"kennung":"%s","name":"%s","profil":"%s","version":"%s","zustand":%s,"ergebnis":"%s","wartung":%s,"agentVersion":"%s"}' \
+        '{"kennung":"%s","name":"%s","profil":"%s","version":"%s","zustand":"%s","ergebnis":"%s","wartung":%s,"agentVersion":"%s"}' \
         "$KNOTEN" "${HJ_NODE_NAME:-$KNOTEN}" "$(module_lesen | tr ' ' '+')" \
-        "$version" "$(zustand_sammeln)" "lauf" "$IN_WARTUNG" "$AGENT_VERSION")" \
+        "$version" "$(json_text "$(zustand_sammeln)")" "lauf" "$IN_WARTUNG" "$AGENT_VERSION")" \
         >/dev/null 2>&1 || sagen "Update-Server nicht erreichbar - Herzschlag ausgelassen."
 fi
 

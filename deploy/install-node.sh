@@ -490,17 +490,29 @@ else
     #   401  Die Anmeldung stimmt nicht. Meist ein Geheimnis, das nicht mehr
     #        gilt - der Knoten wurde im Updater neu angelegt.
     #   403  Die Anmeldung stimmt, die Adresse ist gesperrt oder nicht frei.
-    #   404  Der Pfad gibt es nicht - falscher Update-Server oder alter Stand.
+    #   404  Den Pfad gibt es nicht - falscher Update-Server oder alter Stand.
     #
-    # Die alte Meldung nannte nur die Adresse. Wer 401 bekam, suchte
-    # daraufhin in den Freigaben - und fand dort nichts, weil dort nichts war.
-    fehler "Schluessel liess sich nicht hinterlegen.
+    # Der Server nennt den Grund im Antwortkoerper, mitsamt der Adresse, die
+    # ER gesehen hat. Genau die zaehlt.
+    #
+    # Frueher stand hier stattdessen die Auskunft von api.ipify.org - also die
+    # IPv4 dieses Hosts. Laeuft die Verbindung zum Update-Server ueber IPv6
+    # (bei Hetzner der Normalfall), ist das eine andere Adresse: freigeschaltet
+    # wurde die IPv4, abgewiesen wurde die IPv6, und die Meldung blieb
+    # dieselbe. Zwei Stunden Suche an einer Stelle, an der nichts war.
+    fehler "Schluessel liess sich nicht hinterlegen (HTTP ${US_STATUS:-?}).
 
-       Bei 401 stimmt die Anmeldung nicht: im Updater unter 'Verwalten' einen
-       neuen Aufsetz-Token erzeugen und diesen Befehl damit wiederholen.
+       Der Update-Server sagt:
+       ${US_ANTWORT:-<keine Antwort>}
 
-       Bei 403 ist die Adresse dieses Hosts nicht freigeschaltet. Unter
-       'Freigaben' eintragen - die oeffentliche IPv4 dieses Hosts lautet:
+       Bei 401: im Updater unter 'Verwalten' einen neuen Aufsetz-Token
+       erzeugen und diesen Befehl damit wiederholen.
+
+       Bei 403: die oben genannte Adresse unter 'Freigaben' eintragen.
+       Steht dort eine IPv6, genuegt meist das ganze Netz dieses Hosts:
+       $(ip -6 -o addr show scope global 2>/dev/null \
+         | awk '{print \"         \" \$4}' | head -3)
+       Die IPv4 dieses Hosts lautet zum Vergleich:
        $(curl -fsS --max-time 5 https://api.ipify.org 2>/dev/null || echo '<nicht ermittelbar>')"
 fi
 
@@ -636,9 +648,13 @@ if ! printf '%s' "$HJ_KNOTEN_GEHEIMNIS" | docker login "$HJ_UPDATE_HOST" \
 
        Als: ${HJ_KNOTEN_KENNUNG}
 
-       Ist die Adresse dieses Hosts unter 'Freigaben' eingetragen? Die
-       oeffentliche IPv4 lautet:
-       $(curl -fsS --max-time 5 https://api.ipify.org 2>/dev/null || echo '<nicht ermittelbar>')"
+       Ist die Adresse dieses Hosts unter 'Freigaben' eingetragen?
+       Achtung: der Update-Server sieht die Adresse, ueber die die
+       Verbindung LAEUFT - bei Hetzner meist IPv6, nicht IPv4.
+$(ip -6 -o addr show scope global 2>/dev/null | awk '{print "         IPv6  " $4}' | head -3)
+         IPv4  $(curl -fsS --max-time 5 https://api.ipify.org 2>/dev/null || echo '<nicht ermittelbar>')
+
+       Welche davon abgewiesen wurde, steht im Updater unter 'Protokoll'."
 fi
 gut "an der Registry angemeldet"
 
