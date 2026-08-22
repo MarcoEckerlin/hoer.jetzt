@@ -12,6 +12,7 @@
 #   --web-bind <adr>    Lauschadresse der Weboberflaeche (Vorgabe 0.0.0.0)
 #   --web-port <port>   Host-Port der Weboberflaeche (Vorgabe 8080)
 #   --privat-ip <adr>   Lauschadresse von Lavalink; sonst selbst ermittelt
+#   --node-nr <n>       Zahlenraum eines Controllers; sonst aus der Kennung
 #   --pruefen           nur nachsehen, nichts aendern
 #
 # ---------------------------------------------------------------------------
@@ -75,6 +76,8 @@ WEB_BIND="${HJ_WEB_BIND:-0.0.0.0}"
 WEB_PORT_HOST="${HJ_WEB_PORT_HOST:-8080}"
 # Private Adresse fuer Lavalink. Leer heisst: selbst ermitteln.
 PRIVAT_IP="${HJ_PRIVAT_IP:-}"
+# Zahlenraum eines Controllers. Leer heisst: aus der Kennung ableiten.
+NODE_NR="${HJ_NODE_NR:-}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -85,6 +88,7 @@ while [[ $# -gt 0 ]]; do
         --web-bind)         WEB_BIND="${2:?Adresse angeben}"; shift 2 ;;
         --web-port)         WEB_PORT_HOST="${2:?Port angeben}"; shift 2 ;;
         --privat-ip)        PRIVAT_IP="${2:?Adresse angeben}"; shift 2 ;;
+        --node-nr)          NODE_NR="${2:?Nummer angeben}"; shift 2 ;;
         --pruefen)          NUR_PRUEFEN=true; shift ;;
         -h|--help)          sed -n '2,20p' "$0"; exit 0 ;;
         *)                  fehler "Unbekannte Angabe: $1" ;;
@@ -357,6 +361,82 @@ $(ip -4 -o addr show scope global 2>/dev/null | awk '{printf "         %-10s %s\
 
     umgebung_setzen HJ_PRIVAT_IP "$PRIVAT_IP" || true
     sagen "Lavalink auf ${PRIVAT_IP}:2333 - nur aus dem privaten Netz."
+fi
+
+# ------------------------------------------------ Controller: Nummer und Spock
+#
+# Ein Controller braucht beides, und beides muss VOR dem ersten Start stehen.
+#
+# HJ_NODE_NR
+# ----------
+# schema-postgres.sql legt an:
+#
+#   CREATE SEQUENCE IF NOT EXISTS hj_id_seq START WITH ${HJ_NODE_NR} INCREMENT BY 1000
+#
+# Node 1 vergibt 1, 1001, 2001 - Node 2 vergibt 2, 1002, 2002. So kollidieren
+# zwei Schreiber nicht, obwohl beide fortlaufende Nummern vergeben.
+#
+# Der Vorgabewert ist 1. Bisher setzte ihn niemand, also standen ALLE Knoten
+# auf 1 - unter Replikation heisst das doppelte Schluessel, sobald beide
+# schreiben. Das faellt nicht beim Einrichten auf, sondern im Betrieb.
+#
+# "IF NOT EXISTS" ist der Grund fuer "vor dem ersten Start": steht die Sequenz
+# einmal, aendert ein spaeteres HJ_NODE_NR gar nichts mehr.
+#
+# Die Nummer kommt aus der Kennung - controller-1 wird 1, controller-2 wird 2.
+# Das ist vorhersagbar und braucht keine Rueckfrage beim Update-Server. Wer
+# anders benennt, gibt sie mit --node-nr an.
+if printf '%s' "$MODULE" | grep -qE '(^| )controller( |$)'; then
+
+    if [[ -z "$NODE_NR" ]]; then
+        NODE_NR="$(printf '%s' "$KENNUNG" | grep -oE '[0-9]+$' || true)"
+    fi
+    [[ -n "$NODE_NR" ]] || fehler "Kein Zahlenraum fuer diesen Controller.
+       Die Kennung '${KENNUNG}' endet nicht auf einer Zahl, aus der sich
+       HJ_NODE_NR ableiten liesse. Zwei Controller mit derselben Nummer
+       vergeben dieselben Schluessel, sobald sie replizieren.
+       Angeben mit: --node-nr 2"
+    [[ "$NODE_NR" =~ ^[0-9]{1,3}$ && "$NODE_NR" -ge 1 ]] || fehler \
+        "HJ_NODE_NR muss zwischen 1 und 999 liegen (ist: ${NODE_NR}).
+       Der Schritt der Sequenz ist 1000 - groessere Nummern ueberlappen."
+
+    if umgebung_setzen HJ_NODE_NR "$NODE_NR"; then
+        gut "Zahlenraum ${NODE_NR} (vergibt ${NODE_NR}, $((NODE_NR + 1000)), $((NODE_NR + 2000)) ...)"
+    else
+        gut "Zahlenraum ${NODE_NR} - unveraendert"
+    fi
+
+    # ------------------------------------------------------------------ Spock
+    #
+    # Und hier wird es heikel: das Spock-Overlay benutzt ein anderes Abbild
+    # UND ein anderes Volume (pgdaten-spock statt postgres-daten). Einfach
+    # einschalten heisst auf einem laufenden Controller: Postgres startet auf
+    # einem leeren Volume, und es sieht aus, als seien die Daten weg.
+    #
+    # install-node.sh ist ausdruecklich mehrfach ausfuehrbar. Genau deshalb
+    # darf es das nicht selbst tun, wenn schon Daten daliegen - der zweite
+    # Lauf waere sonst der teuerste.
+    if grep -q '^HJ_SPOCK=true' "$UMGEBUNG" 2>/dev/null; then
+        gut "Replikation (Spock) ist aktiv"
+    elif docker volume inspect hoerjetzt_postgres-daten >/dev/null 2>&1 \
+         && [[ -n "$(docker run --rm -v hoerjetzt_postgres-daten:/v alpine:3 \
+                     sh -c 'ls -A /v 2>/dev/null | head -1' 2>/dev/null)" ]]; then
+        warnen "Replikation NICHT eingeschaltet - es liegen schon Daten."
+        sagen "  Spock benutzt ein anderes Volume (pgdaten-spock). Umschalten"
+        sagen "  ohne Umzug hiesse: leere Datenbank. Der Weg mit Daten:"
+        sagen ""
+        sagen "    bash ${HIER}/sicherung.sh --nur-lokal"
+        sagen "    echo HJ_SPOCK=true >> ${UMGEBUNG}"
+        sagen "    bash ${HIER}/install-node.sh --kennung ${KENNUNG} --modules ${MODULE// /,}"
+        sagen "    bash ${HIER}/uebernehmen.sh --datei ${ARBEIT}/sicherungen/<datei>"
+        sagen "    bash ${HIER}/spock-einrichten.sh anlegen"
+    else
+        umgebung_setzen HJ_SPOCK true || true
+        gut "Replikation (Spock) eingeschaltet - leere Datenbank, gefahrlos"
+        sagen "  Koppeln mit dem anderen Controller danach:"
+        sagen "    bash ${HIER}/spock-einrichten.sh anlegen"
+        sagen "    bash ${HIER}/spock-einrichten.sh verbinden <ip-des-anderen> <dessen-nummer>"
+    fi
 fi
 
 # ------------------------------------------- 4. Schluessel hinterlegen

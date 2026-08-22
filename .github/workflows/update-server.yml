@@ -409,6 +409,52 @@ jobs:
               echo "ok   .env wird vor 'compose up' uebertragen (Zeile $u vor $c)"
           fi
 
+          # Bekommt ein Controller Zahlenraum und Replikation?
+          #
+          # schema-postgres.sql legt an:
+          #   CREATE SEQUENCE IF NOT EXISTS hj_id_seq START WITH ${HJ_NODE_NR}
+          #                                             INCREMENT BY 1000
+          #
+          # Der Vorgabewert ist 1, und gesetzt hat ihn frueher niemand - alle
+          # Knoten standen auf 1. Unter Replikation heisst das doppelte
+          # Schluessel, sobald beide schreiben, und zwar erst im Betrieb.
+          #
+          # "IF NOT EXISTS": steht die Sequenz einmal, aendert ein spaeteres
+          # HJ_NODE_NR nichts mehr. Es muss also VOR dem ersten "compose up"
+          # gesetzt werden.
+          for v in HJ_NODE_NR HJ_SPOCK; do
+              if grep -q "umgebung_setzen ${v}" deploy/install-node.sh; then
+                  printf 'ok   install-node.sh setzt %s\n' "$v"
+              else
+                  printf 'FEHL install-node.sh setzt %s nicht\n' "$v"
+                  fehler=1
+              fi
+          done
+
+          n="$(grep -n 'umgebung_setzen HJ_NODE_NR' deploy/install-node.sh | head -1 | cut -d: -f1)"
+          c="$(grep -n 'compose up -d' deploy/install-node.sh | head -1 | cut -d: -f1)"
+          if [ -n "$n" ] && [ "$n" -lt "$c" ]; then
+              echo "ok   HJ_NODE_NR steht vor dem ersten Start (Zeile $n vor $c)"
+          else
+              echo "FEHL HJ_NODE_NR wird erst nach 'compose up' gesetzt."
+              echo "     Die Sequenz ist dann schon angelegt und die Nummer wirkungslos."
+              fehler=1
+          fi
+
+          # Und schaltet es Spock NICHT blind ein, wenn Daten daliegen?
+          #
+          # Das Overlay benutzt ein anderes Volume (pgdaten-spock). Blindes
+          # Einschalten auf einem laufenden Controller heisst: Postgres startet
+          # leer, und es sieht aus, als seien die Daten weg. install-node.sh ist
+          # ausdruecklich mehrfach ausfuehrbar - der zweite Lauf waere sonst der
+          # teuerste.
+          if grep -q 'docker volume inspect hoerjetzt_postgres-daten' deploy/install-node.sh; then
+              echo "ok   Spock wird nur bei leerem Volume eingeschaltet"
+          else
+              echo "FEHL Spock wird ohne Pruefung auf vorhandene Daten eingeschaltet"
+              fehler=1
+          fi
+
           # Zieht der Knoten nur seine eigenen Abbilder?
           #
           # "docker compose pull" ohne Dienstnamen zieht ALLES aus der Datei.
