@@ -233,12 +233,27 @@ anlegen)
     # Ergebnis war ein leeres Set, das sich als vollstaendig ausgab.
     ZUGEFUEGT=0
     UEBERSPRUNGEN=""
+    ERSTER_GRUND=""
     while read -r tabelle; do
         [[ -n "$tabelle" ]] || continue
-        if psql_ -qtAc "SELECT spock.repset_add_table('default', '${tabelle}');" >/dev/null 2>&1; then
+        # Den Grund mitnehmen, nicht nur das Scheitern.
+        #
+        # Vorher ging die Fehlerausgabe nach /dev/null. Uebrig blieb
+        # "1 von 22 Tabellen im Abgleich" und keine Erklaerung - und die
+        # naheliegende Vermutung (fehlender Primaerschluessel) war falsch.
+        # Was Spock hier sagt, sagt es genau einmal und genau hier.
+        if fehlertext="$(psql_ -qtAc "SELECT spock.repset_add_table('default', '${tabelle}');" 2>&1)"; then
             ZUGEFUEGT=$((ZUGEFUEGT + 1))
         else
             UEBERSPRUNGEN="${UEBERSPRUNGEN} ${tabelle}"
+            # Kein "[[ ... ]] && ..." als letzter Befehl des Blocks: ist die
+            # Bedingung falsch, endet der Block mit 1 - und "set -e" beendet
+            # dann das ganze Skript mitten in der Schleife.
+            if [[ -z "$ERSTER_GRUND" ]]; then
+                ERSTER_GRUND="$(printf '%s' "$fehlertext" \
+                    | grep -iE '^(ERROR|FEHLER|DETAIL|HINWEIS|HINT):' \
+                    | head -2 | paste -sd' ' - || true)"
+            fi
         fi
     done < <(psql_ -tAc "
         SELECT c.relname
@@ -264,6 +279,7 @@ anlegen)
 
     if [[ -n "$UEBERSPRUNGEN" ]]; then
         warn "Nicht aufgenommen:${UEBERSPRUNGEN}"
+        if [[ -n "$ERSTER_GRUND" ]]; then warn "    Grund (erste Tabelle): ${ERSTER_GRUND}"; fi
         warn "    Fast immer ein fehlender Primaerschluessel. Spock repliziert"
         warn "    UPDATE und DELETE nur mit Schluessel - ohne ihn waere nicht"
         warn "    bestimmbar, welche Zeile gemeint ist."
