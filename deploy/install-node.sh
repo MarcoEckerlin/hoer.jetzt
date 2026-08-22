@@ -664,6 +664,102 @@ if [[ -n "${dienste// /}" ]]; then
     compose up -d $dienste
 fi
 
+
+# ---------------------------------------- Controller: Schema und Replikation
+#
+# Was hier passiert, war bisher Handarbeit in fuenf Schritten - und jeder
+# einzelne davon ist einmal schiefgegangen:
+#
+#   1. Der Kern legt das Schema beim START an (DB.init). Wird der Container
+#      nicht neu angelegt, sieht er eine leere Datenbank nie.
+#   2. HJ_NODE_NR liest er dabei aus SEINER Umgebung. Steht die Nummer beim
+#      Anlegen nicht drin, entsteht die Sequenz mit Startwert 1 - und
+#      "CREATE SEQUENCE IF NOT EXISTS" heilt das nie wieder. Beide Controller
+#      vergeben dann dieselben Schluessel, sobald sie replizieren.
+#   3. spock-einrichten.sh nimmt nur Tabellen in den Abgleich, die es gibt.
+#      Zu frueh gelaufen meldet es "0 von 0" und die Replikation traegt nichts
+#      - waehrend Subscription und Slot "aktiv" melden.
+#
+# Deshalb: warten, pruefen, dann anlegen. Nichts davon bricht das Aufsetzen
+# ab - ein Knoten, der laeuft und nur noch gekoppelt werden muss, ist ein
+# besseres Ergebnis als ein abgebrochener Lauf.
+if printf '%s' "$MODULE" | grep -qE '(^| )controller( |$)' && [[ -n "${dienste// /}" ]]; then
+    schritt "Controller: Schema und Replikation"
+
+    DB_USER_="$(grep '^HJ_DB_USER=' "$UMGEBUNG" 2>/dev/null | cut -d= -f2- | head -1)"
+    DB_NAME_="$(grep '^HJ_DB_NAME=' "$UMGEBUNG" 2>/dev/null | cut -d= -f2- | head -1)"
+    DB_USER_="${DB_USER_:-discordbot}"
+    DB_NAME_="${DB_NAME_:-discordbot}"
+
+    pg() { compose exec -T postgres psql -U "$DB_USER_" -d "$DB_NAME_" -tAc "$1" 2>/dev/null; }
+
+    # Auf das Schema warten. Der Kern braucht nach dem Start eine Weile, und
+    # bei einer frischen Datenbank kommt das Anlegen der sechzehn Tabellen
+    # dazu.
+    tabellen=0
+    for _versuch in $(seq 1 60); do
+        tabellen="$(pg "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'" \
+                    | tr -d '[:space:]')"
+        [[ "${tabellen:-0}" =~ ^[0-9]+$ ]] || tabellen=0
+        [[ "$tabellen" -gt 0 ]] && break
+        sleep 5
+    done
+
+    if [[ "$tabellen" -eq 0 ]]; then
+        warnen "Der Kern hat nach fuenf Minuten kein Schema angelegt."
+        sagen "  Ohne Tabellen traegt die Replikation nichts. Nachsehen:"
+        sagen "    cd ${ARBEIT}/main/deploy/docker && docker compose logs --tail 60 core"
+    else
+        gut "${tabellen} Tabellen angelegt"
+
+        # ------------------------------------------------------- Zahlenraum
+        #
+        # Berichtigt wird nur, solange noch keine ID vergeben ist
+        # (last_value IS NULL). Danach waere ein RESTART gefaehrlich: die
+        # Sequenz liefe erneut durch Werte, die es schon gibt.
+        ist="$(pg "SELECT start_value FROM pg_sequences WHERE sequencename='hj_id_seq'" \
+               | tr -d '[:space:]')"
+        benutzt="$(pg "SELECT last_value IS NOT NULL FROM pg_sequences WHERE sequencename='hj_id_seq'" \
+                   | tr -d '[:space:]')"
+
+        if [[ -z "$ist" ]]; then
+            warnen "hj_id_seq gibt es nicht - stammt das Schema aus einer aelteren Fassung?"
+        elif [[ "$ist" == "$NODE_NR" ]]; then
+            gut "Zahlenraum ${NODE_NR} steht in der Sequenz"
+        elif [[ "$benutzt" == "t" ]]; then
+            warnen "Die Sequenz beginnt bei ${ist}, erwartet waere ${NODE_NR}."
+            sagen "  Es sind bereits IDs vergeben - hier wird nichts umgestellt."
+            sagen "  Von Hand, mit einem Wert ueber dem groessten vorhandenen:"
+            sagen "    ALTER SEQUENCE hj_id_seq RESTART WITH <n> INCREMENT BY 1000;"
+        else
+            compose exec -T postgres psql -U "$DB_USER_" -d "$DB_NAME_" \
+                -c "ALTER SEQUENCE hj_id_seq RESTART WITH ${NODE_NR} INCREMENT BY 1000;" \
+                >/dev/null 2>&1 \
+                && gut "Zahlenraum von ${ist} auf ${NODE_NR} berichtigt (noch keine ID vergeben)" \
+                || warnen "Zahlenraum liess sich nicht berichtigen - bleibt bei ${ist}."
+        fi
+
+        # ------------------------------------------------------------ Spock
+        if grep -q '^HJ_SPOCK=true' "$UMGEBUNG" 2>/dev/null; then
+            if bash "${HIER}/spock-einrichten.sh" anlegen >/dev/null 2>&1; then
+                gut "Replikation eingerichtet - Tabellen sind im Abgleich"
+                sagen ""
+                sagen "  Noch zu koppeln. Auf DIESER Maschine, mit Adresse und Nummer"
+                sagen "  der anderen Node:"
+                sagen "    bash ${HIER}/spock-einrichten.sh verbinden <ip-der-anderen> <deren-nummer>"
+                sagen "  Und dort dasselbe zurueck: ${PRIVAT_IP:-<ip-von-hier>} ${NODE_NR}"
+                sagen ""
+                sagen "  Danach die Schreibprobe in beide Richtungen:"
+                sagen "    bash ${HIER}/spock-einrichten.sh pruefen"
+            else
+                warnen "spock-einrichten.sh anlegen ist nicht durchgelaufen."
+                sagen "  Von Hand, die Meldung nennt den Grund:"
+                sagen "    bash ${HIER}/spock-einrichten.sh anlegen"
+            fi
+        fi
+    fi
+fi
+
 schritt "Fertig"
 sagen "Knoten ${HJ_KNOTEN_KENNUNG} mit [${MODULE}] eingerichtet."
 sagen "Zustand ansehen: bash ${HIER}/agent/hj-agent.sh --zustand"

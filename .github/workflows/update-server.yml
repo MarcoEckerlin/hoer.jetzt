@@ -409,6 +409,33 @@ jobs:
               echo "ok   .env wird vor 'compose up' uebertragen (Zeile $u vor $c)"
           fi
 
+          # Und macht der Installer den Controller fertig?
+          #
+          # Drei Schritte, die bisher Handarbeit waren und jeder einmal
+          # schiefgegangen ist: auf das Schema warten (der Kern legt es beim
+          # START an), den Zahlenraum in der Sequenz pruefen, und erst dann
+          # spock-einrichten.sh anlegen - vorher meldet es "0 von 0 Tabellen"
+          # und die Replikation traegt nichts.
+          for muster in 'information_schema.tables' 'pg_sequences' 'spock-einrichten.sh" anlegen'; do
+              if grep -qF "$muster" deploy/install-node.sh; then
+                  printf 'ok   Installer prueft: %s\n' "$muster"
+              else
+                  printf 'FEHL Installer prueft nicht: %s\n' "$muster"
+                  fehler=1
+              fi
+          done
+
+          # Die Sequenz darf nur umgestellt werden, solange keine ID vergeben
+          # ist. Ein RESTART auf einer benutzten Sequenz liefe erneut durch
+          # Werte, die es schon gibt - und das faellt erst beim naechsten
+          # Schluesselkonflikt auf.
+          if grep -qF 'last_value IS NOT NULL' deploy/install-node.sh; then
+              echo "ok   ALTER SEQUENCE nur bei unbenutzter Sequenz"
+          else
+              echo "FEHL ALTER SEQUENCE ohne Pruefung auf vergebene IDs"
+              fehler=1
+          fi
+
           # Bekommt ein Controller Zahlenraum und Replikation?
           #
           # schema-postgres.sql legt an:
