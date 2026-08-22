@@ -26,6 +26,7 @@
 
 set -euo pipefail
 
+HIER="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 ARBEIT="${ARBEIT:-/opt/hoerjetzt}"
 UMGEBUNG="${UMGEBUNG:-${ARBEIT}/.env}"
 
@@ -144,9 +145,40 @@ anlegen)
 
     step "Erweiterung"
     # Schlaegt hier "could not open extension control file" fehl, laeuft ein
-    # Standard-Postgres statt des Spock-Abbilds - siehe docker-compose.spock.yml.
-    psql_ -c "CREATE EXTENSION IF NOT EXISTS spock;" \
-        || fail "Spock fehlt in diesem Abbild. docker-compose.spock.yml mitgeben."
+    # Standard-Postgres statt des Spock-Abbilds.
+    #
+    # Die Meldung nennt den Grund und nicht nur das Symptom: "Spock fehlt im
+    # Abbild" schickt einen ins Abbild, waehrend die Ursache eine Zeile in der
+    # .env ist - und der Weg dorthin nicht bei allen derselbe.
+    if ! psql_ -c "CREATE EXTENSION IF NOT EXISTS spock;" >/dev/null 2>&1; then
+        laufendes="$(docker compose ps --format '{{.Image}}' postgres 2>/dev/null | head -1)"
+        if [[ "${HJ_SPOCK:-}" != "true" ]]; then
+            fail "$(printf '%s\n' \
+                "HJ_SPOCK steht nicht auf true - es laeuft das Standard-Postgres." \
+                "    (${laufendes:-unbekannt})" \
+                "" \
+                "    Auf einer LEEREN Datenbank genuegt:" \
+                "        echo HJ_SPOCK=true >> ${UMGEBUNG}" \
+                "        cd ${ARBEIT}/main/deploy/docker && docker compose \\" \
+                "            -f docker-compose.yml -f docker-compose.spock.yml up -d postgres" \
+                "" \
+                "    Liegen schon Daten darin, ist es ein Umzug: Spock benutzt ein" \
+                "    ANDERES Volume (pgdaten-spock). Ohne die beiden mittleren" \
+                "    Schritte startet Postgres leer." \
+                "        bash ${HIER}/sicherung.sh --nur-lokal" \
+                "        echo HJ_SPOCK=true >> ${UMGEBUNG}" \
+                "        cd ${ARBEIT}/main/deploy/docker && docker compose \\" \
+                "            -f docker-compose.yml -f docker-compose.spock.yml up -d postgres" \
+                "        bash ${HIER}/uebernehmen.sh --datei ${ARBEIT}/sicherungen/<datei>")"
+        fi
+        fail "$(printf '%s\n' \
+            "HJ_SPOCK ist gesetzt, aber der Container laeuft noch mit dem alten Abbild." \
+            "    (${laufendes:-unbekannt})" \
+            "" \
+            "    Er wird beim Umschalten nicht von selbst ersetzt:" \
+            "        cd ${ARBEIT}/main/deploy/docker && docker compose \\" \
+            "            -f docker-compose.yml -f docker-compose.spock.yml up -d postgres")"
+    fi
     info "$(psql_ -tAc "SELECT 'Spock ' || extversion FROM pg_extension WHERE extname='spock'")"
 
     step "Diese Node bekanntmachen"
