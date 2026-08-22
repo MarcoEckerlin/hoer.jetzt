@@ -335,6 +335,31 @@ if printf '%s' "$MODULE" | grep -qE '(^| )(core|controller)( |$)'; then
     fi
 fi
 
+# ------------------------------------------------------- Private Adresse
+#
+# Sobald es eine gibt, gehoert sie in die .env - nicht nur auf Audio-Knoten.
+# Gebraucht wird sie an vier Stellen:
+#
+#   - Lavalink bindet darauf (docker-compose.yml)
+#   - das Spock-Overlay bindet Postgres darauf
+#   - spock-einrichten.sh verlangt sie und bricht sonst ab
+#   - der Herzschlag meldet sie, damit man in der Oberflaeche sieht,
+#     welche Maschine das eigentlich ist
+#
+# Vorher stand das Setzen INNERHALB des Lavalink-Blocks. Ein Controller bekam
+# sie deshalb nie, und spock-einrichten.sh endete mit
+#
+#   HJ_PRIVAT_IP: HJ_PRIVAT_IP setzen - die 10.x-Adresse dieser Maschine
+#
+# auf einer Maschine, die eine hat.
+if [[ -n "$PRIVAT_IP" ]]; then
+    if umgebung_setzen HJ_PRIVAT_IP "$PRIVAT_IP"; then
+        gut "Private Adresse ${PRIVAT_IP}"
+    else
+        gut "Private Adresse ${PRIVAT_IP} - unveraendert"
+    fi
+fi
+
 # ------------------------------------------------- Lauschadresse von Lavalink
 #
 # Dieselbe Falle wie bei der Weboberflaeche, nur eine Ebene tiefer: die
@@ -359,7 +384,6 @@ if printf '%s' "$MODULE" | grep -qE '(^| )lavalink( |$)'; then
        Vorhandene Adressen:
 $(ip -4 -o addr show scope global 2>/dev/null | awk '{printf "         %-10s %s\n", $2, $4}')"
 
-    umgebung_setzen HJ_PRIVAT_IP "$PRIVAT_IP" || true
     sagen "Lavalink auf ${PRIVAT_IP}:2333 - nur aus dem privaten Netz."
 fi
 
@@ -404,6 +428,17 @@ if printf '%s' "$MODULE" | grep -qE '(^| )controller( |$)'; then
         gut "Zahlenraum ${NODE_NR} (vergibt ${NODE_NR}, $((NODE_NR + 1000)), $((NODE_NR + 2000)) ...)"
     else
         gut "Zahlenraum ${NODE_NR} - unveraendert"
+    fi
+
+    # Ohne private Adresse laeuft die Replikation nicht: das Spock-Overlay
+    # bindet Postgres darauf, und spock-einrichten.sh bricht ohne sie ab.
+    # Kein Grund, das Aufsetzen abzubrechen - ein Controller ohne privates
+    # Netz ist ein zulaessiger Einzelbetrieb.
+    if [[ -z "$PRIVAT_IP" ]]; then
+        warnen "Keine private Adresse - Replikation ist damit nicht moeglich."
+        sagen "  Das Spock-Overlay bindet Postgres auf HJ_PRIVAT_IP, und"
+        sagen "  spock-einrichten.sh verlangt sie. Falls es ein privates Netz"
+        sagen "  gibt, das hier nicht erkannt wurde: --privat-ip 10.0.0.5"
     fi
 
     # ------------------------------------------------------------------ Spock
