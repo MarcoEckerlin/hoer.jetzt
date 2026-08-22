@@ -451,6 +451,23 @@ if [[ -d /etc/systemd/system ]]; then
     gut "Agent laeuft im Minutentakt"
 fi
 
+# Die Datenbanksicherung - nur wo eine Datenbank laeuft.
+#
+# hj-sicherung.timer lag seit jeher in deploy/systemd/, wurde aber nie
+# installiert. Auf keinem Knoten ist je eine Sicherung entstanden; sicherung.sh
+# gab es, aufgerufen hat es niemand.
+#
+# Nicht auf Audio-Knoten: die haben keine Datenbank, und ein Timer, der alle
+# drei Stunden mit "pg_dump: kein Container" scheitert, verstopft nur das
+# Journal und trainiert einen darauf, Fehler zu uebersehen.
+if [[ -d /etc/systemd/system ]] && printf '%s' "$MODULE" | grep -qE '(^| )(core|controller)( |$)'; then
+    install -m644 "${HIER}/systemd/hj-sicherung.service" /etc/systemd/system/ 2>/dev/null || true
+    install -m644 "${HIER}/systemd/hj-sicherung.timer"   /etc/systemd/system/ 2>/dev/null || true
+    systemctl daemon-reload 2>/dev/null || true
+    systemctl enable --now hj-sicherung.timer 2>/dev/null || true
+    gut "Sicherung alle drei Stunden (00,03,06...:07 Uhr)"
+fi
+
 # Gibt es ueberhaupt ein Release?
 #
 # Ohne veroeffentlichte Abbilder gibt es nichts zu ziehen. Der Versuch endet

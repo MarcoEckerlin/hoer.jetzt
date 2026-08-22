@@ -1,0 +1,73 @@
+<!doctype html>
+<html xmlns:th="http://www.thymeleaf.org" lang="de">
+<head th:replace="~{grund :: kopf('Sicherungen')}"></head>
+<body>
+<nav th:replace="~{grund :: navigation('sicherungen')}"></nav>
+<main>
+    <div th:replace="~{grund :: meldungen}"></div>
+
+    <h1>Sicherungen</h1>
+
+    <p class="klein">
+        Die Controller schicken alle drei Stunden einen <code>pg_dump</code> hierher;
+        der Update-Server legt daneben seine eigene Datenbank ab. Es werden 56 je
+        Knoten behalten &ndash; eine Woche.
+    </p>
+    <p class="klein">
+        <strong>Eingespielt wird hier nichts.</strong> Das gehoert auf den Knoten:
+        <code>bash deploy/uebernehmen.sh --datei &lt;datei&gt;</code> haelt vorher die
+        Dienste an, sichert den jetzigen Stand und laeuft in einer Transaktion.
+    </p>
+
+    <p th:if="${gesamt > 0}" class="klein">
+        <strong th:text="${gesamt}"></strong> Dateien,
+        <strong th:text="${#numbers.formatDecimal(platz / 1048576.0, 1, 1)} + ' MB'"></strong>.
+    </p>
+
+    <div th:if="${gesamt == 0}" class="lage">
+        <p class="warnung">Noch keine Sicherung angekommen.</p>
+        <p class="klein">
+            Der Timer wird beim Aufsetzen eines Knotens mit Datenbank eingerichtet.
+            Auf dem Knoten nachsehen:
+        </p>
+        <pre class="befehl">systemctl list-timers hj-sicherung.timer</pre>
+        <p class="klein">Von Hand ausloesen:</p>
+        <pre class="befehl">bash /opt/hoerjetzt/main/deploy/sicherung.sh</pre>
+    </div>
+
+    <div th:each="k : ${nachKnoten}" class="lage">
+        <h2><code th:text="${k.key}"></code></h2>
+
+        <!--
+          Die juengste zuerst - alle() sortiert danach. Bei der Frage "gibt es
+          eine aktuelle" ist die erste Zeile die Antwort, und man muss nicht
+          suchen.
+        -->
+        <table>
+            <thead>
+            <tr><th>Datei</th><th>Angelegt</th><th>Groesse</th><th></th></tr>
+            </thead>
+            <tbody>
+            <tr th:each="s : ${k.value}">
+                <td><code th:text="${s.name()}"></code></td>
+                <td class="klein"
+                    th:text="${#temporals.format(s.zeit(), 'dd.MM.yyyy HH:mm')}"></td>
+                <td class="klein"
+                    th:text="${#numbers.formatDecimal(s.groesse() / 1048576.0, 1, 1)} + ' MB'"></td>
+                <td>
+                    <div class="knopfreihe">
+                        <a class="schlicht" th:href="@{'/sicherungen/' + ${s.name()}}">herunterladen</a>
+                        <form th:action="@{'/sicherungen/' + ${s.name()} + '/entfernen'}" method="post"
+                              onsubmit="return confirm('Diese Sicherung loeschen? Sie ist danach weg - hier wie auf dem Knoten, falls sie dort schon weggeraeumt wurde.');">
+                            <button type="submit" class="gefahr">entfernen</button>
+                        </form>
+                    </div>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+
+</main>
+</body>
+</html>
