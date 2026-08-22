@@ -101,7 +101,7 @@ if [[ -n "$VOLUMES" ]]; then
     printf '  Volumes:\n'
     while read -r v; do
         [[ -n "$v" ]] || continue
-        groesse="$(docker run --rm -v "${v}:/v" alpine:3 du -sh /v 2>/dev/null | cut -f1 || echo '?')"
+        groesse="$(docker run --rm -v "${v}:/v" alpine:3 du -sh /v </dev/null 2>/dev/null | cut -f1 || echo "?")"
         printf '    %-32s %s\n' "$v" "$groesse"
     done <<< "$VOLUMES"
 else
@@ -200,7 +200,7 @@ docker ps -aq --filter "label=com.docker.compose.project=${PROJEKT}" 2>/dev/null
 weg=0
 while read -r v; do
     [[ -n "$v" ]] || continue
-    docker volume rm -f "$v" >/dev/null 2>&1 && weg=$((weg + 1)) || true
+    docker volume rm -f "$v" </dev/null >/dev/null 2>&1 && weg=$((weg + 1)) || true
 done <<< "$(docker volume ls -q 2>/dev/null | grep -E "^${PROJEKT}_" || true)"
 sagen "${weg} Volumes entfernt"
 

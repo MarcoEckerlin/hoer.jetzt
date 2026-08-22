@@ -436,6 +436,48 @@ jobs:
               fehler=1
           fi
 
+      # Frisst ein Befehl in einer while-read-Schleife die Eingabe?
+      #
+      # "docker compose exec -T", "docker run -i", "ssh" und "psql" lesen
+      # stdin. Steht so ein Aufruf im Rumpf einer Schleife, die selbst von
+      # stdin liest, verschlingt der erste Durchlauf den Rest der Liste - und
+      # die Schleife ist danach zu Ende.
+      #
+      # Genau so entstand "1 von 22 Tabellen im Abgleich (1 neu)": die 21
+      # anderen wurden nie versucht. Ohne Fehlermeldung, denn es ist ja nichts
+      # gescheitert. Von Hand liess sich jede davon nachtragen, was die Suche
+      # zusaetzlich in die Irre fuehrte.
+      #
+      # Das Gegenmittel ist ein "</dev/null" am Aufruf.
+      - name: Schleifen verlieren ihre Eingabe nicht
+        run: |
+          set -uo pipefail
+          fehler=0
+          while read -r treffer; do
+              [ -n "$treffer" ] || continue
+              printf 'FEHL %s\n' "$treffer"
+              echo "     Der Aufruf liest stdin und leert damit die Schleife."
+              echo "     Abhilfe: </dev/null an den Befehl haengen."
+              fehler=1
+          done < <(
+              for f in $(find deploy update-server -name "*.sh"); do
+                  awk -v F="$f" '
+                      # Eingabeschleifen (read -p / read -s) sind gemeint, nicht
+                      # Listenschleifen - dort ist stdin das Terminal.
+                      /while[[:space:]].*read / && !/read -r -s/ && !/read -r -p/ {
+                          drin = 1; start = NR; rumpf = ""; next }
+                      drin && /^[[:space:]]*done/ {
+                          if (rumpf ~ /(compose exec|docker run -i|psql_|[^a-z]ssh )/ \
+                              && rumpf !~ /\/dev\/null[^)]*2>&1|<\/dev\/null/)
+                              printf "%s:%d\n", F, start
+                          drin = 0 }
+                      drin { rumpf = rumpf $0 }
+                  ' "$f"
+              done
+          )
+          [ "$fehler" -eq 0 ] && echo "ok   keine Schleife verliert ihre Eingabe"
+          exit "$fehler"
+
           # Bekommt ein Controller Zahlenraum und Replikation?
           #
           # schema-postgres.sql legt an:

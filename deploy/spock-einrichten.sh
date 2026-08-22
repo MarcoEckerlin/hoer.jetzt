@@ -242,7 +242,20 @@ anlegen)
         # "1 von 22 Tabellen im Abgleich" und keine Erklaerung - und die
         # naheliegende Vermutung (fehlender Primaerschluessel) war falsch.
         # Was Spock hier sagt, sagt es genau einmal und genau hier.
-        if fehlertext="$(psql_ -qtAc "SELECT spock.repset_add_table('default', '${tabelle}');" 2>&1)"; then
+        # </dev/null ist hier keine Kosmetik, sondern der ganze Punkt.
+        #
+        # "docker compose exec -T" haengt stdin durch (darauf beruht anderswo
+        # das Einspielen eines Dumps per Pipe). Ohne diese Umleitung liest
+        # psql die RESTLICHE Tabellenliste aus derselben Quelle, aus der die
+        # Schleife liest - und die Schleife ist nach dem ersten Durchlauf zu
+        # Ende.
+        #
+        # Sichtbar war davon nur "1 von 22 Tabellen im Abgleich (1 neu)" ohne
+        # eine einzige Fehlermeldung: die 21 anderen wurden nie versucht, also
+        # konnte auch nichts scheitern. Von Hand liess sich jede davon ohne
+        # Weiteres nachtragen, was die Suche zusaetzlich in die Irre fuehrte.
+        if fehlertext="$(psql_ -qtAc "SELECT spock.repset_add_table('default', '${tabelle}');" \
+                         </dev/null 2>&1)"; then
             ZUGEFUEGT=$((ZUGEFUEGT + 1))
         else
             UEBERSPRUNGEN="${UEBERSPRUNGEN} ${tabelle}"
