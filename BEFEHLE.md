@@ -603,6 +603,43 @@ eintragen, **ohne** Schreibrecht.
 
 ---
 
+## Knoten vollständig zurücksetzen
+
+```bash
+bash /opt/hoerjetzt/main/deploy/neu-aufsetzen.sh --pruefen
+```
+
+Zeigt, was wegkäme — Container, Volumes mit Größe, Zeitgeber — und fasst nichts
+an. Dann scharf:
+
+```bash
+bash /opt/hoerjetzt/main/deploy/neu-aufsetzen.sh
+```
+
+Legt vorher eine letzte Sicherung nach `/root/` (die überlebt das Löschen),
+verlangt dann das getippte Wort `loeschen` und entfernt danach: Zeitgeber,
+Container, **beide** Postgres-Volumes, das Netz, `/opt/hoerjetzt`, die
+Registry-Anmeldung und das Protokoll.
+
+| Angabe | Wirkung |
+|---|---|
+| `--pruefen` | nur zeigen |
+| `--ja` | ohne Rückfrage |
+| `--abbilder` | zusätzlich die geladenen Abbilder |
+| `--ohne-sicherung` | keine letzte Sicherung |
+
+> **Beide Volumes.** `docker compose down --volumes` entfernt nur, was in den
+> *mitgegebenen* Dateien steht. Ohne das Spock-Overlay überlebt
+> `pgdaten-spock` — und der frisch aufgesetzte Knoten findet die alten Daten
+> wieder vor, obwohl man ihn gelöscht zu haben glaubte. Das Skript entfernt die
+> Volumes zusätzlich beim Namen.
+
+**Was nicht passiert:** der Knoten meldet sich beim Update-Server nicht ab.
+Sein Eintrag bleibt unter *Verwalten* stehen und muss dort entfernt werden,
+sonst zeigt die Liste eine Maschine, die es nicht mehr gibt.
+
+Danach neu aufsetzen mit dem Einzeiler aus der Oberfläche.
+
 ## Datenbank mit einem Werkzeug ansehen
 
 HeidiSQL, pgAdmin oder `psql` auf die Postgres eines Knotens. Zwei Wege — der
